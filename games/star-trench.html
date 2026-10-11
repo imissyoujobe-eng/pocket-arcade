@@ -1,0 +1,165 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Star Trench</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600&display=swap">
+<style>
+/* Layout: one portrait arcade screen; HUD strip above, touch zones on the canvas (left drag = move, right hold = action) */
+:root{--bg:#060a14;--panel:#111a2e;--ink:#eaf0ff;--dim:#8f9bbd;--acc:#5affc8;--acc2:#ff4f6b;--display:'Bungee',Impact,system-ui,sans-serif;--body:'Rubik',system-ui,sans-serif;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding-inline:16px;padding-block:6px;box-sizing:border-box}
+#hud{width:min(100%,440px);display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:var(--display);font-size:clamp(14px,4.4vw,19px);font-variant-numeric:tabular-nums}
+#hud .lbl{display:block;font-family:var(--body);font-size:10px;letter-spacing:.12em;color:var(--dim);font-weight:600}
+#hud .c{text-align:center}#hud .r{text-align:right}
+#hud .btns{display:flex;gap:6px}
+.ib{font:600 12px var(--body);letter-spacing:.06em;color:var(--ink);background:var(--panel);border:1px solid #26314f;border-radius:8px;padding:6px 8px;cursor:pointer}
+#stage{position:relative;width:min(100%,440px,calc((100vh - 90px) * 2 / 3));width:min(100%,440px,calc((100dvh - 90px) * 2 / 3));aspect-ratio:2/3}
+canvas{width:100%;height:100%;display:block;border-radius:10px;box-shadow:0 0 0 2px #1a2440,0 0 40px -10px var(--acc)}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(6,10,20,.84);border-radius:10px;padding-inline:20px;backdrop-filter:blur(2px)}
+#overlay h1{font-family:var(--display);font-size:clamp(34px,11vw,58px);line-height:1;margin:0;color:var(--acc);text-shadow:0 0 22px var(--acc),3px 3px 0 var(--acc2);text-wrap:balance}
+#overlay p{margin:0;max-width:30ch;line-height:1.5}
+#overlay .how{font-size:12px;color:var(--dim);max-width:34ch}
+#overlay .best{font-family:var(--display);font-size:14px;color:var(--acc2)}
+#go{font-family:var(--display);font-size:20px;padding:12px 34px;border:0;border-radius:999px;background:var(--acc);color:#06101a;box-shadow:0 5px 0 rgba(0,0,0,.45);cursor:pointer}
+button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid var(--acc2);outline-offset:3px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){canvas{box-shadow:0 0 0 2px #1a2440}}
+</style>
+<div id="app">
+  <div id="hud"><div><span class="lbl" id="l1">SCORE</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">STAGE</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">SHIELDS</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
+  <div id="stage"><canvas id="c" width="400" height="600"></canvas>
+    <div id="overlay"><h1>Star Trench</h1><p id="msg">Dogfight in deep space, strafe the fortress surface, then fly the trench and hit the core vent.</p><p class="how">Left side: drag to move your sight. Right side: hold to fire. Shoot incoming fireballs before they hit. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+  </div>
+</div>
+<script>
+const GAME_ID='star-trench';
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const W=cv.width,H=cv.height,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
+let AC,muted=false;
+try{muted=localStorage.getItem('arcade_muted')==='1'}catch(e){}
+function setMuteLabel(){$('mu').textContent=muted?'MUTE':'SND'}setMuteLabel();
+$('mu').onclick=()=>{muted=!muted;setMuteLabel();try{localStorage.setItem('arcade_muted',muted?'1':'0')}catch(e){}};
+function beep(f,d,v=.05,type='square',slide){if(!AC||muted)return;try{const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,slide),t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0008,t+d);o.connect(g).connect(AC.destination);o.start(t);o.stop(t+d+.02)}catch(e){}}
+function noise(d,v=.08,f=800){if(!AC||muted)return;try{const t=AC.currentTime,n=Math.floor(AC.sampleRate*d),b=AC.createBuffer(1,n,AC.sampleRate),a=b.getChannelData(0);for(let i=0;i<n;i++)a[i]=(Math.random()*2-1)*(1-i/n);const s=AC.createBufferSource(),fl=AC.createBiquadFilter(),g=AC.createGain();s.buffer=b;fl.type='lowpass';fl.frequency.value=f;g.gain.value=v;s.connect(fl).connect(g).connect(AC.destination);s.start(t)}catch(e){}}
+function jingle(notes,step=.09,type='square',v=.05){notes.forEach((n,i)=>setTimeout(()=>beep(n,step*1.4,v,type),i*step*1000))}
+const keys={};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=1;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();if(state!=='play'&&k==='enter')startGame();if(k==='p'&&(state==='play'||state==='paused'))togglePause()});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0});
+let joy=null,fireId=null;const coarse=matchMedia('(pointer:coarse)').matches;
+function cpos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
+cv.addEventListener('pointerdown',e=>{const p=cpos(e);try{cv.setPointerCapture(e.pointerId)}catch(_){}if((p.x<W*.55||!ACTION_LABEL)&&!joy)joy={id:e.pointerId,x0:p.x,y0:p.y,x:p.x,y:p.y};else{fireId=e.pointerId;tapPt=p}e.preventDefault()});
+cv.addEventListener('pointermove',e=>{if(joy&&e.pointerId===joy.id){const p=cpos(e);joy.x=p.x;joy.y=p.y;const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>55){joy.x0=joy.x-dx/m*55;joy.y0=joy.y-dy/m*55}}});
+function up(e){if(joy&&e.pointerId===joy.id)joy=null;if(e.pointerId===fireId)fireId=null}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+let tapPt=null;const inp={x:0,y:0,fire:false,fireTap:false,up:false,upTap:false};let prevFire=false,prevUp=false;
+function readInput(){let x=0,y=0;if(keys.arrowleft||keys.a)x--;if(keys.arrowright||keys.d)x++;if(keys.arrowup||keys.w)y--;if(keys.arrowdown||keys.s)y++;
+ if(joy){const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>7){const k=Math.min(1,m/38);x=dx/m*k;y=dy/m*k}}
+ const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f}
+function drawJoy(){if(!joy&&!coarse)return;ctx.save();if(joy){ctx.globalAlpha=.3;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.x0,joy.y0,42,0,TAU);ctx.stroke();ctx.fillStyle='#fff';const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy),k=m>42?42/m:1;ctx.beginPath();ctx.arc(joy.x0+dx*k,joy.y0+dy*k,17,0,TAU);ctx.fill()}
+ if(coarse&&state==='play'&&ACTION_LABEL){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(W-58,H-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,W-58,H-58)}ctx.restore()}
+let ACTION_LABEL='FIRE';
+/* juice: particles, floating text, screen shake */
+let parts=[],floats=[],shake=0,flash=0,flashCol='#fff';
+function burst(x,y,col,n=18,sp=160,life=.7,size=3){for(let i=0;i<n;i++){const a=Math.random()*TAU,s=Math.random()*sp;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:life*rnd(.5,1),L:life,c:Array.isArray(col)?col[i%col.length]:col,s:size*rnd(.6,1.3)})}}
+function floatText(x,y,t,col='#fff'){floats.push({x,y,t,c:col,l:1})}
+function kick(s){shake=Math.max(shake,s)}
+function updFx(dt){for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.pow(.2,dt);p.vy*=Math.pow(.2,dt);p.vy+=(p.g||0)*dt;p.l-=dt}parts=parts.filter(p=>p.l>0);for(const f of floats){f.y-=40*dt;f.l-=dt}floats=floats.filter(f=>f.l>0);shake=Math.max(0,shake-dt*30);flash=Math.max(0,flash-dt*3)}
+function drawFx(){for(const p of parts){ctx.globalAlpha=Math.max(0,p.l/p.L);ctx.fillStyle=p.c;ctx.fillRect(p.x-p.s/2,p.y-p.s/2,p.s,p.s)}ctx.globalAlpha=1;ctx.textAlign='center';ctx.font='14px Bungee, Impact, sans-serif';for(const f of floats){ctx.globalAlpha=Math.min(1,f.l*2);ctx.fillStyle='#000';ctx.fillText(f.t,f.x+1.5,f.y+1.5);ctx.fillStyle=f.c;ctx.fillText(f.t,f.x,f.y)}ctx.globalAlpha=1;if(flash>0){ctx.globalAlpha=flash*.5;ctx.fillStyle=flashCol;ctx.fillRect(0,0,W,H);ctx.globalAlpha=1}}
+let banner=null;function showBanner(t,sub='',dur=1.6){banner={t,sub,l:dur,L:dur}}
+function drawBanner(dt){if(!banner)return;banner.l-=dt;if(banner.l<=0){banner=null;return}const a=Math.min(1,banner.l*3,(banner.L-banner.l)*6);ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,H/2-46,W,banner.sub?84:64);ctx.textAlign='center';ctx.font='30px Bungee, Impact, sans-serif';ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc');ctx.fillText(banner.t,W/2,H/2-4);if(banner.sub){ctx.font='14px Rubik, sans-serif';ctx.fillStyle='#fff';ctx.fillText(banner.sub,W/2,H/2+24)}ctx.restore()}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+let state='menu',score=0,best=0;
+try{best=+localStorage.getItem('best_'+GAME_ID)||0}catch(e){}
+function showBest(){$('bestline').textContent=best?'BEST '+best:''}showBest();
+function saveBest(){if(score>best){best=score;try{localStorage.setItem('best_'+GAME_ID,best)}catch(e){}return true}return false}
+function startGame(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==='suspended')AC.resume();$('overlay').hidden=true;try{document.activeElement.blur()}catch(e){}parts=[];floats=[];banner=null;state='play';reset();jingle([523,659,784,1047],.07)}
+$('go').onclick=startGame;
+function gameOver(msg,useBest=true){if(state!=='play')return;state='over';let nb=false;if(useBest)nb=saveBest();$('msg').textContent=msg+(nb?' New best!':'');showBest();$('go').textContent='Play again';jingle([392,330,262,196],.14,'triangle',.06);setTimeout(()=>{$('overlay').hidden=false},1100)}
+function togglePause(){if(state==='play'){state='paused';$('pz').textContent='▶'}else if(state==='paused'){state='play';$('pz').textContent='II';last=performance.now()}}
+$('pz').onclick=togglePause;
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause()});
+let last=performance.now(),T=0;
+function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(state==='play'){T+=dt;update(dt);updFx(dt)}else if(state==='over'||state==='menu')updFx(dt);
+ ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
+ if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',W/2,H/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',W/2,H/2+28)}
+ requestAnimationFrame(frame)}
+</script>
+<script>
+// STAR TRENCH — vector space battle in three stages: dogfight, surface run, and the trench. Hit the core vent at the end.
+const HX=200,HY=250,F=300,VIEWB=520;
+let cx,cy,cvx,cvy,shields,level,phase,phaseT,objs,fbs,stars,lasers,fireCD,kills,trenchZ,port,portMissed,wipe,shipY;
+ACTION_LABEL='FIRE';
+const NEON='#5affc8',RED='#ff4f6b',YEL='#ffe14f',BLUEL='#6bb4ff';
+function reset(){score=0;shields=8;level=1;cx=HX;cy=HY;cvx=cvy=0;stars=Array.from({length:90},()=>({x:rnd(-300,300),y:rnd(-300,300),z:rnd(1,300)}));lasers=[];fireCD=0;startPhase(1);hud()}
+function hud(){$('h1').textContent=score;$('h2').textContent=['','SPACE','SURFACE','TRENCH'][phase];$('h3').textContent=shields}
+function startPhase(p){phase=p;phaseT=0;objs=[];fbs=[];kills=0;port=null;portMissed=false;trenchZ=0;
+ if(p===1){for(let i=0;i<Math.min(5,2+level);i++)objs.push(mkFighter(i))}
+ showBanner(['','WAVE '+level+': DOGFIGHT','THE SURFACE','THE TRENCH'][p],p===1?'Shoot down 10 fighters':p===2?'Blast the tower tops':'Dodge the beams, hit the vent',1.8);hud()}
+function mkFighter(i){return{k:'f',t:rnd(0,9)+i*2,w:rnd(.5,.8),ax:rnd(60,110),ay:rnd(40,80),ph:rnd(0,TAU),zc:rnd(110,150),za:rnd(60,90),fireT:rnd(1,3),x:0,y:0,z:300,hp:1}}
+function P(x,y,z){if(z<1)return null;return{x:HX+x/z*F,y:HY+y/z*F,s:F/z}}
+function line(a,b){if(!a||!b)return;ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y)}
+function hitShield(why){shields--;flash=.8;flashCol=RED;kick(10);noise(.4,.12,900);beep(120,.4,.07,'sawtooth',50);hud();if(shields<=0){gameOver('Shields gone. Score '+score+'.')}else floatText(HX,HY-60,why,RED)}
+function spawnFB(x,y,z){fbs.push({x,y,z,sx:x,sy:y,sz:z,hp:1,t:0});beep(260,.15,.03,'triangle',120)}
+function update(dt){phaseT+=dt;fireCD-=dt;
+ cvx+=(inp.x*340-cvx)*Math.min(1,dt*10);cvy+=(inp.y*300-cvy)*Math.min(1,dt*10);cx=clamp(cx+cvx*dt,30,W-30);cy=clamp(cy+cvy*dt,40,VIEWB-30);
+ shipY=(cy-HY)/(VIEWB-HY)*22;const shipX=(cx-HX)/HX*24;
+ const speed=phase===3?150+level*10:phase===2?120:70;
+ for(const s of stars){s.z-=speed*dt*(phase===1?1.4:.4);if(s.z<1){s.z=300;s.x=rnd(-300,300);s.y=rnd(-300,300)}}
+ if(inp.fire&&fireCD<=0){fireCD=.17;fire()}
+ for(const l of lasers)l.l-=dt;lasers=lasers.filter(l=>l.l>0);
+ if(phase===1){for(const f of objs){f.t+=dt;const tw=f.t*f.w;f.z=f.zc+Math.cos(tw)*f.za;f.x=Math.sin(tw*1.3+f.ph)*f.ax;f.y=Math.sin(tw*.9+f.ph*2)*f.ay;f.bank=Math.cos(tw*1.3+f.ph);
+   f.fireT-=dt;if(f.fireT<=0&&f.z<170){f.fireT=rnd(1.8,3.5)-Math.min(1.2,level*.15);spawnFB(f.x,f.y,f.z)}}
+  if(kills>=10){objs=[];startPhase(2);return}}
+ if(phase===2){if(Math.random()<dt*(1.6+level*.2))objs.push({k:'tower',x:rnd(-140,140),z:320,h:rnd(25,70),hp:1,fireT:rnd(.8,2.5)});
+  for(const o of objs){o.z-=speed*dt;o.fireT-=dt;if(o.fireT<=0&&o.z<220&&o.z>60&&!o.dead){o.fireT=rnd(2,4);spawnFB(o.x,40-o.h,o.z)}}
+  objs=objs.filter(o=>o.z>2);if(phaseT>22){startPhase(3);return}}
+ if(phase===3){trenchZ+=speed*dt;const len=1500+level*200;
+  if(Math.random()<dt*(1+level*.25)&&trenchZ<len-200)objs.push({k:'beam',y:rnd(-18,18),z:320,hp:99});
+  if(Math.random()<dt*(.8+level*.2)&&trenchZ<len-200){const side=Math.random()<.5?-1:1;objs.push({k:'turret',x:side*30,y:rnd(-15,15),z:320,hp:1,fireT:rnd(.3,1)})}
+  for(const o of objs){o.z-=speed*dt;if(o.k==='turret'){o.fireT-=dt;if(o.fireT<=0&&o.z<240&&o.z>60&&!o.dead){o.fireT=9;spawnFB(o.x,o.y,o.z)}}
+   if(o.k==='beam'&&!o.passed&&o.z<3){o.passed=true;if(Math.abs(o.y-shipY)<6)hitShield('BEAM HIT');else{floatText(HX,HY+80,'CLEAR','#fff');beep(900,.05,.03)}}}
+  objs=objs.filter(o=>o.z>1);
+  if(!port&&trenchZ>=len){port={z:300};showBanner('VENT AHEAD','Line it up and fire!',1.2)}
+  if(port){port.z-=speed*dt*.8;if(port.z<8&&!port.hit){if(!portMissed){portMissed=true;showBanner('MISSED','Back through the trench',1.4);jingle([330,262],.15,'triangle')}port=null;trenchZ=0}}
+  if(port&&port.hit){port.boomT=(port.boomT||0)+dt;if(port.boomT>2.2){level++;shields=Math.min(12,shields+2);startPhase(1)}}}
+ for(const b of fbs){b.t+=dt;b.z-=110*dt;const k=b.z/b.sz;b.x=b.sx*k+shipX*(1-k)*0;b.y=b.sy*k;if(b.z<4&&b.hp>0){b.hp=0;hitShield('FIREBALL')}}
+ fbs=fbs.filter(b=>b.hp>0&&b.z>2);
+}
+function fire(){lasers.push({x:cx,y:cy,l:.14});beep(1500,.09,.03,'sawtooth',300);
+ const near=(p,r)=>p&&Math.hypot(p.x-cx,p.y-cy)<r;
+ for(const b of fbs){const p=P(b.x,b.y,b.z);if(b.hp>0&&near(p,Math.max(10,p&&p.s*5))){b.hp=0;score+=33;floatText(p.x,p.y-10,'+33',YEL);burst(p.x,p.y,[YEL,'#fff'],12,120,.4,2);beep(700,.06,.04);hud();return}}
+ for(const o of objs){if(o.dead)continue;let p=null,r=0;
+  if(o.k==='f'){p=P(o.x,o.y,o.z);r=p?Math.max(12,p.s*14):0}
+  else if(o.k==='tower'){p=P(o.x,40-o.h,o.z);r=p?Math.max(10,p.s*9):0}
+  else if(o.k==='turret'){p=P(o.x,o.y,o.z);r=p?Math.max(10,p.s*6):0}
+  if(near(p,r)){if(o.k==='f'){o.hp=0;kills++;const pts=1000;score+=pts;floatText(p.x,p.y-14,'+'+pts,NEON);burst(p.x,p.y,[NEON,'#fff',BLUEL],30,220,.9,3);kick(4);noise(.4,.1,1600);Object.assign(o,mkFighter(0));o.t=rnd(0,2)}
+   else{o.dead=true;const pts=o.k==='tower'?200:150;score+=pts;floatText(p.x,p.y-12,'+'+pts,NEON);burst(p.x,p.y,[NEON,YEL,'#fff'],18,160,.6,3);noise(.25,.08,1400)}hud();return}}
+ if(port&&!port.hit){const p=P(0,25,port.z);if(p&&port.z<170&&near(p,Math.max(14,p.s*7))){port.hit=true;const b=5000*level+shields*500;score+=b;flash=1;flashCol='#fff';kick(16);noise(1.5,.2,600);jingle([523,659,784,1047,1319,1568],.11);burst(HX,HY,[YEL,'#fff',NEON,RED],120,420,2,4);showBanner('CORE DESTROYED','+'+b,2.2);hud()}}}
+function drawFighter(o){const p=P(o.x,o.y,o.z);if(!p)return;const s=p.s,b=(o.bank||0)*.5;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(b);ctx.strokeStyle=RED;ctx.lineWidth=Math.max(1,s*.5);ctx.beginPath();
+ ctx.moveTo(0,-4*s);ctx.lineTo(13*s,5*s);ctx.lineTo(4*s,3*s);ctx.lineTo(0,7*s);ctx.lineTo(-4*s,3*s);ctx.lineTo(-13*s,5*s);ctx.closePath();ctx.moveTo(0,-4*s);ctx.lineTo(0,7*s);ctx.stroke();
+ ctx.fillStyle=YEL;ctx.beginPath();ctx.arc(0,1*s,1.6*s,0,TAU);ctx.fill();ctx.restore()}
+function draw(){ctx.fillStyle='#02030a';ctx.fillRect(0,0,W,H);
+ ctx.fillStyle='#fff';for(const s of stars){const p=P(s.x,s.y,s.z);if(!p||p.y>VIEWB)continue;const sz=Math.min(3,p.s*.6);ctx.globalAlpha=Math.min(1,p.s*.8);ctx.fillRect(p.x,p.y,sz,sz)}ctx.globalAlpha=1;
+ ctx.save();ctx.beginPath();ctx.rect(0,0,W,VIEWB);ctx.clip();ctx.lineWidth=1.2;
+ if(phase===2){ctx.strokeStyle='rgba(90,255,200,.35)';ctx.beginPath();const off=(phaseT*120)%30;for(let z=320-off;z>4;z-=30){line(P(-400,40,z),P(400,40,z))}for(let x=-400;x<=400;x+=50)line(P(x,40,320),P(x,40,4));ctx.stroke();
+  const sorted=[...objs].sort((a,b)=>b.z-a.z);for(const o of sorted){const w=10,top=40-o.h,c=[[-w,-w],[w,-w],[w,w],[-w,w]];ctx.strokeStyle=o.dead?'rgba(90,255,200,.25)':NEON;ctx.beginPath();
+   for(let i=0;i<4;i++){const [ax,az]=c[i],[bx,bz]=c[(i+1)%4];line(P(o.x+ax,40,o.z+az),P(o.x+bx,40,o.z+bz));line(P(o.x+ax,top,o.z+az),P(o.x+bx,top,o.z+bz));line(P(o.x+ax,40,o.z+az),P(o.x+ax,top,o.z+az))}ctx.stroke();
+   if(!o.dead){ctx.fillStyle=RED;const p=P(o.x,top,o.z);if(p){ctx.beginPath();ctx.arc(p.x,p.y,Math.max(2,p.s*4),0,TAU);ctx.fill()}}}}
+ if(phase===3){ctx.strokeStyle='rgba(107,180,255,.55)';ctx.beginPath();const off=trenchZ%25;for(let z=320-off;z>2;z-=25){const a=P(-30,-25,z),b=P(-30,25,z),c=P(30,25,z),d=P(30,-25,z);line(a,b);line(b,c);line(c,d)}
+  for(const y of[-25,0,25]){line(P(-30,y,320),P(-30,y,2));line(P(30,y,320),P(30,y,2))}line(P(0,25,320),P(0,25,2));ctx.stroke();
+  const sorted=[...objs].sort((a,b)=>b.z-a.z);for(const o of sorted){if(o.k==='beam'){const near=o.z<70&&Math.abs(o.y-shipY)<6;ctx.strokeStyle=near?RED:YEL;ctx.lineWidth=near?3:2;ctx.beginPath();line(P(-30,o.y-2,o.z),P(30,o.y-2,o.z));line(P(-30,o.y+2,o.z),P(30,o.y+2,o.z));ctx.stroke();ctx.lineWidth=1.2}
+   else if(!o.dead){const p=P(o.x,o.y,o.z);if(p){ctx.strokeStyle=RED;ctx.beginPath();ctx.rect(p.x-p.s*4,p.y-p.s*4,p.s*8,p.s*8);ctx.stroke();ctx.fillStyle=RED;ctx.beginPath();ctx.arc(p.x,p.y,p.s*2,0,TAU);ctx.fill()}}}
+  if(port&&!port.hit){const p=P(0,25,port.z);if(p){ctx.strokeStyle=YEL;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(p.x,p.y,p.s*7,p.s*2.5,0,0,TAU);ctx.stroke();ctx.fillStyle='rgba(255,225,79,.35)';ctx.fill();if(port.z<170){ctx.strokeStyle='rgba(255,225,79,.8)';ctx.beginPath();ctx.arc(p.x,p.y,p.s*10+Math.sin(T*10)*3,0,TAU);ctx.stroke()}}}}
+ if(phase===1){const sorted=[...objs].sort((a,b)=>b.z-a.z);for(const o of sorted)drawFighter(o)}
+ for(const b of fbs){const p=P(b.x,b.y,b.z);if(!p)continue;const r=Math.max(3,p.s*3.2);ctx.fillStyle='#ff9a3d';ctx.shadowColor='#ff6a00';ctx.shadowBlur=12;ctx.beginPath();for(let i=0;i<10;i++){const a=i/10*TAU+b.t*6,rr2=i%2?r*.55:r;ctx.lineTo(p.x+Math.cos(a)*rr2,p.y+Math.sin(a)*rr2)}ctx.fill();ctx.shadowBlur=0}
+ ctx.restore();
+ for(const l of lasers){ctx.globalAlpha=l.l/.14;ctx.strokeStyle=NEON;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(20,VIEWB);ctx.lineTo(l.x,l.y);ctx.moveTo(W-20,VIEWB);ctx.lineTo(l.x,l.y);ctx.stroke()}ctx.globalAlpha=1;
+ // cockpit frame + sight
+ ctx.strokeStyle=NEON;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx-18,cy);ctx.lineTo(cx-6,cy);ctx.moveTo(cx+6,cy);ctx.lineTo(cx+18,cy);ctx.moveTo(cx,cy-18);ctx.lineTo(cx,cy-6);ctx.moveTo(cx,cy+6);ctx.lineTo(cx,cy+18);ctx.stroke();ctx.beginPath();ctx.arc(cx,cy,12,0,TAU);ctx.stroke();
+ ctx.fillStyle='#070b18';ctx.fillRect(0,VIEWB,W,H-VIEWB);ctx.strokeStyle='#1d2b55';ctx.beginPath();ctx.moveTo(0,VIEWB);ctx.lineTo(W,VIEWB);ctx.stroke();
+ ctx.font='11px Rubik, sans-serif';ctx.textAlign='left';ctx.fillStyle='#8f9bbd';ctx.fillText('SHIELDS',16,VIEWB+22);for(let i=0;i<12;i++){ctx.fillStyle=i<shields?(shields<3?RED:NEON):'#1a2440';ctx.fillRect(16+i*13,VIEWB+30,10,12)}
+ ctx.textAlign='right';ctx.fillStyle='#8f9bbd';const prog=phase===1?'FIGHTERS '+kills+'/10':phase===2?'SURFACE '+Math.max(0,Math.ceil(22-phaseT))+'s':port?'VENT IN RANGE':'TRENCH '+Math.min(99,Math.floor(trenchZ/(15+level*2)))+'%';ctx.fillText(prog,W-16,VIEWB+22);ctx.fillText('WAVE '+level,W-16,VIEWB+40);
+ if(phase===3){ctx.fillStyle='#8f9bbd';ctx.textAlign='center';ctx.fillText('Your height in the trench follows the sight',W/2,VIEWB+62)}}
+
+reset();requestAnimationFrame(frame);
+</script>
+
+</body></html>

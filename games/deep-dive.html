@@ -1,0 +1,165 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Deep Dive</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600&display=swap">
+<style>
+/* Layout: one portrait arcade screen; HUD strip above, touch zones on the canvas (left drag = move, right hold = action) */
+:root{--bg:#060a14;--panel:#111a2e;--ink:#eaf0ff;--dim:#8f9bbd;--acc:#ffcf2e;--acc2:#1aa0c8;--display:'Bungee',Impact,system-ui,sans-serif;--body:'Rubik',system-ui,sans-serif;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding-inline:16px;padding-block:6px;box-sizing:border-box}
+#hud{width:min(100%,440px);display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:var(--display);font-size:clamp(14px,4.4vw,19px);font-variant-numeric:tabular-nums}
+#hud .lbl{display:block;font-family:var(--body);font-size:10px;letter-spacing:.12em;color:var(--dim);font-weight:600}
+#hud .c{text-align:center}#hud .r{text-align:right}
+#hud .btns{display:flex;gap:6px}
+.ib{font:600 12px var(--body);letter-spacing:.06em;color:var(--ink);background:var(--panel);border:1px solid #26314f;border-radius:8px;padding:6px 8px;cursor:pointer}
+#stage{position:relative;width:min(100%,440px,calc((100vh - 90px) * 2 / 3));width:min(100%,440px,calc((100dvh - 90px) * 2 / 3));aspect-ratio:2/3}
+canvas{width:100%;height:100%;display:block;border-radius:10px;box-shadow:0 0 0 2px #1a2440,0 0 40px -10px var(--acc)}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(6,10,20,.84);border-radius:10px;padding-inline:20px;backdrop-filter:blur(2px)}
+#overlay h1{font-family:var(--display);font-size:clamp(34px,11vw,58px);line-height:1;margin:0;color:var(--acc);text-shadow:0 0 22px var(--acc),3px 3px 0 var(--acc2);text-wrap:balance}
+#overlay p{margin:0;max-width:30ch;line-height:1.5}
+#overlay .how{font-size:12px;color:var(--dim);max-width:34ch}
+#overlay .best{font-family:var(--display);font-size:14px;color:var(--acc2)}
+#go{font-family:var(--display);font-size:20px;padding:12px 34px;border:0;border-radius:999px;background:var(--acc);color:#06101a;box-shadow:0 5px 0 rgba(0,0,0,.45);cursor:pointer}
+button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid var(--acc2);outline-offset:3px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){canvas{box-shadow:0 0 0 2px #1a2440}}
+</style>
+<div id="app">
+  <div id="hud"><div><span class="lbl" id="l1">SCORE</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">LEVEL</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">SUBS</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
+  <div id="stage"><canvas id="c" width="400" height="600"></canvas>
+    <div id="overlay"><h1>Deep Dive</h1><p id="msg">Torpedo sharks and raider subs, rescue six divers, then surface before your air runs out.</p><p class="how">Left side: drag to steer. Right side: hold to fire. You only get fresh air when you surface with a diver aboard. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+  </div>
+</div>
+<script>
+const GAME_ID='deep-dive';
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const W=cv.width,H=cv.height,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
+let AC,muted=false;
+try{muted=localStorage.getItem('arcade_muted')==='1'}catch(e){}
+function setMuteLabel(){$('mu').textContent=muted?'MUTE':'SND'}setMuteLabel();
+$('mu').onclick=()=>{muted=!muted;setMuteLabel();try{localStorage.setItem('arcade_muted',muted?'1':'0')}catch(e){}};
+function beep(f,d,v=.05,type='square',slide){if(!AC||muted)return;try{const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,slide),t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0008,t+d);o.connect(g).connect(AC.destination);o.start(t);o.stop(t+d+.02)}catch(e){}}
+function noise(d,v=.08,f=800){if(!AC||muted)return;try{const t=AC.currentTime,n=Math.floor(AC.sampleRate*d),b=AC.createBuffer(1,n,AC.sampleRate),a=b.getChannelData(0);for(let i=0;i<n;i++)a[i]=(Math.random()*2-1)*(1-i/n);const s=AC.createBufferSource(),fl=AC.createBiquadFilter(),g=AC.createGain();s.buffer=b;fl.type='lowpass';fl.frequency.value=f;g.gain.value=v;s.connect(fl).connect(g).connect(AC.destination);s.start(t)}catch(e){}}
+function jingle(notes,step=.09,type='square',v=.05){notes.forEach((n,i)=>setTimeout(()=>beep(n,step*1.4,v,type),i*step*1000))}
+const keys={};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=1;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();if(state!=='play'&&k==='enter')startGame();if(k==='p'&&(state==='play'||state==='paused'))togglePause()});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0});
+let joy=null,fireId=null;const coarse=matchMedia('(pointer:coarse)').matches;
+function cpos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
+cv.addEventListener('pointerdown',e=>{const p=cpos(e);try{cv.setPointerCapture(e.pointerId)}catch(_){}if((p.x<W*.55||!ACTION_LABEL)&&!joy)joy={id:e.pointerId,x0:p.x,y0:p.y,x:p.x,y:p.y};else{fireId=e.pointerId;tapPt=p}e.preventDefault()});
+cv.addEventListener('pointermove',e=>{if(joy&&e.pointerId===joy.id){const p=cpos(e);joy.x=p.x;joy.y=p.y;const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>55){joy.x0=joy.x-dx/m*55;joy.y0=joy.y-dy/m*55}}});
+function up(e){if(joy&&e.pointerId===joy.id)joy=null;if(e.pointerId===fireId)fireId=null}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+let tapPt=null;const inp={x:0,y:0,fire:false,fireTap:false,up:false,upTap:false};let prevFire=false,prevUp=false;
+function readInput(){let x=0,y=0;if(keys.arrowleft||keys.a)x--;if(keys.arrowright||keys.d)x++;if(keys.arrowup||keys.w)y--;if(keys.arrowdown||keys.s)y++;
+ if(joy){const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>7){const k=Math.min(1,m/38);x=dx/m*k;y=dy/m*k}}
+ const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f}
+function drawJoy(){if(!joy&&!coarse)return;ctx.save();if(joy){ctx.globalAlpha=.3;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.x0,joy.y0,42,0,TAU);ctx.stroke();ctx.fillStyle='#fff';const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy),k=m>42?42/m:1;ctx.beginPath();ctx.arc(joy.x0+dx*k,joy.y0+dy*k,17,0,TAU);ctx.fill()}
+ if(coarse&&state==='play'&&ACTION_LABEL){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(W-58,H-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,W-58,H-58)}ctx.restore()}
+let ACTION_LABEL='FIRE';
+/* juice: particles, floating text, screen shake */
+let parts=[],floats=[],shake=0,flash=0,flashCol='#fff';
+function burst(x,y,col,n=18,sp=160,life=.7,size=3){for(let i=0;i<n;i++){const a=Math.random()*TAU,s=Math.random()*sp;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:life*rnd(.5,1),L:life,c:Array.isArray(col)?col[i%col.length]:col,s:size*rnd(.6,1.3)})}}
+function floatText(x,y,t,col='#fff'){floats.push({x,y,t,c:col,l:1})}
+function kick(s){shake=Math.max(shake,s)}
+function updFx(dt){for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.pow(.2,dt);p.vy*=Math.pow(.2,dt);p.vy+=(p.g||0)*dt;p.l-=dt}parts=parts.filter(p=>p.l>0);for(const f of floats){f.y-=40*dt;f.l-=dt}floats=floats.filter(f=>f.l>0);shake=Math.max(0,shake-dt*30);flash=Math.max(0,flash-dt*3)}
+function drawFx(){for(const p of parts){ctx.globalAlpha=Math.max(0,p.l/p.L);ctx.fillStyle=p.c;ctx.fillRect(p.x-p.s/2,p.y-p.s/2,p.s,p.s)}ctx.globalAlpha=1;ctx.textAlign='center';ctx.font='14px Bungee, Impact, sans-serif';for(const f of floats){ctx.globalAlpha=Math.min(1,f.l*2);ctx.fillStyle='#000';ctx.fillText(f.t,f.x+1.5,f.y+1.5);ctx.fillStyle=f.c;ctx.fillText(f.t,f.x,f.y)}ctx.globalAlpha=1;if(flash>0){ctx.globalAlpha=flash*.5;ctx.fillStyle=flashCol;ctx.fillRect(0,0,W,H);ctx.globalAlpha=1}}
+let banner=null;function showBanner(t,sub='',dur=1.6){banner={t,sub,l:dur,L:dur}}
+function drawBanner(dt){if(!banner)return;banner.l-=dt;if(banner.l<=0){banner=null;return}const a=Math.min(1,banner.l*3,(banner.L-banner.l)*6);ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,H/2-46,W,banner.sub?84:64);ctx.textAlign='center';ctx.font='30px Bungee, Impact, sans-serif';ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc');ctx.fillText(banner.t,W/2,H/2-4);if(banner.sub){ctx.font='14px Rubik, sans-serif';ctx.fillStyle='#fff';ctx.fillText(banner.sub,W/2,H/2+24)}ctx.restore()}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+let state='menu',score=0,best=0;
+try{best=+localStorage.getItem('best_'+GAME_ID)||0}catch(e){}
+function showBest(){$('bestline').textContent=best?'BEST '+best:''}showBest();
+function saveBest(){if(score>best){best=score;try{localStorage.setItem('best_'+GAME_ID,best)}catch(e){}return true}return false}
+function startGame(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==='suspended')AC.resume();$('overlay').hidden=true;try{document.activeElement.blur()}catch(e){}parts=[];floats=[];banner=null;state='play';reset();jingle([523,659,784,1047],.07)}
+$('go').onclick=startGame;
+function gameOver(msg,useBest=true){if(state!=='play')return;state='over';let nb=false;if(useBest)nb=saveBest();$('msg').textContent=msg+(nb?' New best!':'');showBest();$('go').textContent='Play again';jingle([392,330,262,196],.14,'triangle',.06);setTimeout(()=>{$('overlay').hidden=false},1100)}
+function togglePause(){if(state==='play'){state='paused';$('pz').textContent='▶'}else if(state==='paused'){state='play';$('pz').textContent='II';last=performance.now()}}
+$('pz').onclick=togglePause;
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause()});
+let last=performance.now(),T=0;
+function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(state==='play'){T+=dt;update(dt);updFx(dt)}else if(state==='over'||state==='menu')updFx(dt);
+ ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
+ if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',W/2,H/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',W/2,H/2+28)}
+ requestAnimationFrame(frame)}
+</script>
+<script>
+// DEEP DIVE — submarine rescue. Torpedo sharks and raider subs, pick up divers, surface before your air runs out.
+const SURF=92,FLOOR=548,LANES=[148,206,264,322,380,438,496];
+let noRefill=false,sub,torps,ens,divers,ebul,lives,level,oxy,saved,dived,deadT,spawnT,dSpawnT,bubbles,lowBeepT,boat,refillT;
+ACTION_LABEL='FIRE';
+function reset(){score=0;lives=3;level=1;saved=0;bubbles=Array.from({length:26},()=>({x:rnd(0,W),y:rnd(SURF,FLOOR),s:rnd(1,3),v:rnd(10,30)}));newLife();hud()}
+function newLife(){sub={x:200,y:SURF,f:1,inv:2};torps=[];ens=[];divers=[];ebul=[];oxy=1;noRefill=false;dived=false;deadT=0;spawnT=1.2;dSpawnT=2;lowBeepT=0;boat={x:-60,v:40+level*6,dropT:3};refillT=0}
+function hud(){$('h1').textContent=score;$('h2').textContent=level;$('h3').textContent='◆'.repeat(Math.max(0,lives))||'–'}
+function die(why){if(deadT>0)return;lives--;deadT=2;burst(sub.x,sub.y,['#ffd23f','#ff7a1f','#fff'],40,240,1.1,4);kick(10);noise(.6,.12,700);beep(200,.7,.07,'sawtooth',40);showBanner(why,lives>0?'Subs left: '+lives:'',1.8);hud()}
+function laneFree(y){return!ens.some(e=>e.lane===y)}
+function update(dt){
+ for(const b of bubbles){b.y-=b.v*dt;if(b.y<SURF){b.y=FLOOR;b.x=rnd(0,W)}}
+ if(deadT>0){deadT-=dt;if(deadT<=0){if(lives<=0)gameOver('Game over. Score '+score+'.');else newLife()}return}
+ sub.inv-=dt;
+ sub.x=clamp(sub.x+inp.x*175*dt,22,W-22);sub.y=clamp(sub.y+inp.y*140*dt,SURF,FLOOR-16);if(Math.abs(inp.x)>.2)sub.f=Math.sign(inp.x);
+ const atSurf=sub.y<=SURF+3;
+ if(!atSurf){if(sub.y>SURF+24)dived=true;oxy-=dt/Math.max(20,34-level*1.5)}
+ else{if(dived){dived=false;
+   if(saved===0){noRefill=true;showBanner('NO DIVERS ABOARD','No air refill until you rescue one',1.8);beep(200,.3,.05,'square')}
+   if(saved>=6){const bonus=500*level+Math.round(oxy*1000);score+=bonus;floatText(sub.x,sub.y-24,'+'+bonus,'#7cffb2');level++;saved=0;showBanner('FULL CREW!','Level '+level,2);jingle([523,659,784,1047,784,1047],.09);ens=[];ebul=[]}
+   else{saved--;noRefill=false;showBanner('AIR REFILLED','One diver went ashore',1.4)}
+   refillT=1;hud()}
+  if(!noRefill)oxy=Math.min(1,oxy+dt*.9);if(!noRefill&&oxy<1&&Math.random()<dt*10)beep(600+oxy*600,.03,.02,'sine')}
+ if(oxy<=0){die('OUT OF AIR');return}
+ if(oxy<.25&&!atSurf){lowBeepT-=dt;if(lowBeepT<=0){lowBeepT=.5;beep(880,.08,.05,'square')}}
+ if(inp.fire&&!atSurf&&torps.length<1+(level>3?1:0)&&!torps.some(t=>t.age<.25)){torps.push({x:sub.x+sub.f*20,y:sub.y+3,vx:sub.f*440,age:0});beep(700,.12,.04,'square',200)}
+ for(const t of torps){t.x+=t.vx*dt;t.age+=dt;if(Math.random()<dt*30)parts.push({x:t.x-Math.sign(t.vx)*8,y:t.y,vx:0,vy:-20,l:.4,L:.4,c:'#bfe9ff',s:2})}
+ torps=torps.filter(t=>t.x>-20&&t.x<W+20&&!t.dead);
+ // spawn enemy waves in free lanes
+ spawnT-=dt;if(spawnT<=0){spawnT=Math.max(.6,1.6-level*.1);const free=LANES.filter(laneFree);if(free.length){const lane=free[Math.floor(Math.random()*free.length)],dir=Math.random()<.5?1:-1,n=1+Math.floor(Math.random()*Math.min(3,1+level/2)),type=Math.random()<Math.min(.55,.2+level*.06)?'raider':'shark',sp=(55+level*11+rnd(0,25))*dir;
+   for(let i=0;i<n;i++)ens.push({x:dir>0?-30-i*48:W+30+i*48,y:lane,lane,vx:sp,type,fireT:rnd(1,3),t:Math.random()*9})}}
+ dSpawnT-=dt;if(dSpawnT<=0){dSpawnT=rnd(2.2,4);const lane=LANES[Math.floor(Math.random()*LANES.length)],dir=Math.random()<.5?1:-1;divers.push({x:dir>0?-20:W+20,y:lane+rnd(-8,8),vx:dir*rnd(35,55),t:0})}
+ for(const e of ens){e.x+=e.vx*dt;e.t+=dt;e.y=e.lane+Math.sin(e.t*3)*(e.type==='shark'?5:2);
+  if(e.type==='raider'&&e.x>10&&e.x<W-10){e.fireT-=dt;if(e.fireT<=0){e.fireT=rnd(2.2,4)-Math.min(1.2,level*.12);ebul.push({x:e.x,y:e.y,vx:Math.sign(e.vx)*(190+level*12)});beep(300,.08,.03)}}}
+ ens=ens.filter(e=>e.x>-200&&e.x<W+200&&!e.dead);
+ // patrol boat on the surface drops depth charges once you are far into the game
+ if(level>=3){boat.x+=boat.v*dt;if(boat.x>W+60){boat.x=-60}boat.dropT-=dt;if(boat.dropT<=0&&boat.x>20&&boat.x<W-20){boat.dropT=rnd(2.5,4.5);ebul.push({x:boat.x,y:SURF+6,vx:0,vy:110,charge:true})}}
+ for(const b of ebul){b.x+=b.vx*dt;b.y+=(b.vy||0)*dt}
+ ebul=ebul.filter(b=>b.x>-20&&b.x<W+20&&b.y<FLOOR+10);
+ for(const d of divers){d.x+=d.vx*dt;d.t+=dt;if(saved<6&&dist(d.x,d.y,sub.x,sub.y)<20){d.got=true;saved++;noRefill=false;score+=25;floatText(d.x,d.y-12,'DIVER!','#7cffb2');jingle([660,880],.06,'triangle',.05);hud()}}
+ divers=divers.filter(d=>!d.got&&d.x>-40&&d.x<W+40);
+ for(const t of torps)for(const e of ens){if(!e.dead&&Math.abs(t.x-e.x)<20&&Math.abs(t.y-e.y)<12){e.dead=t.dead=true;const pts=(e.type==='shark'?20:40)*level;score+=pts;floatText(e.x,e.y-12,'+'+pts,'#ffd23f');burst(e.x,e.y,e.type==='shark'?['#ff9db0','#fff','#9fd6ff']:['#ffb44a','#fff','#777'],22,180,.8,3);kick(3);noise(.25,.08,1200);hud()}}
+ if(sub.inv<=0){for(const e of ens)if(Math.abs(e.x-sub.x)<24&&Math.abs(e.y-sub.y)<14){die(e.type==='shark'?'SHARK ATTACK':'RAMMED');return}
+  for(const b of ebul)if(Math.abs(b.x-sub.x)<16&&Math.abs(b.y-sub.y)<10){die(b.charge?'DEPTH CHARGE':'TORPEDOED');return}}
+}
+function drawSub(x,y,f,a=1){ctx.save();ctx.translate(x,y);ctx.scale(f,1);ctx.globalAlpha=a;
+ ctx.fillStyle='#ffcf2e';rr(-20,-7,40,14,7);ctx.fill();ctx.fillStyle='#e0a800';ctx.fillRect(-20,2,40,5);
+ ctx.fillStyle='#ffcf2e';rr(-6,-14,14,9,3);ctx.fill();ctx.fillStyle='#333';ctx.fillRect(2,-20,2,7);ctx.fillRect(2,-20,6,2);
+ ctx.fillStyle='#8be2ff';for(const px of[-10,-2,6]){ctx.beginPath();ctx.arc(px,-1,2.6,0,TAU);ctx.fill()}
+ ctx.fillStyle='#888';const s=Math.sin(T*30)*5;ctx.fillRect(-24,-1-Math.abs(s)/2,3,Math.abs(s)+2);ctx.restore()}
+function drawShark(e){ctx.save();ctx.translate(e.x,e.y);ctx.scale(Math.sign(e.vx),1);const hue=(200+level*37)%360;
+ ctx.fillStyle=`hsl(${hue},45%,62%)`;ctx.beginPath();ctx.moveTo(18,0);ctx.quadraticCurveTo(6,-10,-12,-4);ctx.lineTo(-20,-10+Math.sin(e.t*12)*3);ctx.lineTo(-17,0);ctx.lineTo(-20,10+Math.sin(e.t*12)*3);ctx.lineTo(-12,4);ctx.quadraticCurveTo(6,9,18,0);ctx.fill();
+ ctx.beginPath();ctx.moveTo(0,-7);ctx.lineTo(-6,-15);ctx.lineTo(-8,-6);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(18,0);ctx.quadraticCurveTo(6,8,-10,4);ctx.lineTo(4,2);ctx.fill();
+ ctx.fillStyle='#111';ctx.beginPath();ctx.arc(9,-2,1.6,0,TAU);ctx.fill();ctx.restore()}
+function drawRaider(e){ctx.save();ctx.translate(e.x,e.y);ctx.scale(Math.sign(e.vx),1);ctx.fillStyle='#7c8794';rr(-18,-6,36,12,6);ctx.fill();ctx.fillStyle='#c0392b';ctx.fillRect(-18,-1,36,3);ctx.fillStyle='#5d6672';rr(-4,-12,10,7,2);ctx.fill();ctx.fillStyle='#ff5a5a';ctx.beginPath();ctx.arc(10,0,2.2,0,TAU);ctx.fill();ctx.restore()}
+function drawDiver(d){ctx.save();ctx.translate(d.x,d.y);ctx.scale(Math.sign(d.vx),1);const k=Math.sin(d.t*10)*4;ctx.strokeStyle='#ffdd99';ctx.lineWidth=3;ctx.lineCap='round';
+ ctx.beginPath();ctx.moveTo(8,0);ctx.lineTo(-6,0);ctx.lineTo(-13,-3+k);ctx.moveTo(-6,0);ctx.lineTo(-13,3-k);ctx.stroke();ctx.fillStyle='#ff7a1f';ctx.fillRect(-3,-5,7,4);ctx.fillStyle='#ffdd99';ctx.beginPath();ctx.arc(11,-1,3.5,0,TAU);ctx.fill();ctx.fillStyle='#4fd1ff';ctx.fillRect(10,-3,4,2);ctx.restore()}
+function draw(){const sky=ctx.createLinearGradient(0,0,0,SURF);sky.addColorStop(0,'#0e1a3a');sky.addColorStop(1,'#3a6fb0');ctx.fillStyle=sky;ctx.fillRect(0,0,W,SURF);
+ ctx.fillStyle='#ffe9a8';ctx.beginPath();ctx.arc(330,40,16,0,TAU);ctx.fill();
+ const sea=ctx.createLinearGradient(0,SURF,0,FLOOR);const deep=Math.min(1,level/8);sea.addColorStop(0,'#1aa0c8');sea.addColorStop(.5,`rgb(${12-deep*8},${90-deep*40},${140-deep*40})`);sea.addColorStop(1,'#04203a');ctx.fillStyle=sea;ctx.fillRect(0,SURF,W,FLOOR-SURF);
+ ctx.globalAlpha=.07;ctx.fillStyle='#fff';for(let i=0;i<5;i++){const x=(i*97+T*8)%(W+120)-60;ctx.beginPath();ctx.moveTo(x,SURF);ctx.lineTo(x+40,SURF);ctx.lineTo(x+110,FLOOR);ctx.lineTo(x+40,FLOOR);ctx.fill()}ctx.globalAlpha=1;
+ ctx.fillStyle='#1aa0c8';ctx.beginPath();ctx.moveTo(0,SURF);for(let x=0;x<=W;x+=10)ctx.lineTo(x,SURF-3+Math.sin(x*.06+T*3)*3);ctx.lineTo(W,SURF+4);ctx.lineTo(0,SURF+4);ctx.fill();
+ ctx.fillStyle='#c9a46a';ctx.beginPath();ctx.moveTo(0,FLOOR);for(let x=0;x<=W;x+=20)ctx.lineTo(x,FLOOR-4+Math.sin(x*.05)*5);ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.fill();
+ ctx.strokeStyle='#2c8a5a';ctx.lineWidth=3;for(const x of[40,130,260,350]){ctx.beginPath();ctx.moveTo(x,FLOOR);for(let k=1;k<6;k++)ctx.lineTo(x+Math.sin(T*2+k+x)*5,FLOOR-k*10);ctx.stroke()}
+ ctx.fillStyle='rgba(255,255,255,.35)';for(const b of bubbles){ctx.beginPath();ctx.arc(b.x+Math.sin(b.y*.05)*3,b.y,b.s,0,TAU);ctx.fill()}
+ if(level>=3){ctx.save();ctx.translate(boat.x,SURF-8);ctx.fillStyle='#d9dde3';ctx.beginPath();ctx.moveTo(-26,0);ctx.lineTo(26,0);ctx.lineTo(20,9);ctx.lineTo(-20,9);ctx.fill();ctx.fillStyle='#8a2b2b';ctx.fillRect(-8,-8,16,8);ctx.restore()}
+ for(const d of divers)drawDiver(d);
+ for(const e of ens)e.type==='shark'?drawShark(e):drawRaider(e);
+ for(const b of ebul){ctx.fillStyle=b.charge?'#222':'#ff5a5a';if(b.charge){ctx.beginPath();ctx.arc(b.x,b.y,5,0,TAU);ctx.fill();ctx.fillStyle='#ff5a5a';ctx.fillRect(b.x-1,b.y-7,2,3)}else ctx.fillRect(b.x-7,b.y-1.5,14,3)}
+ for(const t of torps){ctx.fillStyle='#fff';ctx.fillRect(t.x-9,t.y-1.5,18,3);ctx.fillStyle='#ffd23f';ctx.fillRect(t.x+(t.vx>0?7:-9),t.y-1.5,2,3)}
+ if(deadT<=0)drawSub(sub.x,sub.y,sub.f,sub.inv>0&&Math.floor(T*10)%2?.4:1);
+ // air gauge and crew
+ ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(0,H-44,W,44);ctx.fillStyle='#fff';ctx.font='11px Rubik, sans-serif';ctx.textAlign='left';ctx.fillText('AIR',14,H-27);
+ rr(44,H-36,180,12,6);ctx.fillStyle='#1b2540';ctx.fill();const oc=oxy<.25?(Math.floor(T*6)%2?'#ff3d52':'#ff9a3d'):'#4fe3a1';rr(44,H-36,Math.max(6,180*oxy),12,6);ctx.fillStyle=oc;ctx.fill();
+ ctx.fillText('CREW',238,H-27);for(let i=0;i<6;i++){ctx.fillStyle=i<saved?'#7cffb2':'#2a3555';ctx.beginPath();ctx.arc(282+i*18,H-31,6,0,TAU);ctx.fill()}
+ ctx.fillStyle='#8f9bbd';ctx.font='10px Rubik, sans-serif';ctx.fillText('Collect 6 divers, then surface',14,H-10)}
+
+reset();requestAnimationFrame(frame);
+</script>
+
+</body></html>

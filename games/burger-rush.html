@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Burger Rush</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Burger Rush: catch the right toppings in the right order to build each burger on the ticket. Dodge the wrong ones.
+K.theme({ bg: '#2a1408', ink: '#fff6e8', accent: '#ffb02e', accentInk: '#2a1600' });
+const W = 240, H = 340, PY = 300, SHIFT = 90;
+K.screen(W, H);
+K.hud(['score', 'served', 'time']);
+K.pad({ dpad: 'lr', buttons: [{ id: 'a', label: 'TOSS' }] });
+const ING = {
+  patty: { c: '#6b3a1e', h: 6, n: 'Patty' }, cheese: { c: '#ffd23f', h: 3, n: 'Cheese' }, lettuce: { c: '#5cc23a', h: 3, n: 'Lettuce' },
+  tomato: { c: '#e63946', h: 3, n: 'Tomato' }, onion: { c: '#e8d6f0', h: 3, n: 'Onion' }, bacon: { c: '#c0504a', h: 3, n: 'Bacon' }, top: { c: '#e0a14a', h: 8, n: 'Top bun' }
+};
+const POOL = ['patty', 'cheese', 'lettuce', 'tomato', 'onion', 'bacon'];
+let state = 'title', px, order, stack, falling, parts, score, served, left, spawnT, msg, msgT, best = K.best('burger');
+function title() { K.card({ title: 'BURGER RUSH', text: 'Read the ticket and catch the toppings in that order on your bun, finishing with the top bun. Wrong topping? Dodge it, or hit TOSS to start the burger over. You have ' + SHIFT + ' seconds.', best: best ? 'BEST ' + best : '', button: 'Open kitchen', onStart: start }); }
+function start() { px = W / 2; falling = []; parts = []; score = 0; served = 0; left = SHIFT; spawnT = 0.5; newOrder(); state = 'play'; hud(); }
+function newOrder() {
+  const n = Math.min(5, 2 + Math.floor(served / 2));
+  order = []; for (let i = 0; i < n; i++) order.push(POOL[K.ri(0, served < 2 ? 2 : POOL.length - 1)]);
+  order.push('top'); stack = [];
+}
+function hud() { K.set('score', score); K.set('served', 'SERVED ' + served); K.set('time', Math.ceil(left) + 's'); }
+const need = () => order[stack.length];
+
+function update(dt) {
+  if (state !== 'play') return;
+  left -= dt; if (msgT > 0) msgT -= dt;
+  if (left <= 0) { left = 0; hud(); return over(); }
+  const ax = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0);
+  px += ax * 140 * dt; if (K.ptr.down) px += K.clamp(K.ptr.x - px, -150 * dt, 150 * dt);
+  px = K.clamp(px, 16, W - 16);
+  if (K.hit('a') && stack.length) { stack = []; say('TOSSED', '#ccc'); K.noise(0.15, 0.15); }
+  spawnT -= dt;
+  if (spawnT <= 0) {
+    // about half the drops are what you need next, so there's always something to catch
+    const want = Math.random() < 0.5 ? need() : Math.random() < 0.15 ? 'top' : POOL[K.ri(0, POOL.length - 1)];
+    falling.push({ k: want, x: K.rnd(14, W - 14), y: 40, vy: K.rnd(55, 75) + served * 3, r: K.rnd(-1, 1) });
+    spawnT = K.rnd(0.45, 0.8) / (1 + served * 0.04);
+  }
+  const top = PY - 4 - stack.reduce((a, k) => a + ING[k].h, 0);
+  for (const f of falling) {
+    f.y += f.vy * dt; f.r += dt * 2;
+    if (Math.abs(f.x - px) < 15 && f.y > top - 6 && f.y < top + 6) {
+      f.dead = true;
+      if (f.k === need()) {
+        stack.push(f.k); K.beep(500 + stack.length * 90, 0.07, { type: 'triangle', vol: 0.06 });
+        if (stack.length === order.length) { served++; const pts = 50 * order.length; score += pts; say('ORDER UP! +' + pts, '#ffd23f'); K.tune([523, 659, 784, 1047], 0.07); newOrder(); }
+      } else { score = Math.max(0, score - 10); say('WRONG! -10', '#ff5a36'); stack = []; K.beep(160, 0.25, { type: 'sawtooth', vol: 0.06 }); for (let i = 0; i < 8; i++) parts.push({ x: px, y: top, vx: K.rnd(-80, 80), vy: K.rnd(-120, -40), l: 0.6, c: ING[f.k].c }); }
+      hud();
+    }
+    if (f.y > H + 10) f.dead = true;
+  }
+  falling = falling.filter(f => !f.dead);
+  for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt; p.l -= dt; } parts = parts.filter(p => p.l > 0);
+  if (Math.floor(left * 4) !== Math.floor((left + dt) * 4)) hud();
+}
+function say(t, col) { msg = { t, col }; msgT = 1; }
+function over() { state = 'over'; best = K.saveBest('burger', score); K.card({ title: 'KITCHEN CLOSED', text: 'You served ' + served + ' burger' + (served === 1 ? '' : 's') + ' for ' + score + ' points.', best: 'BEST ' + best, button: 'Next shift', onStart: start }); }
+
+function layer(c, k, x, y, w) {
+  const g = ING[k]; c.fillStyle = g.c;
+  if (k === 'top') { c.beginPath(); c.ellipse(x, y, w / 2, g.h, 0, Math.PI, 0); c.fill(); c.fillStyle = '#fff3c4'; for (let i = -2; i <= 2; i++) c.fillRect(x + i * 5, y - 5 + Math.abs(i), 2, 1); return; }
+  if (k === 'lettuce') { for (let i = -w / 2; i < w / 2; i += 4) c.fillRect(x + i, y - g.h + ((i / 4) % 2 ? 1 : 0), 4, g.h); return; }
+  if (k === 'cheese') { c.fillRect(x - w / 2, y - g.h, w, g.h); c.beginPath(); c.moveTo(x - 4, y); c.lineTo(x, y + 4); c.lineTo(x + 4, y); c.fill(); return; }
+  c.fillRect(x - w / 2 + (k === 'patty' ? 0 : 1), y - g.h, w - (k === 'patty' ? 0 : 2), g.h);
+  if (k === 'patty') { c.fillStyle = '#4a2810'; for (let i = -10; i < 12; i += 6) c.fillRect(x + i, y - 4, 2, 1); }
+}
+function draw(c, t) {
+  c.fillStyle = '#f2e3c6'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#e6d2ae'; for (let y = 60; y < H; y += 20) for (let x = (y / 20 % 2) * 20; x < W; x += 40) c.fillRect(x, y, 20, 20);
+  c.fillStyle = '#9aa0a8'; c.fillRect(0, 0, W, 40); c.fillStyle = '#c0c6d0'; for (let x = 10; x < W; x += 40) { c.fillRect(x, 6, 26, 26); c.fillStyle = '#ff7a3a'; c.fillRect(x + 4, 28, 18, 3); c.fillStyle = '#c0c6d0'; }
+  c.fillStyle = '#7a5a3a'; c.fillRect(0, PY + 10, W, H - PY - 10); c.fillStyle = '#5a3a22'; c.fillRect(0, PY + 10, W, 3);
+  if (!order) return;
+  // ticket
+  c.fillStyle = '#fffdf5'; c.fillRect(W - 72, 46, 66, 22 + order.length * 11); c.strokeStyle = '#ccc'; c.strokeRect(W - 72, 46, 66, 22 + order.length * 11);
+  K.text(c, 'ORDER', W - 39, 54, 7, '#e63946');
+  order.slice().reverse().forEach((k, j) => { const i = order.length - 1 - j, done = i < stack.length, nxt = i === stack.length; c.fillStyle = ING[k].c; c.fillRect(W - 66, 62 + j * 11, 8, 7); c.font = '8px Rubik, sans-serif'; c.textAlign = 'left'; c.fillStyle = done ? '#9a9a9a' : nxt ? '#e63946' : '#333'; c.fillText((nxt ? '▸ ' : '') + ING[k].n, W - 55, 66 + j * 11); if (done) c.fillRect(W - 56, 65 + j * 11, 44, 1); });
+  for (const f of falling) { c.save(); c.translate(f.x, f.y); c.rotate(Math.sin(f.r) * 0.3); c.scale(1.4, 1.9); layer(c, f.k, 0, 0, 20); c.restore(); }
+  // chef plate + stack
+  const x = Math.round(px);
+  c.fillStyle = '#fff'; c.beginPath(); c.ellipse(x, PY + 2, 20, 4, 0, 0, 7); c.fill();
+  c.fillStyle = '#e0a14a'; c.fillRect(x - 13, PY - 4, 26, 5);
+  let y = PY - 4; for (const k of stack) { layer(c, k, x, y, 26); y -= ING[k].h; }
+  c.fillStyle = '#fff'; c.fillRect(x - 6, PY + 8, 12, 14); c.fillStyle = '#ffcf9e'; c.fillRect(x - 22, PY - 2, 6, 6); c.fillRect(x + 16, PY - 2, 6, 6);
+  for (const p of parts) { c.fillStyle = p.c; c.fillRect(p.x - 2, p.y - 2, 4, 3); }
+  if (msgT > 0) K.text(c, msg.t, W / 2 - 30, 160, 13, msg.col);
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

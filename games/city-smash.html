@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>City Smash</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// City Smash: you are a giant lizard. Climb the towers, punch out every window until each one crumbles, and swat the soldiers and choppers fighting back.
+K.theme({ bg: '#1a1030', ink: '#fff2e0', accent: '#7aff4a', accentInk: '#0a2400' });
+const W = 320, H = 220, GY = 196, FW = 12, FH = 13;
+K.screen(W, H);
+K.hud(['score', 'city', 'hp']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'JUMP' }, { id: 'a', label: 'PUNCH' }] });
+
+let state = 'title', score, hp, city, me, blds, foes, shots, people, parts, spawnT, punchT, best = K.best('citysmash'), shake;
+function title() { K.card({ title: 'CITY SMASH', text: '◀ ▶ walk. Walk into a tower and press ▲ ▼ to climb it. PUNCH smashes windows, soldiers and choppers. JUMP leaps. Grab the little people in the windows to heal. Knock down every tower to wreck the city!', best: best ? 'BEST ' + best : '', button: 'Rampage', onStart: start }); }
+function start() { score = 0; hp = 100; city = 1; buildCity(); state = 'play'; }
+function buildCity() {
+  blds = []; const n = 3 + Math.min(2, Math.floor(city / 2)); let x = 30;
+  for (let i = 0; i < n; i++) { const cols = K.ri(3, 4), rows = K.ri(5, 9); const w = cols * FW + 6, gap = (W - 40) / n;
+    const b = { x: 20 + i * gap + (gap - w) / 2, w, cols, rows, h: rows * FH + 8, col: ['#5a6a8a', '#8a5a5a', '#6a7a5a', '#8a7a5a', '#6a5a8a'][i % 5], wins: [], fall: 0, down: false };
+    for (let r = 0; r < rows; r++) for (let cc = 0; cc < cols; cc++) b.wins.push({ r, c: cc, hp: 2, person: Math.random() < 0.08 });
+    blds.push(b); }
+  me = { x: 10, y: GY, vx: 0, vy: 0, cling: null, face: 1, air: false };
+  foes = []; shots = []; people = []; parts = []; spawnT = 2; punchT = 0; shake = 0;
+}
+const winPos = (b, w) => ({ x: b.x + 3 + w.c * FW + 1, y: GY - b.h + b.fall + 6 + w.r * FH });
+function boom(x, y, c, n) { for (let i = 0; i < (n || 8); i++) parts.push({ x, y, vx: K.rnd(-60, 60), vy: K.rnd(-90, 10), t: K.rnd(0.4, 0.9), c }); }
+function hurt(n) { hp -= n; K.beep(150, 0.08, { type: 'sawtooth' }); if (hp <= 0) { state = 'over'; best = K.saveBest('citysmash', score); K.card({ title: 'LIZARD DOWN', text: 'You smashed ' + (city - 1) + ' cities for ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); } }
+function bldAt(x) { return blds.find(b => !b.down && x > b.x - 4 && x < b.x + b.w + 4); }
+function update(dt) {
+  if (state !== 'play') return;
+  if (punchT > 0) punchT -= dt; if (shake > 0) shake -= dt;
+  if (me.cling) {
+    const b = me.cling; if (b.down || b.fall > 0) { me.cling = null; me.air = true; }
+    else { if (K.down('up')) me.y -= 50 * dt; if (K.down('down')) me.y += 50 * dt; me.y = K.clamp(me.y, GY - b.h + b.fall + 4, GY);
+      if (me.y >= GY && K.down('down')) me.cling = null;
+      if (K.hit('b') || (K.down('left') && me.face > 0 && false)) { me.cling = null; me.vx = -me.face * 70; me.vy = -120; me.air = true; me.face = -me.face; }
+      if (K.hit('left') && me.face > 0) { me.cling = null; me.vx = -50; me.air = true; me.face = -1; } if (K.hit('right') && me.face < 0) { me.cling = null; me.vx = 50; me.air = true; me.face = 1; } }
+  }
+  if (!me.cling) {
+    let dx = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0); if (K.ptr.down && !me.air) dx = K.ptr.x > me.x + 8 ? 1 : K.ptr.x < me.x - 8 ? -1 : 0;
+    if (!me.air) me.vx = dx * 60; if (dx) me.face = dx;
+    if (K.hit('b') && !me.air) { me.vy = -150; me.air = true; K.beep(250, 0.1, { to: 400 }); }
+    me.vy += 350 * dt; me.x += me.vx * dt; me.y += me.vy * dt; me.x = K.clamp(me.x, 8, W - 8);
+    if (me.y >= GY) { me.y = GY; me.vy = 0; me.air = false; }
+    const b = bldAt(me.x + me.face * 8); if (b && (K.down('up') || (me.air && me.vy > -40)) && me.y <= GY + 1 && me.y > GY - b.h + b.fall) { me.cling = b; me.x = me.face > 0 ? b.x - 6 : b.x + b.w + 6; me.vx = 0; me.vy = 0; me.air = false; }
+  }
+  if (K.hit('a') || (K.ptr.tapped && K.ptr.y < me.y - 30)) {
+    punchT = 0.18; const px = me.x + me.face * 14, py = me.y - 16; K.noise(0.06, 0.2);
+    for (const b of blds) { if (b.down) continue; for (const w of b.wins) { if (w.hp <= 0) continue; const p = winPos(b, w); if (Math.abs(p.x + 5 - px) < 9 && Math.abs(p.y + 5 - py) < 9) { w.hp--; score += 10; boom(p.x + 5, p.y + 5, '#9cf', 4); if (w.hp <= 0) { score += 40; if (w.person) people.push({ x: p.x + 5, y: p.y + 6, t: 3 }); } } } }
+    foes.forEach(f => { if (Math.abs(f.x - px) < 14 && Math.abs(f.y - py) < 16) { f.dead = true; score += f.k === 'heli' ? 300 : 100; boom(f.x, f.y, '#ffb04a', 12); } });
+    people.forEach(p => { if (Math.abs(p.x - px) < 12 && Math.abs(p.y - py) < 14) { p.dead = true; hp = Math.min(100, hp + 15); score += 200; K.tune([660, 880], 0.05); } });
+  }
+  blds.forEach(b => { if (b.down) return; const broken = b.wins.filter(w => w.hp <= 0).length;
+    if (broken >= b.wins.length * 0.7 && !b.fall) { b.fall = 0.01; K.noise(1.2, 0.5); shake = 1; if (me.cling === b) { me.cling = null; me.air = true; hurt(10); } }
+    if (b.fall) { b.fall += 60 * dt; if (Math.random() < 0.6) parts.push({ x: b.x + K.rnd(0, b.w), y: GY - 4, vx: K.rnd(-30, 30), vy: K.rnd(-60, -10), t: 0.8, c: '#bbb' }); if (b.fall >= b.h) { b.down = true; score += 500; } } });
+  spawnT -= dt;
+  if (spawnT <= 0 && foes.length < 3 + city) { const side = Math.random() < 0.5; if (Math.random() < 0.35 + city * 0.05) foes.push({ k: 'heli', x: side ? -20 : W + 20, y: K.rnd(40, 100), vx: side ? 30 : -30, cd: 2 }); else foes.push({ k: 'sol', x: side ? -10 : W + 10, y: GY, vx: side ? 25 : -25, cd: K.rnd(1, 2) }); spawnT = K.rnd(1.5, 3) - city * 0.1; }
+  foes.forEach(f => { f.x += f.vx * dt; if (f.k === 'heli') { if (Math.abs(f.x - me.x) < 70) f.vx *= 0.98; f.y += (me.y - 40 - f.y) * dt * 0.4; }
+    if (f.k === 'sol' && Math.abs(f.x - me.x) < 60) f.vx = 0;
+    f.cd -= dt; if (f.cd <= 0 && f.x > 0 && f.x < W) { f.cd = K.rnd(1.4, 2.6); const a = Math.atan2(me.y - 16 - f.y, me.x - f.x); shots.push({ x: f.x, y: f.y - (f.k === 'sol' ? 8 : 0), vx: Math.cos(a) * 100, vy: Math.sin(a) * 100 }); K.beep(800, 0.03, { vol: 0.03 }); }
+    if (f.k === 'sol' && Math.abs(f.x - me.x) < 8 && me.y > GY - 6) { f.dead = true; hp = Math.min(100, hp + 5); score += 100; K.beep(120, 0.1); } });
+  foes = foes.filter(f => !f.dead && f.x > -40 && f.x < W + 40);
+  shots.forEach(s => { s.x += s.vx * dt; s.y += s.vy * dt; if (Math.abs(s.x - me.x) < 9 && s.y < me.y && s.y > me.y - 30) { s.dead = true; hurt(4); } });
+  shots = shots.filter(s => !s.dead && s.x > -5 && s.x < W + 5 && s.y > -5 && s.y < H);
+  people.forEach(p => p.t -= dt); people = people.filter(p => !p.dead && p.t > 0);
+  parts.forEach(p => { p.t -= dt; p.vy += 150 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
+  if (state !== 'play') return;
+  if (blds.every(b => b.down)) { city++; score += 1000; hp = Math.min(100, hp + 30); K.tune([392, 523, 659, 784], 0.1); buildCity(); }
+  K.set('score', score); K.set('city', 'CITY ' + city); K.set('hp', 'HP ' + Math.max(0, Math.ceil(hp)));
+}
+function draw(c, t) {
+  if (shake > 0) c.translate(K.rnd(-2, 2), K.rnd(-2, 2));
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#2a1a50'); g.addColorStop(1, '#e8705a'); c.fillStyle = g; c.fillRect(-4, -4, W + 8, H + 8);
+  c.fillStyle = '#3a2a5a'; for (let i = 0; i < 10; i++) c.fillRect(i * 34, GY - 40 - (i * 37 % 50), 30, 60);
+  blds.forEach(b => { if (b.down) { c.fillStyle = '#777'; c.beginPath(); c.moveTo(b.x - 4, GY); c.lineTo(b.x + b.w / 2, GY - 8); c.lineTo(b.x + b.w + 4, GY); c.fill(); return; }
+    c.save(); c.beginPath(); c.rect(b.x - 10, 0, b.w + 20, GY); c.clip();
+    const top = GY - b.h + b.fall; c.fillStyle = b.col; c.fillRect(b.x, top, b.w, b.h); c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(b.x, top, b.w, 4);
+    b.wins.forEach(w => { const p = winPos(b, w); c.fillStyle = w.hp === 2 ? '#ffe9a0' : w.hp === 1 ? '#c09060' : '#1a1020'; c.fillRect(p.x, p.y, FW - 3, FH - 4); if (w.hp === 1) { c.strokeStyle = '#fff'; c.beginPath(); c.moveTo(p.x + 1, p.y + 1); c.lineTo(p.x + 7, p.y + 8); c.stroke(); } if (w.person && w.hp > 0) { c.fillStyle = '#c05030'; c.fillRect(p.x + 3, p.y + 3, 3, 5); } });
+    c.restore(); });
+  c.fillStyle = '#3a3040'; c.fillRect(0, GY, W, H - GY);
+  people.forEach(p => { c.fillStyle = '#ffd0a0'; c.fillRect(p.x - 2, p.y - 6, 4, 4); c.fillStyle = '#4a8aff'; c.fillRect(p.x - 2, p.y - 2, 4, 6); K.text(c, 'HELP', p.x, p.y - 12, 6, '#fff'); });
+  foes.forEach(f => { if (f.k === 'sol') { c.fillStyle = '#4a5a2a'; c.fillRect(f.x - 2, f.y - 9, 4, 9); c.fillStyle = '#e0b090'; c.fillRect(f.x - 2, f.y - 12, 4, 3); } else { c.fillStyle = '#4a5a6a'; c.beginPath(); c.ellipse(f.x, f.y, 12, 5, 0, 0, 7); c.fill(); c.fillRect(f.x - (f.vx > 0 ? 22 : -8), f.y - 2, 14, 3); c.strokeStyle = '#111'; c.beginPath(); const r = Math.sin(t / 25) * 16; c.moveTo(f.x - r, f.y - 7); c.lineTo(f.x + r, f.y - 7); c.stroke(); } });
+  if (state !== 'title') { const x = me.x, y = me.y, f = me.face, step = me.vx && !me.air ? Math.sin(t / 80) * 2 : 0;
+    c.fillStyle = '#4ab83a'; c.fillRect(x - 7, y - 26, 14, 18); c.fillStyle = '#3a9a2a'; c.beginPath(); c.moveTo(x - f * 7, y - 12); c.lineTo(x - f * 16, y - 2); c.lineTo(x - f * 7, y - 6); c.fill();
+    c.fillStyle = '#4ab83a'; c.fillRect(x - 6 + step, y - 8, 5, 8); c.fillRect(x + 1 - step, y - 8, 5, 8);
+    c.fillRect(x - 6 + f * 4, y - 34, 12, 9); c.fillStyle = '#fff'; c.fillRect(x + f * 5 - 1, y - 32, 3, 3); c.fillStyle = '#c8f0a0'; c.fillRect(x - 3, y - 22, 6, 12);
+    for (let i = 0; i < 3; i++) { c.fillStyle = '#ffd84a'; c.fillRect(x - f * 8 - 1, y - 24 + i * 5, 2, 3); }
+    c.fillStyle = '#4ab83a'; const reach = punchT > 0 ? 16 : 8; c.fillRect(f > 0 ? x + 4 : x - 4 - reach, y - 20, reach, 4); if (punchT > 0) { c.fillStyle = '#fff'; c.fillRect(x + f * 18 - 2, y - 21, 4, 6); } }
+  c.fillStyle = '#ffec6a'; shots.forEach(s => c.fillRect(s.x - 1, s.y - 1, 2, 2));
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+}
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>

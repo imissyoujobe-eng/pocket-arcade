@@ -1,0 +1,159 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Spore Patrol</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600&display=swap">
+<style>
+/* Layout: one portrait arcade screen; HUD strip above, touch zones on the canvas (left drag = move, right hold = action) */
+:root{--bg:#060a14;--panel:#111a2e;--ink:#eaf0ff;--dim:#8f9bbd;--acc:#ff4fa3;--acc2:#7cff6b;--display:'Bungee',Impact,system-ui,sans-serif;--body:'Rubik',system-ui,sans-serif;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding-inline:16px;padding-block:6px;box-sizing:border-box}
+#hud{width:min(100%,440px);display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:var(--display);font-size:clamp(14px,4.4vw,19px);font-variant-numeric:tabular-nums}
+#hud .lbl{display:block;font-family:var(--body);font-size:10px;letter-spacing:.12em;color:var(--dim);font-weight:600}
+#hud .c{text-align:center}#hud .r{text-align:right}
+#hud .btns{display:flex;gap:6px}
+.ib{font:600 12px var(--body);letter-spacing:.06em;color:var(--ink);background:var(--panel);border:1px solid #26314f;border-radius:8px;padding:6px 8px;cursor:pointer}
+#stage{position:relative;width:min(100%,440px,calc((100vh - 90px) * 2 / 3));width:min(100%,440px,calc((100dvh - 90px) * 2 / 3));aspect-ratio:2/3}
+canvas{width:100%;height:100%;display:block;border-radius:10px;box-shadow:0 0 0 2px #1a2440,0 0 40px -10px var(--acc)}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(6,10,20,.84);border-radius:10px;padding-inline:20px;backdrop-filter:blur(2px)}
+#overlay h1{font-family:var(--display);font-size:clamp(34px,11vw,58px);line-height:1;margin:0;color:var(--acc);text-shadow:0 0 22px var(--acc),3px 3px 0 var(--acc2);text-wrap:balance}
+#overlay p{margin:0;max-width:30ch;line-height:1.5}
+#overlay .how{font-size:12px;color:var(--dim);max-width:34ch}
+#overlay .best{font-family:var(--display);font-size:14px;color:var(--acc2)}
+#go{font-family:var(--display);font-size:20px;padding:12px 34px;border:0;border-radius:999px;background:var(--acc);color:#06101a;box-shadow:0 5px 0 rgba(0,0,0,.45);cursor:pointer}
+button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid var(--acc2);outline-offset:3px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){canvas{box-shadow:0 0 0 2px #1a2440}}
+</style>
+<div id="app">
+  <div id="hud"><div><span class="lbl" id="l1">SCORE</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">WAVE</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">LIVES</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
+  <div id="stage"><canvas id="c" width="400" height="600"></canvas>
+    <div id="overlay"><h1>Spore Patrol</h1><p id="msg">A giant crawler is winding down through the mushroom patch. Blast every segment before it reaches you.</p><p class="how">Left side: drag to move. Right side: hold to fire. Hit segments turn into mushrooms. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+  </div>
+</div>
+<script>
+const GAME_ID='spore-patrol';
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const W=cv.width,H=cv.height,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
+let AC,muted=false;
+try{muted=localStorage.getItem('arcade_muted')==='1'}catch(e){}
+function setMuteLabel(){$('mu').textContent=muted?'MUTE':'SND'}setMuteLabel();
+$('mu').onclick=()=>{muted=!muted;setMuteLabel();try{localStorage.setItem('arcade_muted',muted?'1':'0')}catch(e){}};
+function beep(f,d,v=.05,type='square',slide){if(!AC||muted)return;try{const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,slide),t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0008,t+d);o.connect(g).connect(AC.destination);o.start(t);o.stop(t+d+.02)}catch(e){}}
+function noise(d,v=.08,f=800){if(!AC||muted)return;try{const t=AC.currentTime,n=Math.floor(AC.sampleRate*d),b=AC.createBuffer(1,n,AC.sampleRate),a=b.getChannelData(0);for(let i=0;i<n;i++)a[i]=(Math.random()*2-1)*(1-i/n);const s=AC.createBufferSource(),fl=AC.createBiquadFilter(),g=AC.createGain();s.buffer=b;fl.type='lowpass';fl.frequency.value=f;g.gain.value=v;s.connect(fl).connect(g).connect(AC.destination);s.start(t)}catch(e){}}
+function jingle(notes,step=.09,type='square',v=.05){notes.forEach((n,i)=>setTimeout(()=>beep(n,step*1.4,v,type),i*step*1000))}
+const keys={};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=1;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();if(state!=='play'&&k==='enter')startGame();if(k==='p'&&(state==='play'||state==='paused'))togglePause()});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0});
+let joy=null,fireId=null;const coarse=matchMedia('(pointer:coarse)').matches;
+function cpos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
+cv.addEventListener('pointerdown',e=>{const p=cpos(e);try{cv.setPointerCapture(e.pointerId)}catch(_){}if((p.x<W*.55||!ACTION_LABEL)&&!joy)joy={id:e.pointerId,x0:p.x,y0:p.y,x:p.x,y:p.y};else{fireId=e.pointerId;tapPt=p}e.preventDefault()});
+cv.addEventListener('pointermove',e=>{if(joy&&e.pointerId===joy.id){const p=cpos(e);joy.x=p.x;joy.y=p.y;const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>55){joy.x0=joy.x-dx/m*55;joy.y0=joy.y-dy/m*55}}});
+function up(e){if(joy&&e.pointerId===joy.id)joy=null;if(e.pointerId===fireId)fireId=null}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+let tapPt=null;const inp={x:0,y:0,fire:false,fireTap:false,up:false,upTap:false};let prevFire=false,prevUp=false;
+function readInput(){let x=0,y=0;if(keys.arrowleft||keys.a)x--;if(keys.arrowright||keys.d)x++;if(keys.arrowup||keys.w)y--;if(keys.arrowdown||keys.s)y++;
+ if(joy){const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>7){const k=Math.min(1,m/38);x=dx/m*k;y=dy/m*k}}
+ const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f}
+function drawJoy(){if(!joy&&!coarse)return;ctx.save();if(joy){ctx.globalAlpha=.3;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.x0,joy.y0,42,0,TAU);ctx.stroke();ctx.fillStyle='#fff';const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy),k=m>42?42/m:1;ctx.beginPath();ctx.arc(joy.x0+dx*k,joy.y0+dy*k,17,0,TAU);ctx.fill()}
+ if(coarse&&state==='play'&&ACTION_LABEL){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(W-58,H-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,W-58,H-58)}ctx.restore()}
+let ACTION_LABEL='FIRE';
+/* juice: particles, floating text, screen shake */
+let parts=[],floats=[],shake=0,flash=0,flashCol='#fff';
+function burst(x,y,col,n=18,sp=160,life=.7,size=3){for(let i=0;i<n;i++){const a=Math.random()*TAU,s=Math.random()*sp;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:life*rnd(.5,1),L:life,c:Array.isArray(col)?col[i%col.length]:col,s:size*rnd(.6,1.3)})}}
+function floatText(x,y,t,col='#fff'){floats.push({x,y,t,c:col,l:1})}
+function kick(s){shake=Math.max(shake,s)}
+function updFx(dt){for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.pow(.2,dt);p.vy*=Math.pow(.2,dt);p.vy+=(p.g||0)*dt;p.l-=dt}parts=parts.filter(p=>p.l>0);for(const f of floats){f.y-=40*dt;f.l-=dt}floats=floats.filter(f=>f.l>0);shake=Math.max(0,shake-dt*30);flash=Math.max(0,flash-dt*3)}
+function drawFx(){for(const p of parts){ctx.globalAlpha=Math.max(0,p.l/p.L);ctx.fillStyle=p.c;ctx.fillRect(p.x-p.s/2,p.y-p.s/2,p.s,p.s)}ctx.globalAlpha=1;ctx.textAlign='center';ctx.font='14px Bungee, Impact, sans-serif';for(const f of floats){ctx.globalAlpha=Math.min(1,f.l*2);ctx.fillStyle='#000';ctx.fillText(f.t,f.x+1.5,f.y+1.5);ctx.fillStyle=f.c;ctx.fillText(f.t,f.x,f.y)}ctx.globalAlpha=1;if(flash>0){ctx.globalAlpha=flash*.5;ctx.fillStyle=flashCol;ctx.fillRect(0,0,W,H);ctx.globalAlpha=1}}
+let banner=null;function showBanner(t,sub='',dur=1.6){banner={t,sub,l:dur,L:dur}}
+function drawBanner(dt){if(!banner)return;banner.l-=dt;if(banner.l<=0){banner=null;return}const a=Math.min(1,banner.l*3,(banner.L-banner.l)*6);ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,H/2-46,W,banner.sub?84:64);ctx.textAlign='center';ctx.font='30px Bungee, Impact, sans-serif';ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc');ctx.fillText(banner.t,W/2,H/2-4);if(banner.sub){ctx.font='14px Rubik, sans-serif';ctx.fillStyle='#fff';ctx.fillText(banner.sub,W/2,H/2+24)}ctx.restore()}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+let state='menu',score=0,best=0;
+try{best=+localStorage.getItem('best_'+GAME_ID)||0}catch(e){}
+function showBest(){$('bestline').textContent=best?'BEST '+best:''}showBest();
+function saveBest(){if(score>best){best=score;try{localStorage.setItem('best_'+GAME_ID,best)}catch(e){}return true}return false}
+function startGame(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==='suspended')AC.resume();$('overlay').hidden=true;try{document.activeElement.blur()}catch(e){}parts=[];floats=[];banner=null;state='play';reset();jingle([523,659,784,1047],.07)}
+$('go').onclick=startGame;
+function gameOver(msg,useBest=true){if(state!=='play')return;state='over';let nb=false;if(useBest)nb=saveBest();$('msg').textContent=msg+(nb?' New best!':'');showBest();$('go').textContent='Play again';jingle([392,330,262,196],.14,'triangle',.06);setTimeout(()=>{$('overlay').hidden=false},1100)}
+function togglePause(){if(state==='play'){state='paused';$('pz').textContent='▶'}else if(state==='paused'){state='play';$('pz').textContent='II';last=performance.now()}}
+$('pz').onclick=togglePause;
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause()});
+let last=performance.now(),T=0;
+function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(state==='play'){T+=dt;update(dt);updFx(dt)}else if(state==='over'||state==='menu')updFx(dt);
+ ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
+ if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',W/2,H/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',W/2,H/2+28)}
+ requestAnimationFrame(frame)}
+</script>
+<script>
+// SPORE PATROL — blast the segmented crawler as it winds down through the mushroom patch. Watch for jumpers and divers.
+const C=16,COLS=25,ROWS=36,ZONE=30;
+let mush,segs,pl,shot,spider,flea,lives,level,deadT,palette,spiderT,fleaT,shotCD,nextLife;
+ACTION_LABEL='FIRE';
+const PALS=[['#ff4fa3','#7cff6b','#ffd23f'],['#38f2ff','#ff9a3d','#fff36b'],['#c08bff','#5affc8','#ff6b6b'],['#ffd23f','#4f8bff','#ff4fa3'],['#7cff6b','#ff4fa3','#38f2ff']];
+function reset(){score=0;lives=3;level=1;nextLife=12000;mush=Array.from({length:ROWS},()=>new Array(COLS).fill(0));
+ for(let i=0;i<46;i++){const r=1+Math.floor(Math.random()*(ROWS-3)),c=Math.floor(Math.random()*COLS);mush[r][c]=4}
+ pl={x:W/2,y:(ROWS-2)*C};newWave();hud()}
+function newWave(){palette=PALS[(level-1)%PALS.length];segs=[];const n=Math.min(16,10+level),sp=Math.min(10,5+level*.6);
+ for(let i=0;i<n;i++)segs.push({c:-i,pc:-i-1,r:0,pr:0,t:0,dir:1,vd:1,head:i===0,sp});
+ spider=null;flea=null;spiderT=rnd(3,6);fleaT=rnd(6,10);shot=null;deadT=0;showBanner('WAVE '+level,'',1)}
+function hud(){$('h1').textContent=score;$('h2').textContent=level;$('h3').textContent='◆'.repeat(Math.max(0,lives))||'–'}
+function addScore(p,x,y,show){score+=p;if(show)floatText(x,y,'+'+p,'#fff');if(score>=nextLife){nextLife+=12000;if(lives<6){lives++;showBanner('EXTRA LIFE','',1.2);jingle([784,1047,1319],.08)}}hud()}
+function blocked(c,r){return c<0||c>=COLS||(r>=0&&r<ROWS&&mush[r][c]>0)}
+function stepSeg(s){s.pc=s.c;s.pr=s.r;
+ if(s.c<0){s.c++;return}
+ const nc=s.c+s.dir;if(!blocked(nc,s.r)||s.r<0){s.c=nc;if(s.c<0)s.c=0;return}
+ // turn: drop (or climb inside the player zone) a row and reverse
+ let nr=s.r+s.vd;if(nr>=ROWS-1){s.vd=-1;nr=s.r-1}else if(s.vd<0&&nr<ZONE){s.vd=1;nr=s.r+1}
+ s.r=nr;s.dir*=-1;if(s.r<ROWS&&s.r>=0&&mush[s.r][s.c]>0&&s.r>=ZONE)mush[s.r][s.c]=0}
+function segXY(s){const k=s.t;return{x:((s.pc+(s.c-s.pc)*k)+.5)*C,y:((s.pr+(s.r-s.pr)*k)+.5)*C}}
+function killPlayer(){if(deadT>0)return;deadT=2.2;lives--;const x=pl.x,y=pl.y;burst(x,y,[palette[0],palette[1],'#fff'],44,240,1.2,4);kick(12);noise(.7,.15,900);beep(400,.8,.07,'sawtooth',40);hud();
+ setTimeout(()=>{let fixed=0;for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(mush[r][c]>0&&mush[r][c]<4){mush[r][c]=4;fixed++;}if(fixed)addScore(fixed*5,W/2,H/2,true)},900)}
+function update(dt){
+ if(deadT>0){deadT-=dt;if(deadT<=0){if(lives<=0){gameOver('The patch is overrun. Score '+score+'.');return}pl={x:W/2,y:(ROWS-2)*C};const n=segs.length||12;segs=[];const sp=Math.min(9,5+level*.6);for(let i=0;i<n;i++)segs.push({c:-i,pc:-i-1,r:0,pr:0,t:0,dir:1,vd:1,head:i===0,sp});spider=null;flea=null;showBanner('READY','',.8)}return}
+ // player: free movement inside the bottom zone, can't pass through mushrooms
+ const nx=clamp(pl.x+inp.x*230*dt,C*.5,W-C*.5),ny=clamp(pl.y+inp.y*230*dt,ZONE*C,(ROWS-.5)*C);
+ const okAt=(x,y)=>{const c=Math.floor(x/C),r=Math.floor(y/C);return!(r>=0&&r<ROWS&&c>=0&&c<COLS&&mush[r][c]>0)};
+ if(okAt(nx,pl.y))pl.x=nx;if(okAt(pl.x,ny))pl.y=ny;
+ if(inp.fire&&!shot){shot={x:pl.x,y:pl.y-10};beep(1600,.04,.025,'square',1200)}
+ if(shot){const steps=4;for(let i=0;i<steps&&shot;i++){shot.y-=1100*dt/steps;
+   const c=Math.floor(shot.x/C),r=Math.floor(shot.y/C);if(shot.y<0){shot=null;break}
+   if(r>=0&&r<ROWS&&mush[r][c]>0){mush[r][c]--;if(mush[r][c]===0){addScore(1);burst((c+.5)*C,(r+.5)*C,palette[1],6,80,.3,2)}beep(300,.03,.03);shot=null;break}
+   for(let k=0;k<segs.length;k++){const s=segs[k];const p=segXY(s);if(Math.abs(p.x-shot.x)<9&&Math.abs(p.y-shot.y)<9){
+     addScore(s.head?100:10,p.x,p.y,s.head);burst(p.x,p.y,[palette[0],palette[2],'#fff'],14,150,.5,3);noise(.12,.06,2500);beep(180,.08,.05,'square',90);
+     const mc=Math.round(p.x/C-.5),mr=Math.round(p.y/C-.5);if(mr>=0&&mr<ROWS&&mc>=0&&mc<COLS)mush[mr][mc]=4;
+     if(segs[k+1])segs[k+1].head=true;segs.splice(k,1);shot=null;kick(2);break}}
+   if(!shot)break;
+   if(spider&&Math.abs(spider.x-shot.x)<14&&Math.abs(spider.y-shot.y)<10){const d=pl.y-spider.y,pts=d<40?900:d<90?600:300;addScore(pts,spider.x,spider.y-14,true);burst(spider.x,spider.y,['#fff','#ff4fa3'],24,200,.7,3);noise(.3,.08,1500);spider=null;shot=null;break}
+   if(flea&&Math.abs(flea.x-shot.x)<10&&Math.abs(flea.y-shot.y)<12){flea.hp--;if(flea.hp<=0){addScore(200,flea.x,flea.y,true);burst(flea.x,flea.y,['#fff','#ffd23f'],16,160,.5,3);flea=null}else{flea.vy*=2;beep(800,.05,.04)}shot=null;break}}}
+ // crawler segments step cell to cell
+ for(const s of segs){s.t+=dt*s.sp*(s.head&&level>3?1.15:1);while(s.t>=1){s.t-=1;stepSeg(s)}}
+ if(segs.length===0){level++;const bonus=100*level;addScore(bonus,W/2,H/2,true);jingle([523,659,784,1047],.08);newWave();hud()}
+ for(const s of segs){const p=segXY(s);if(Math.abs(p.x-pl.x)<12&&Math.abs(p.y-pl.y)<12){killPlayer();return}}
+ // spider zig-zags across the player zone eating mushrooms
+ spiderT-=dt;if(!spider&&spiderT<=0){const fromL=Math.random()<.5;spider={x:fromL?-10:W+10,y:(ZONE+2)*C,vx:(fromL?1:-1)*rnd(70,110+level*8),vy:rnd(-140,140),t:0}}
+ if(spider){spider.t+=dt;spider.x+=spider.vx*dt;spider.y+=spider.vy*dt;if(spider.y<(ZONE-2)*C||spider.y>(ROWS-1)*C){spider.vy*=-1;spider.y=clamp(spider.y,(ZONE-2)*C,(ROWS-1)*C)}if(Math.random()<dt*1.5)spider.vy=rnd(-160,160);
+  const c=Math.floor(spider.x/C),r=Math.floor(spider.y/C);if(r>=0&&r<ROWS&&c>=0&&c<COLS&&mush[r][c]>0&&Math.random()<dt*4)mush[r][c]=0;
+  if(spider.x<-30||spider.x>W+30){spider=null;spiderT=rnd(3,7)}else if(Math.abs(spider.x-pl.x)<16&&Math.abs(spider.y-pl.y)<12){killPlayer();return}}
+ // flea dives when the bottom zone is thin on mushrooms, sowing new ones
+ let zoneM=0;for(let r=ZONE;r<ROWS;r++)for(let c=0;c<COLS;c++)if(mush[r][c])zoneM++;
+ fleaT-=dt;if(!flea&&fleaT<=0&&level>=2&&zoneM<5+level){flea={x:(Math.floor(Math.random()*COLS)+.5)*C,y:-10,vy:220+level*10,hp:2};fleaT=rnd(4,8);beep(1200,.4,.03,'sine',300)}
+ if(flea){flea.y+=flea.vy*dt;const r=Math.floor(flea.y/C),c=Math.floor(flea.x/C);if(r>0&&r<ROWS-1&&!mush[r][c]&&Math.random()<dt*3)mush[r][c]=4;if(flea.y>H)flea=null;else if(Math.abs(flea.x-pl.x)<12&&Math.abs(flea.y-pl.y)<12){killPlayer();return}}
+}
+function drawMush(c,r,hp){const x=c*C,y=r*C,k=hp/4;ctx.fillStyle=palette[1];ctx.beginPath();ctx.ellipse(x+8,y+7,7.5,6*k+1.5,0,Math.PI,TAU);ctx.fill();ctx.fillRect(x+.5,y+6.5,15,1.5);
+ ctx.fillStyle='#f4e8d0';ctx.fillRect(x+5,y+8,6,7);ctx.fillStyle='rgba(255,255,255,.8)';if(hp>2){ctx.beginPath();ctx.arc(x+5,y+4,1.4,0,TAU);ctx.arc(x+11,y+5,1.2,0,TAU);ctx.fill()}}
+function draw(){ctx.fillStyle='#07080f';ctx.fillRect(0,0,W,H);
+ const g=ctx.createLinearGradient(0,ZONE*C-30,0,ROWS*C);g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(1,'rgba(124,255,107,.06)');ctx.fillStyle=g;ctx.fillRect(0,ZONE*C-30,W,ROWS*C-ZONE*C+30);
+ ctx.strokeStyle='rgba(255,255,255,.06)';ctx.setLineDash([4,6]);ctx.beginPath();ctx.moveTo(0,ZONE*C);ctx.lineTo(W,ZONE*C);ctx.stroke();ctx.setLineDash([]);
+ for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(mush[r][c]>0)drawMush(c,r,mush[r][c]);
+ for(let i=segs.length-1;i>=0;i--){const s=segs[i],p=segXY(s),wob=Math.sin(T*14+i)*1.5;ctx.fillStyle=s.head?palette[2]:palette[0];ctx.beginPath();ctx.arc(p.x,p.y+wob*.3,7.2,0,TAU);ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.arc(p.x,p.y+2,7,0,Math.PI);ctx.fill();ctx.strokeStyle=s.head?palette[2]:palette[0];ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(p.x-4,p.y+6);ctx.lineTo(p.x-6,p.y+9+wob);ctx.moveTo(p.x+4,p.y+6);ctx.lineTo(p.x+6,p.y+9-wob);ctx.stroke();
+  if(s.head){const d=s.dir;ctx.fillStyle='#000';ctx.beginPath();ctx.arc(p.x+d*3,p.y-2,1.8,0,TAU);ctx.arc(p.x+d*3,p.y+2,1.8,0,TAU);ctx.fill();ctx.strokeStyle=palette[2];ctx.beginPath();ctx.moveTo(p.x+d*5,p.y-4);ctx.lineTo(p.x+d*9,p.y-9);ctx.moveTo(p.x+d*5,p.y+4);ctx.lineTo(p.x+d*9,p.y+9);ctx.stroke()}}
+ if(spider){ctx.save();ctx.translate(spider.x,spider.y);ctx.strokeStyle='#ff4fa3';ctx.lineWidth=2;const l=Math.sin(spider.t*20)*3;for(const s of[-1,1])for(let i=0;i<3;i++){ctx.beginPath();ctx.moveTo(s*4,-2+i*3);ctx.lineTo(s*10,-6+i*4+(i%2?l:-l));ctx.lineTo(s*14,2+i*3);ctx.stroke()}
+  ctx.fillStyle='#ff4fa3';ctx.beginPath();ctx.ellipse(0,0,7,6,0,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(-3,-3,2,2);ctx.fillRect(1,-3,2,2);ctx.restore()}
+ if(flea){ctx.fillStyle='#ffd23f';ctx.beginPath();ctx.ellipse(flea.x,flea.y,5,8,0,0,TAU);ctx.fill();ctx.strokeStyle='#ffd23f';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(flea.x-4,flea.y);ctx.lineTo(flea.x-8,flea.y-8);ctx.moveTo(flea.x+4,flea.y);ctx.lineTo(flea.x+8,flea.y-8);ctx.stroke()}
+ if(shot){ctx.fillStyle='#fff';ctx.shadowColor=palette[2];ctx.shadowBlur=8;ctx.fillRect(shot.x-1.5,shot.y-8,3,10);ctx.shadowBlur=0}
+ if(deadT<=0){ctx.save();ctx.translate(pl.x,pl.y);ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(0,-9);ctx.lineTo(7,6);ctx.lineTo(0,3);ctx.lineTo(-7,6);ctx.fill();ctx.fillStyle=palette[2];ctx.beginPath();ctx.arc(0,-1,3,0,TAU);ctx.fill();ctx.restore()}
+ ctx.fillStyle='#8f9bbd';ctx.font='10px Rubik, sans-serif';ctx.textAlign='left';ctx.fillText('SEGMENTS '+segs.length,8,H-6);ctx.textAlign='right';ctx.fillText('NEXT LIFE '+nextLife,W-8,H-6)}
+
+reset();requestAnimationFrame(frame);
+</script>
+
+</body></html>

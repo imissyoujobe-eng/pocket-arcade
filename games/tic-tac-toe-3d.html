@@ -1,0 +1,333 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Tic Tac Toe 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: one-screen toy — a tilted plastic game board floating over a candy sky, controls above and below */
+:root {
+  --sky-top: #5ec8ff;
+  --sky-bottom: #b58cff;
+  --board: #ffd23f;
+  --board-edge: #e0a800;
+  --tile: #fff6d6;
+  --tile-edge: #e8cf7a;
+  --x: #ff4f8b;
+  --x-deep: #c2185b;
+  --o: #19c7b6;
+  --o-deep: #0b8577;
+  --ink: #2b1d5c;
+  --card: rgba(255,255,255,.85);
+  --display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
+  --body: "Nunito", system-ui, sans-serif;
+  color-scheme: light;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: linear-gradient(170deg, var(--sky-top), var(--sky-bottom));
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: var(--body);
+  overflow-x: hidden;
+}
+.app {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding-inline: 16px;
+  padding-block: 20px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  position: relative;
+}
+.bubbles { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+.bubbles span {
+  position: absolute; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.7), rgba(255,255,255,.08));
+  animation: float 14s ease-in-out infinite;
+}
+@keyframes float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-40px) } }
+
+h1 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(2.1rem, 9vw, 3.2rem);
+  margin: 0;
+  line-height: 1;
+  letter-spacing: .01em;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 2px 0 var(--ink), 0 4px 0 var(--ink), 0 6px 0 rgba(43,29,92,.6), 0 12px 18px rgba(43,29,92,.35);
+}
+h1 .x { color: var(--x); }
+h1 .o { color: var(--o); }
+
+.modes {
+  display: flex; gap: 6px; padding: 5px;
+  background: var(--card); border-radius: 999px;
+  box-shadow: 0 4px 0 rgba(43,29,92,.25);
+  flex-wrap: wrap; justify-content: center;
+}
+.modes button {
+  font-family: var(--display); font-weight: 600; font-size: .95rem;
+  border: 0; background: transparent; color: var(--ink);
+  padding: 8px 14px; border-radius: 999px; cursor: pointer;
+}
+.modes button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.modes button:focus-visible, .btn:focus-visible, .cell:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+
+.scores { display: flex; gap: 10px; width: 100%; max-width: 380px; }
+.score {
+  flex: 1; min-width: 0; text-align: center;
+  background: var(--card); border-radius: 18px; padding: 8px 6px;
+  box-shadow: 0 4px 0 rgba(43,29,92,.25);
+  border: 3px solid transparent; transition: border-color .2s, transform .2s;
+}
+.score.active { transform: translateY(-3px); }
+.score.sx.active { border-color: var(--x); }
+.score.so.active { border-color: var(--o); }
+.score .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; font-weight: 800; opacity: .75; }
+.score .num { font-family: var(--display); font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.score.sx .num { color: var(--x-deep); }
+.score.so .num { color: var(--o-deep); }
+
+.status {
+  font-family: var(--display); font-weight: 600; font-size: 1.25rem;
+  color: #fff; text-shadow: 0 2px 0 rgba(43,29,92,.55);
+  min-height: 1.6em; text-align: center;
+}
+
+.stage { perspective: 900px; width: 100%; max-width: 380px; }
+.board {
+  position: relative;
+  transform: rotateX(22deg);
+  transform-style: preserve-3d;
+  background: var(--board);
+  border-radius: 28px;
+  padding: 14px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  box-shadow:
+    0 14px 0 var(--board-edge),
+    0 26px 30px rgba(43,29,92,.45);
+  transition: transform .5s cubic-bezier(.3,1.4,.5,1);
+}
+.board.shake { animation: shake .5s; }
+@keyframes shake { 0%,100%{transform:rotateX(22deg)} 25%{transform:rotateX(22deg) rotateZ(-2deg)} 75%{transform:rotateX(22deg) rotateZ(2deg)} }
+.cell {
+  aspect-ratio: 1; max-width: 100%;
+  border: 0; padding: 0; cursor: pointer;
+  background: var(--tile);
+  border-radius: 18px;
+  box-shadow: inset 0 -6px 0 var(--tile-edge), 0 3px 0 rgba(0,0,0,.08);
+  display: grid; place-items: center;
+  position: relative;
+  transition: transform .15s;
+}
+.cell:not(:disabled):hover { transform: translateY(-3px); }
+.cell:disabled { cursor: default; }
+.cell.win { background: #fff; box-shadow: inset 0 -6px 0 var(--tile-edge), 0 0 0 5px #fff, 0 0 26px 6px rgba(255,255,255,.9); }
+
+.piece { width: 72%; height: 72%; animation: pop .45s cubic-bezier(.3,1.6,.5,1) both; filter: drop-shadow(0 6px 0 rgba(43,29,92,.28)); }
+@keyframes pop { from { transform: scale(0) rotate(-90deg) translateZ(0); } to { transform: scale(1) rotate(0); } }
+.cell.win .piece { animation: pop .45s cubic-bezier(.3,1.6,.5,1) both, bounce .8s ease-in-out .45s infinite; }
+@keyframes bounce { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.btn {
+  font-family: var(--display); font-weight: 600; font-size: 1.05rem;
+  border: 0; border-radius: 16px; padding: 12px 20px; cursor: pointer;
+  color: #fff; background: var(--x);
+  box-shadow: 0 6px 0 var(--x-deep);
+  transition: transform .1s, box-shadow .1s;
+}
+.btn.alt { background: var(--o); box-shadow: 0 6px 0 var(--o-deep); }
+.btn:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--x-deep); }
+.btn.alt:active { box-shadow: 0 1px 0 var(--o-deep); }
+
+.confetti { position: fixed; inset: 0; pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="bubbles" aria-hidden="true">
+  <span style="width:90px;height:90px;left:6%;top:12%"></span>
+  <span style="width:50px;height:50px;left:82%;top:8%;animation-delay:-4s"></span>
+  <span style="width:120px;height:120px;left:75%;top:70%;animation-delay:-8s"></span>
+  <span style="width:40px;height:40px;left:10%;top:78%;animation-delay:-2s"></span>
+</div>
+<canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
+
+<main class="app">
+  <h1>Tic <span class="x">Tac</span> <span class="o">Toe</span></h1>
+
+  <div class="modes" role="group" aria-label="Game mode">
+    <button id="m-easy" data-mode="easy" aria-pressed="false">vs Computer: Easy</button>
+    <button id="m-hard" data-mode="hard" aria-pressed="true">vs Computer: Hard</button>
+    <button id="m-2p" data-mode="2p" aria-pressed="false">2 Players</button>
+  </div>
+
+  <div class="scores">
+    <div class="score sx" id="sx"><div class="lbl" id="lx">You (X)</div><div class="num" id="nx">0</div></div>
+    <div class="score" id="sd"><div class="lbl">Ties</div><div class="num" id="nd">0</div></div>
+    <div class="score so" id="so"><div class="lbl" id="lo">Computer (O)</div><div class="num" id="no">0</div></div>
+  </div>
+
+  <div class="status" id="status" aria-live="polite">Your turn, X!</div>
+
+  <div class="stage">
+    <div class="board" id="board" role="grid" aria-label="Tic tac toe board"></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="again">New Round</button>
+    <button class="btn alt" id="reset">Reset Scores</button>
+  </div>
+</main>
+
+<script>
+(function () {
+  const X_SVG = '<svg class="piece" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="gx" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9ec0"/><stop offset=".5" stop-color="#ff4f8b"/><stop offset="1" stop-color="#c2185b"/></linearGradient></defs><g stroke-linecap="round" fill="none"><path d="M22 22 L78 78 M78 22 L22 78" stroke="#8e1244" stroke-width="22" transform="translate(0 5)"/><path d="M22 22 L78 78 M78 22 L22 78" stroke="url(#gx)" stroke-width="22"/><path d="M26 22 L50 46 M74 22 L62 34" stroke="#fff" stroke-opacity=".6" stroke-width="5"/></g></svg>';
+  const O_SVG = '<svg class="piece" viewBox="0 0 100 100" aria-hidden="true"><defs><linearGradient id="go" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9ff5ea"/><stop offset=".5" stop-color="#19c7b6"/><stop offset="1" stop-color="#0b8577"/></linearGradient></defs><circle cx="50" cy="55" r="30" fill="none" stroke="#06584f" stroke-width="20"/><circle cx="50" cy="50" r="30" fill="none" stroke="url(#go)" stroke-width="20"/><path d="M30 38 A26 26 0 0 1 52 24" fill="none" stroke="#fff" stroke-opacity=".65" stroke-width="5" stroke-linecap="round"/></svg>';
+  const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
+  const cells = [];
+  let board, turn, over, mode = 'hard', starter = 'X';
+  let scores = { X: 0, O: 0, D: 0 };
+
+  for (let i = 0; i < 9; i++) {
+    const b = document.createElement('button');
+    b.className = 'cell'; b.id = 'cell' + i;
+    b.setAttribute('aria-label', 'Square ' + (i + 1));
+    b.addEventListener('click', () => play(i));
+    boardEl.appendChild(b); cells.push(b);
+  }
+
+  function winner(bd) {
+    for (const l of LINES) { const [a,b,c] = l; if (bd[a] && bd[a] === bd[b] && bd[a] === bd[c]) return { p: bd[a], line: l }; }
+    return bd.every(Boolean) ? { p: 'D' } : null;
+  }
+
+  function minimax(bd, player) {
+    const w = winner(bd);
+    if (w) return { s: w.p === 'O' ? 10 : w.p === 'X' ? -10 : 0 };
+    let best = { s: player === 'O' ? -Infinity : Infinity, i: -1 };
+    for (let i = 0; i < 9; i++) if (!bd[i]) {
+      bd[i] = player;
+      const r = minimax(bd, player === 'O' ? 'X' : 'O');
+      bd[i] = null;
+      const s = r.s - Math.sign(r.s) * 0.1; // prefer faster wins
+      if (player === 'O' ? s > best.s : s < best.s) best = { s, i };
+    }
+    return best;
+  }
+
+  function aiMove() {
+    const free = board.map((v, i) => v ? null : i).filter(v => v !== null);
+    if (mode === 'easy' && Math.random() < 0.6) return free[Math.floor(Math.random() * free.length)];
+    return minimax(board.slice(), 'O').i;
+  }
+
+  function vsAI() { return mode !== '2p'; }
+
+  function render() {
+    cells.forEach((c, i) => {
+      const v = board[i];
+      if (v && !c.dataset.v) { c.innerHTML = v === 'X' ? X_SVG : O_SVG; c.dataset.v = v; }
+      if (!v) { c.innerHTML = ''; delete c.dataset.v; }
+      c.disabled = !!v || over || (vsAI() && turn === 'O');
+      c.setAttribute('aria-label', 'Square ' + (i + 1) + (v ? ', ' + v : ', empty'));
+    });
+    document.getElementById('sx').classList.toggle('active', !over && turn === 'X');
+    document.getElementById('so').classList.toggle('active', !over && turn === 'O');
+    document.getElementById('nx').textContent = scores.X;
+    document.getElementById('no').textContent = scores.O;
+    document.getElementById('nd').textContent = scores.D;
+    document.getElementById('lx').textContent = vsAI() ? 'You (X)' : 'Player X';
+    document.getElementById('lo').textContent = vsAI() ? 'Computer (O)' : 'Player O';
+  }
+
+  function setStatus() {
+    if (vsAI()) statusEl.textContent = turn === 'X' ? 'Your turn!' : 'Computer is thinking…';
+    else statusEl.textContent = 'Player ' + turn + ', your turn!';
+  }
+
+  function play(i) {
+    if (over || board[i]) return;
+    if (vsAI() && turn === 'O') return;
+    place(i);
+  }
+
+  function place(i) {
+    board[i] = turn;
+    const w = winner(board);
+    if (w) return finish(w);
+    turn = turn === 'X' ? 'O' : 'X';
+    setStatus(); render();
+    if (vsAI() && turn === 'O') setTimeout(() => place(aiMove()), 550);
+  }
+
+  function finish(w) {
+    over = true;
+    scores[w.p]++;
+    if (w.p === 'D') {
+      statusEl.textContent = "It's a tie!";
+      boardEl.classList.remove('shake'); void boardEl.offsetWidth; boardEl.classList.add('shake');
+    } else {
+      w.line.forEach(i => cells[i].classList.add('win'));
+      if (vsAI()) statusEl.textContent = w.p === 'X' ? 'You win! 🎉' : 'Computer wins this one!';
+      else statusEl.textContent = 'Player ' + w.p + ' wins! 🎉';
+      if (!vsAI() || w.p === 'X') confetti(w.p === 'X' ? ['#ff4f8b','#ffd23f','#fff','#b58cff'] : ['#19c7b6','#ffd23f','#fff','#5ec8ff']);
+    }
+    render();
+  }
+
+  function newRound() {
+    board = Array(9).fill(null); over = false;
+    cells.forEach(c => c.classList.remove('win'));
+    turn = starter; starter = starter === 'X' ? 'O' : 'X'; // take turns going first
+    setStatus(); render();
+    if (vsAI() && turn === 'O') setTimeout(() => place(aiMove()), 550);
+  }
+
+  document.querySelectorAll('.modes button').forEach(b => b.addEventListener('click', () => {
+    mode = b.dataset.mode;
+    document.querySelectorAll('.modes button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    scores = { X: 0, O: 0, D: 0 }; starter = 'X'; newRound();
+  }));
+  document.getElementById('again').addEventListener('click', newRound);
+  document.getElementById('reset').addEventListener('click', () => { scores = { X: 0, O: 0, D: 0 }; render(); });
+
+  // Confetti burst
+  const cv = document.getElementById('confetti'), ctx = cv.getContext('2d');
+  let parts = [], raf = null;
+  function confetti(colors) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    cv.width = innerWidth; cv.height = innerHeight;
+    for (let i = 0; i < 140; i++) parts.push({
+      x: innerWidth / 2, y: innerHeight * 0.45,
+      vx: (Math.random() - .5) * 14, vy: -Math.random() * 14 - 4,
+      r: Math.random() * 6 + 4, c: colors[i % colors.length], a: Math.random() * 6, life: 120
+    });
+    if (!raf) tick();
+  }
+  function tick() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    parts.forEach(p => {
+      p.vy += .35; p.x += p.vx; p.y += p.vy; p.a += .2; p.life--;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / 2); ctx.restore();
+    });
+    parts = parts.filter(p => p.life > 0 && p.y < cv.height + 20);
+    raf = parts.length ? requestAnimationFrame(tick) : (ctx.clearRect(0, 0, cv.width, cv.height), null);
+  }
+
+  newRound();
+})();
+</script>
+
+</body></html>

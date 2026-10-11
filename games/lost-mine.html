@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lost Mine</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Lost Mine: explore a deep cavern for gold bars and the lost relic. Climb ladders, swim the underground river, dodge bats and scorpions.
+K.theme({ bg: '#0e0a06', ink: '#fff4e0', accent: '#ffd23f', accentInk: '#2a1d00' });
+const W = 320, H = 240, T = 16, SX = 20, SY = 15;
+K.screen(W, H);
+K.hud(['score', 'gold', 'room']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'JUMP' }] });
+const WORLD = ["........................................", "........................................", "........................................", "..............$.........................", ".............===......==....$...........", "........................................", ".P........s....................s......+.", "#####H################################H#", "#....H.............##.................H#", "#....H......b......##.................H#", "#....H.............##......$..........H#", "#....H...=====.....##....=====........H#", "#....H................................H#", "#.....................................H#", "############H#########H#################", "############H#########H#################", "#...........H......##.H................#", "#...........H......##.H....$...........#", "#.....b.....H......##.H..=====.........#", "#...........H......##.H................#", "#=====......H...$..##.H.........s......#", "#..........======..##=================.#", "#..................##..................#", "#..................##..................#", "#~~~~~~~~~~~~~~~~~~##.......+..........#", "#~~~~~~~$~~~~~~~~~~##~~~~~~~~~~~~~~~~~~#", "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#", "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#", "#~~~~~~~~~~~~~~~~~~##~~~~~~~~~~~~~~~~~~#", "##################################~~~~##", "##################################~~~~##", "#..................###############~~~~##", "#..$...............##.............~~~~.#", "#=====H............##..........b.......#", "#.....H............##..====............#", "#.....H.....b......##.........$........#", "#.....H............##.......=====......#", "#.....H.......+....##..................#", "#.....H........................s.......#", "#.....H................................#", "####################################H###", "#####################...............H..#", "#####################...$...........H..#", "#####################.....^^^^......H..#", "##############################H#########", "##############################H#########", "#..................##.........H........#", "#.R................##.........H........#", "#====H.............##..$......H.....b..#", "#....H.............##=====....H...=====#", "#....H......b......##.........H........#", "#....H.............##.........H.....+..#", "#....H....$........######.....H....#####", "#....H...====......##..................#", "#....H.............##........s.........#", "#....H.......s.....##=================.#", "#....H.................................#", "#....H.................................#", "#....H.............##..................#", "########################################"];
+const WT = WORLD[0].length, HT = WORLD.length;
+
+let state = 'title', g, p, mobs, gold, goldTotal, score, check, msg, msgT, deadT, time, best = K.best('lostmine'), sparkles;
+function title() { K.card({ title: 'LOST MINE', text: 'Somewhere at the bottom of this cavern is the lost relic. Collect gold bars on the way. Climb ladders with up and down, JUMP gaps, and swim by holding up in water. Touch a cross to save your spot. Bats, scorpions and spikes send you back to it.', best: best ? 'BEST ' + best : '', button: 'Explore', onStart: start }); }
+function start() {
+  g = WORLD.map(r => r.split('')); mobs = []; goldTotal = 0; gold = 0; score = 0; time = 0; sparkles = [];
+  for (let y = 0; y < HT; y++) for (let x = 0; x < WT; x++) {
+    const ch = g[y][x];
+    if (ch === 'P') { check = { x: x * T + 3, y: y * T }; g[y][x] = '.'; }
+    if (ch === 'b') { mobs.push({ t: 'bat', x: x * T + 8, y: y * T + 8, y0: y * T + 8, vx: 40, ph: Math.random() * 6 }); g[y][x] = '.'; }
+    if (ch === 's') { mobs.push({ t: 'scorp', x: x * T + 8, y: y * T + 16, vx: 22 }); g[y][x] = '.'; }
+    if (ch === '$') goldTotal++;
+  }
+  respawn(); state = 'play'; hud();
+}
+function respawn() { p = { x: check.x, y: check.y, vx: 0, vy: 0, climb: false, face: 1, ground: false, swim: false }; deadT = 0; }
+function hud() { K.set('score', score); K.set('gold', 'GOLD ' + gold + '/' + goldTotal); K.set('room', 'CAVE ' + (Math.floor(p.y / (SY * T)) + 1) + '-' + (Math.floor(p.x / (SX * T)) + 1)); }
+function tile(px, py) { const x = Math.floor(px / T), y = Math.floor(py / T); if (y < 0) return '.'; if (x < 0 || x >= WT || y >= HT) return '#'; return g[y][x]; }
+const isSolid = c => c === '#';
+function hits(x, y, w, h, test) { for (let ix = 0; ix <= 2; ix++) for (let iy = 0; iy <= 2; iy++) if (test(tile(x + (w - 1) * ix / 2, y + (h - 1) * iy / 2))) return true; return false; }
+
+function update(dt) {
+  if (state !== 'play') return;
+  time += dt; if (msgT > 0) msgT -= dt;
+  for (const s of sparkles) s.l -= dt; sparkles = sparkles.filter(s => s.l > 0);
+  if (deadT > 0) { deadT -= dt; if (deadT <= 0) respawn(); return; }
+  const PW = 10, PH = 14, cx = p.x + PW / 2;
+  let ax = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0);
+  const up = K.down('up'), dn = K.down('down');
+  if (ax) p.face = ax;
+  const lx = [0, -6, 6].map(d => cx + d).find(xx => tile(xx, p.y + PH / 2) === 'H' || (dn && tile(xx, p.y + PH + 1) === 'H'));
+  const onLadder = lx !== undefined;
+  p.swim = tile(cx, p.y + PH / 2) === '~';
+  if (!p.climb && onLadder && (up || dn) && !(up && tile(lx, p.y + PH / 2) !== 'H')) { p.climb = true; p.x = Math.floor(lx / T) * T + 3; }
+  if (p.climb) {
+    if (!onLadder && tile(cx, p.y + PH) !== 'H') p.climb = false;
+    p.vx = 0; p.vy = (dn ? 1 : 0) * 60 - (up ? 1 : 0) * 60;
+    if (ax && !isSolid(tile(p.x + (ax > 0 ? PW + 2 : -2), p.y + PH - 2))) { p.climb = false; p.vx = ax * 70; }
+    if (K.hit('a')) { p.climb = false; p.vy = -170; }
+  } else if (p.swim) {
+    p.vx = ax * 50; p.vy += (up ? -260 : 60) * dt; p.vy = K.clamp(p.vy, -70, 40);
+    if (K.hit('a')) p.vy = -120;
+  } else {
+    p.vx = ax * 76; p.vy = Math.min(300, p.vy + 620 * dt);
+    if (K.hit('a') && p.ground) { p.vy = -235; K.beep(520, 0.06, { to: 760, vol: 0.04 }); }
+  }
+  // move with collisions: solid rock, one-way ledges, ladder tops act like ledges
+  let nx = p.x + p.vx * dt; if (!hits(nx, p.y, PW, PH, isSolid)) p.x = nx;
+  let ny = p.y + p.vy * dt; p.ground = false;
+  if (hits(p.x, ny, PW, PH, isSolid)) { if (p.vy > 0) p.ground = true; p.vy = 0; }
+  else {
+    const footOld = p.y + PH, footNew = ny + PH, rowTop = Math.floor(footNew / T) * T;
+    const under = [tile(p.x + 1, footNew), tile(p.x + PW - 2, footNew)];
+    const ledge = under.some(c => c === '=' || (c === 'H' && !p.climb && tile(p.x + PW / 2, footNew - T) !== 'H'));
+    if (p.vy > 0 && ledge && footOld <= rowTop + 1 && !(dn && under.includes('H'))) { p.y = rowTop - PH; p.vy = 0; p.ground = true; }
+    else p.y = ny;
+  }
+  p.x = K.clamp(p.x, 0, WT * T - PW);
+  if (p.y < -20) p.y = -20;
+  // tiles you touch
+  const here = [tile(p.x + 2, p.y + 2), tile(p.x + PW - 2, p.y + 2), tile(p.x + 2, p.y + PH - 1), tile(p.x + PW - 2, p.y + PH - 1)];
+  if (here.includes('^')) return die('SPIKES!');
+  for (const [tx, ty] of [[p.x + 2, p.y + 2], [p.x + PW - 2, p.y + PH - 2]]) {
+    const ix = Math.floor(tx / T), iy = Math.floor(ty / T), ch = tile(tx, ty);
+    if (ch === '$') { g[iy][ix] = '.'; gold++; score += 500; hud(); K.tune([880, 1175], 0.06, { type: 'triangle' }); for (let i = 0; i < 10; i++) sparkles.push({ x: ix * T + 8, y: iy * T + 8, vx: K.rnd(-50, 50), vy: K.rnd(-60, 10), l: 0.6 }); }
+    if (ch === '+') { if (check.x !== ix * T + 3 || check.y !== iy * T) { check = { x: ix * T + 3, y: iy * T }; msg = 'SPOT SAVED'; msgT = 1.2; K.beep(988, 0.12, { type: 'sine', vol: 0.05 }); } }
+    if (ch === 'R') { g[iy][ix] = '.'; return win(); }
+  }
+  // critters
+  for (const m of mobs) {
+    if (m.t === 'bat') { m.ph += dt * 3; const nx = m.x + m.vx * dt; if (isSolid(tile(nx + Math.sign(m.vx) * 6, m.y))) m.vx = -m.vx; else m.x = nx; m.y = m.y0 + Math.sin(m.ph) * 10; }
+    else { const nx = m.x + m.vx * dt; const ahead = nx + Math.sign(m.vx) * 6; if (isSolid(tile(ahead, m.y - 4)) || !['#', '='].includes(tile(ahead, m.y + 2))) m.vx = -m.vx; else m.x = nx; }
+    if (Math.abs(m.x - (p.x + PW / 2)) < 10 && Math.abs((m.t === 'bat' ? m.y : m.y - 5) - (p.y + PH / 2)) < 10) return die(m.t === 'bat' ? 'BAT BITE!' : 'SCORPION!');
+  }
+  if (Math.floor(time * 2) !== Math.floor((time - dt) * 2)) hud();
+}
+function die(t) { deadT = 1.2; score = Math.max(0, score - 100); msg = t + ' -100'; msgT = 1.4; hud(); K.beep(220, 0.4, { type: 'sawtooth', to: 70, vol: 0.06 }); for (let i = 0; i < 12; i++) sparkles.push({ x: p.x + 5, y: p.y + 7, vx: K.rnd(-60, 60), vy: K.rnd(-80, 0), l: 0.6, red: true }); }
+function win() {
+  const bonus = Math.max(0, 5000 - Math.floor(time) * 10); score += 2000 + bonus; hud(); state = 'over';
+  best = K.saveBest('lostmine', score); K.tune([523, 659, 784, 1047, 1319, 1568], 0.12);
+  setTimeout(() => K.card({ title: 'RELIC FOUND!', text: 'You escaped with the relic and ' + gold + ' of ' + goldTotal + ' gold bars in ' + Math.floor(time / 60) + 'm ' + Math.floor(time % 60) + 's. Score ' + score + '.', best: 'BEST ' + best, button: 'Explore again', onStart: start }), 900);
+}
+
+function draw(c, t) {
+  if (!g) { c.fillStyle = '#1a120c'; c.fillRect(0, 0, W, H); return; }
+  const sc = Math.floor((p.x + 5) / (SX * T)), sr = Math.floor((p.y + 7) / (SY * T)), ox = sc * SX * T, oy = sr * SY * T;
+  c.fillStyle = '#1a120c'; c.fillRect(0, 0, W, H); if (sr === 0) { c.fillStyle = '#6ec3ff'; c.fillRect(0, 0, W, 7 * T); }
+  if (sr === 0) { c.fillStyle = '#2f7a2c'; for (let i = 0; i < 8; i++) { const x = i * 44 + 8; c.fillRect(x, 40, 10, 72); c.beginPath(); c.arc(x + 5, 36, 20, 0, 7); c.fill(); } c.fillStyle = '#5a3a1a'; for (let i = 0; i < 8; i++) c.fillRect(i * 44 + 11, 56, 4, 56); }
+  for (let y = 0; y < SY; y++) for (let x = 0; x < SX; x++) {
+    const ch = g[sr * SY + y] ? g[sr * SY + y][sc * SX + x] : '#', X = x * T, Y = y * T;
+    if (ch === '#') { c.fillStyle = sr === 0 && y === 7 ? '#5a8a3a' : ((x + y * 3) % 4 ? '#5e4028' : '#6b4a2e'); c.fillRect(X, Y, T, T); if (sr === 0 && y === 7) { c.fillStyle = '#5e4028'; c.fillRect(X, Y + 5, T, 11); } c.fillStyle = 'rgba(0,0,0,.18)'; if ((x * 5 + y) % 3 === 0) c.fillRect(X + 4, Y + 9, 5, 3); }
+    else if (ch === '=') { c.fillStyle = '#8a6a3a'; c.fillRect(X, Y, T, 5); c.fillStyle = '#5a3a1a'; c.fillRect(X, Y + 5, T, 2); }
+    else if (ch === 'H') { c.fillStyle = '#c99a57'; c.fillRect(X + 2, Y, 2, T); c.fillRect(X + 12, Y, 2, T); for (let k = 2; k < T; k += 5) c.fillRect(X + 2, Y + k, 12, 2); }
+    else if (ch === '~') { c.fillStyle = 'rgba(42,111,219,.6)'; c.fillRect(X, Y, T, T); if (y === 0 || g[sr * SY + y - 1][sc * SX + x] !== '~') { c.fillStyle = '#9ad8ff'; c.fillRect(X, Y + Math.sin(t / 300 + x) * 1.5, T, 2); } }
+    else if (ch === '^') { c.fillStyle = '#c0c6d6'; for (let k = 0; k < 4; k++) { c.beginPath(); c.moveTo(X + k * 4, Y + T); c.lineTo(X + k * 4 + 2, Y + 6); c.lineTo(X + k * 4 + 4, Y + T); c.fill(); } }
+    else if (ch === '$') { const b = Math.sin(t / 250 + x) * 1.5; c.fillStyle = '#ffd23f'; c.fillRect(X + 3, Y + 7 + b, 10, 6); c.fillStyle = '#fff3a0'; c.fillRect(X + 4, Y + 8 + b, 4, 2); }
+    else if (ch === '+') { c.fillStyle = '#ffffff'; c.fillRect(X + 7, Y + 2, 2, 14); c.fillRect(X + 3, Y + 6, 10, 2); c.fillStyle = check && check.x === (sc * SX + x) * T + 3 && check.y === (sr * SY + y) * T ? '#7cff6b' : '#ccc'; c.fillRect(X + 7, Y + 2, 2, 2); }
+    else if (ch === 'R') { const glow = 0.5 + Math.sin(t / 200) * 0.3; c.fillStyle = 'rgba(255,210,63,' + glow * 0.4 + ')'; c.beginPath(); c.arc(X + 8, Y + 8, 12, 0, 7); c.fill(); c.fillStyle = '#7cffda'; c.beginPath(); c.moveTo(X + 8, Y + 1); c.lineTo(X + 14, Y + 8); c.lineTo(X + 8, Y + 15); c.lineTo(X + 2, Y + 8); c.fill(); c.fillStyle = '#fff'; c.fillRect(X + 6, Y + 5, 2, 3); }
+  }
+  for (const m of mobs) {
+    const x = m.x - ox, y = m.y - oy; if (x < -10 || x > W + 10 || y < -10 || y > H + 10) continue;
+    if (m.t === 'bat') { const f = Math.floor(t / 90) % 2; c.fillStyle = '#4a3a5a'; c.fillRect(x - 3, y - 3, 6, 6); c.fillRect(x - 10, y - (f ? 5 : 0), 7, 3); c.fillRect(x + 3, y - (f ? 5 : 0), 7, 3); c.fillStyle = '#ff3b5c'; c.fillRect(x - 2, y - 2, 1, 1); c.fillRect(x + 1, y - 2, 1, 1); }
+    else { const d = Math.sign(m.vx); c.fillStyle = '#c8502c'; c.fillRect(x - 6, y - 5, 12, 5); c.fillRect(x - 6 * d - 3, y - 11, 3, 7); c.fillRect(x - 6 * d - 3 + d * 2, y - 13, 3, 3); c.fillStyle = '#8a3a1a'; for (let k = -5; k < 6; k += 3) c.fillRect(x + k, y, 1, 2); }
+  }
+  if (deadT <= 0) {
+    const x = Math.round(p.x - ox), y = Math.round(p.y - oy), k = Math.abs(p.vx) > 1 && p.ground ? Math.floor(t / 100) % 2 : 0;
+    c.fillStyle = '#c8a050'; c.fillRect(x, y, 10, 3); c.fillRect(x + 2, y - 2, 6, 2);
+    c.fillStyle = '#ffcf9e'; c.fillRect(x + 2, y + 3, 6, 4); c.fillStyle = '#000'; c.fillRect(x + (p.face > 0 ? 6 : 3), y + 4, 1, 1);
+    c.fillStyle = '#3f8530'; c.fillRect(x + 1, y + 7, 8, 4);
+    c.fillStyle = '#7a5a3a'; c.fillRect(x + 1 + (k ? 2 : 0), y + 11, 3, 3); c.fillRect(x + 6 - (k ? 2 : 0), y + 11, 3, 3);
+    if (p.climb) { c.fillStyle = '#ffcf9e'; c.fillRect(x - 1, y + 5 + (Math.floor(t / 150) % 2) * 2, 2, 2); c.fillRect(x + 9, y + 7 - (Math.floor(t / 150) % 2) * 2, 2, 2); }
+  }
+  for (const s of sparkles) { s.x += s.vx * 0.016; s.y += s.vy * 0.016; c.fillStyle = s.red ? '#ff5a36' : '#fff3a0'; c.fillRect(s.x - ox, s.y - oy, 2, 2); }
+  if (msgT > 0) K.text(c, msg, W / 2, 24, 12, '#fff');
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

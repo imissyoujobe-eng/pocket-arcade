@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Echo Fin</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Echo Fin: swim through walls of seahorses in murky water. Ping your sonar to find the gaps. The squid is right behind you.
+K.theme({ bg: '#041a2a', ink: '#e8fbff', accent: '#3ef0c9', accentInk: '#002a22' });
+const W = 320, H = 240, DX = 110, TOP = 26, BOT = 222;
+K.screen(W, H);
+K.hud(['score', 'lives']);
+K.pad({ dpad: 'ud', buttons: [{ id: 'a', label: 'PING' }] });
+
+let state = 'title', d, y, vy, speed, walls, nextWall, squid, lives, score, ping, pingCd, shells, power, hurt, bubbles, best = K.best('echofin');
+function title() { K.card({ title: 'ECHO FIN', text: 'The water is dark. Tap PING to send out sonar and light up the gap in each wall of seahorses. Bump a wall and the giant squid behind you gets closer. Grab a glowing shell to turn the tables.', best: best ? 'BEST ' + best : '', button: 'Dive in', onStart: start }); }
+function start() {
+  d = 0; y = 120; vy = 0; speed = 70; walls = []; nextWall = 220; squid = 120; lives = 3; score = 0; ping = 0; pingCd = 0; shells = []; power = 0; hurt = 0;
+  bubbles = Array.from({ length: 30 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: K.rnd(0.5, 2) }));
+  state = 'play'; hud();
+}
+function hud() { K.set('score', score); K.set('lives', '♥'.repeat(Math.max(0, lives))); }
+function gapH() { return Math.max(34, 54 - score / 120); }
+
+function update(dt) {
+  if (state !== 'play') return;
+  speed = Math.min(150, 70 + score / 40);
+  d += speed * dt;
+  const mv = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
+  if (K.ptr.down) vy += K.clamp((K.ptr.y - y) * 6, -300, 300) * dt * 3;
+  vy += mv * 420 * dt; vy *= Math.pow(0.05, dt);
+  y = K.clamp(y + vy * dt, TOP + 6, BOT - 6);
+  if (pingCd > 0) pingCd -= dt; if (ping > 0) ping -= dt;
+  if ((K.hit('a') || (K.ptr.tapped && K.ptr.x > W * 0.7)) && pingCd <= 0) { ping = 1.6; pingCd = 1.1; K.beep(1800, 0.25, { type: 'sine', to: 900, vol: 0.06 }); K.beep(1800, 0.2, { type: 'sine', to: 900, vol: 0.03, at: 0.25 }); }
+  if (power > 0) power -= dt; if (hurt > 0) hurt -= dt;
+  // walls
+  while (nextWall < d + W) {
+    const g = gapH(), gy = K.rnd(TOP + g / 2 + 4, BOT - g / 2 - 4);
+    walls.push({ x: nextWall, gy, g, passed: false, broken: false });
+    if (Math.random() < 0.18) shells.push({ x: nextWall + 70, y: K.rnd(TOP + 20, BOT - 20) });
+    nextWall += K.rnd(120, 170) - Math.min(40, score / 40);
+  }
+  for (const w of walls) {
+    const sx = w.x - d + DX;
+    if (!w.passed && !w.broken && sx < DX + 10 && sx > DX - 8) {
+      if (Math.abs(y - w.gy) > w.g / 2 - 5) {
+        if (power > 0) { w.broken = true; score += 50; K.noise(0.2, 0.2); }
+        else { d -= 34; vy = (y < w.gy ? -1 : 1) * 60; squid -= 40; hurt = 0.6; K.beep(120, 0.25, { type: 'square', vol: 0.07 }); }
+      } else { w.passed = true; score += 10; hud(); K.beep(880, 0.06, { type: 'triangle', vol: 0.04 }); }
+    }
+  }
+  walls = walls.filter(w => w.x - d + DX > -30);
+  for (const s of shells) { const sx = s.x - d + DX; if (!s.got && Math.abs(sx - DX) < 12 && Math.abs(s.y - y) < 12) { s.got = true; power = 6; score += 25; K.tune([523, 784, 1047], 0.06, { type: 'triangle' }); } }
+  shells = shells.filter(s => !s.got && s.x - d + DX > -20);
+  // the squid creeps back if you're slow, falls back if you swim clean
+  squid = Math.min(140, squid + dt * 6);
+  if (power > 0 && squid < 120) { squid += dt * 30; if (squid > 100) { score += 0; } }
+  if (squid <= 0) {
+    lives--; hud(); K.noise(0.6, 0.35);
+    if (lives <= 0) return over();
+    squid = 120; d += 0; hurt = 1.5;
+  }
+  if (Math.random() < dt * 3) hud();
+  for (const b of bubbles) { b.x -= speed * 0.5 * b.s * dt; b.y -= 10 * dt; if (b.x < 0) { b.x = W; b.y = Math.random() * H; } if (b.y < TOP) b.y = BOT; }
+}
+function over() { state = 'over'; best = K.saveBest('echofin', score); K.card({ title: 'GOTCHA!', text: 'The squid caught you after ' + score + ' points.', best: 'BEST ' + best, button: 'Swim again', onStart: start }); }
+
+function draw(c, t) {
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0d5a7a'); g.addColorStop(1, '#03131f');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#7fd3ef'; c.fillRect(0, 0, W, TOP); c.fillStyle = '#a7e6fa'; for (let x = -((d || 0) * 0.5 % 20); x < W; x += 20) c.fillRect(x, TOP - 3, 10, 3);
+  c.fillStyle = '#1d2c22'; c.fillRect(0, BOT, W, H - BOT);
+  c.fillStyle = '#2f4a2a'; for (let x = -((d || 0) % 30); x < W; x += 30) { c.fillRect(x, BOT - 6, 3, 6); c.fillRect(x + 12, BOT - 10, 3, 10); }
+  if (!walls) { drawFin(c, 120, 120, t); return; }
+  c.fillStyle = 'rgba(200,240,255,.35)'; for (const b of bubbles) c.fillRect(b.x, b.y, b.s, b.s);
+  // walls: dim unless close or lit by sonar
+  for (const w of walls) {
+    if (w.broken) continue;
+    const sx = w.x - d + DX, near = sx - DX < 60, lit = ping > 0 && sx - DX < 40 + (1.6 - ping) * 260;
+    const a = near ? 0.9 : lit ? Math.min(1, ping) : 0.08;
+    for (let yy = TOP + 4; yy < BOT; yy += 13) {
+      if (Math.abs(yy + 5 - w.gy) < w.g / 2) continue;
+      c.globalAlpha = a; c.fillStyle = '#ffb02e'; c.fillRect(sx - 3, yy, 6, 8); c.fillRect(sx - 5, yy - 2, 5, 4); c.fillRect(sx + 1, yy + 7, 4, 3);
+    }
+    if (lit && !near) { c.globalAlpha = Math.min(1, ping); c.strokeStyle = '#3ef0c9'; c.lineWidth = 1; c.strokeRect(sx - 8, w.gy - w.g / 2, 16, w.g); }
+    c.globalAlpha = 1;
+  }
+  for (const s of shells) { const sx = s.x - d + DX; c.fillStyle = '#ffe9f5'; c.beginPath(); c.arc(sx, s.y, 6 + Math.sin(t / 150) * 1.5, 0, 7); c.fill(); c.fillStyle = '#ff8fc7'; c.beginPath(); c.arc(sx, s.y, 3, 0, 7); c.fill(); }
+  if (ping > 0) { c.strokeStyle = 'rgba(62,240,201,' + ping / 1.6 + ')'; c.lineWidth = 2; c.beginPath(); c.arc(DX, y, (1.6 - ping) * 260, -1.1, 1.1); c.stroke(); }
+  // squid
+  const qx = DX - 30 - squid * 0.7;
+  if (qx > -40) {
+    c.fillStyle = power > 0 ? '#8a7aa8' : '#c0306a'; c.beginPath(); c.ellipse(qx, y + Math.sin(t / 200) * 10, 20, 12, 0, 0, 7); c.fill();
+    for (let k = 0; k < 5; k++) c.fillRect(qx - 34 - Math.sin(t / 90 + k) * 4, y - 8 + k * 4, 16, 2);
+    c.fillStyle = '#fff'; c.fillRect(qx + 8, y - 4, 4, 4); c.fillStyle = '#000'; c.fillRect(qx + 10, y - 3, 2, 2);
+  }
+  if (!(hurt > 0 && Math.floor(t / 70) % 2)) drawFin(c, DX, y, t);
+  if (power > 0) { c.strokeStyle = '#ffe9f5'; c.globalAlpha = 0.5 + Math.sin(t / 80) * 0.3; c.beginPath(); c.arc(DX, y, 16, 0, 7); c.stroke(); c.globalAlpha = 1; }
+  K.text(c, 'SQUID', 30, BOT + 9, 7, '#ff8fc7');
+  c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(54, BOT + 6, 100, 5); c.fillStyle = squid < 40 ? '#ff4f6d' : '#3ef0c9'; c.fillRect(54, BOT + 6, 100 * Math.max(0, squid) / 140, 5);
+  if (pingCd <= 0 && state === 'play') K.text(c, 'PING READY', W - 50, BOT + 9, 7, '#3ef0c9');
+}
+function drawFin(c, x, y, t) {
+  const tail = Math.sin(t / 90) * 3;
+  c.fillStyle = '#5aa6d6'; c.beginPath(); c.ellipse(x, y, 16, 6, 0, 0, 7); c.fill();
+  c.beginPath(); c.moveTo(x - 14, y); c.lineTo(x - 24, y - 6 + tail); c.lineTo(x - 22, y + 6 + tail); c.fill();
+  c.beginPath(); c.moveTo(x - 2, y - 5); c.lineTo(x - 8, y - 11); c.lineTo(x + 4, y - 5); c.fill();
+  c.fillStyle = '#cfeaff'; c.beginPath(); c.ellipse(x + 2, y + 3, 11, 3, 0, 0, 7); c.fill();
+  c.fillStyle = '#5aa6d6'; c.fillRect(x + 14, y - 1, 6, 3);
+  c.fillStyle = '#000'; c.fillRect(x + 9, y - 3, 2, 2);
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

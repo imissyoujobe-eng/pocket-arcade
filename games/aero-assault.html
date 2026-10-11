@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Aero Assault</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Aero Assault: a vertical scrolling shooter. Guns for the air, bombs for the ground targets under your crosshair.
+K.theme({ bg: '#0c1a12', ink: '#eafff0', accent: '#5dffa0', accentInk: '#002410' });
+const W = 240, H = 320;
+K.screen(W, H);
+K.hud(['score', 'zone', 'lives']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'BOMB' }, { id: 'a', label: 'GUN' }] });
+
+let state = 'title', score, lives, zone, scroll, me, shots, bombs, air, ground, ebul, parts, spawnA, spawnG, fireCd, invul, boss, best = K.best('aeroassault');
+function title() { K.card({ title: 'AERO ASSAULT', text: 'Steer with the arrows (or drag). GUN hits flying enemies. BOMB drops on the ground target inside your crosshair: turrets, tanks and the fortress core at the end of every zone.', best: best ? 'BEST ' + best : '', button: 'Launch', onStart: start }); }
+function start() { score = 0; lives = 3; zone = 1; startZone(); state = 'play'; }
+function startZone() { scroll = 0; me = { x: W / 2, y: H - 50 }; shots = []; bombs = []; air = []; ground = []; ebul = []; parts = []; spawnA = 1; spawnG = 1.5; fireCd = 0; invul = 2; boss = null; }
+function boom(x, y, c, n) { for (let i = 0; i < (n || 10); i++) parts.push({ x, y, vx: K.rnd(-70, 70), vy: K.rnd(-70, 70), t: K.rnd(0.3, 0.7), c }); }
+function hurt() { if (invul > 0) return; boom(me.x, me.y, '#ffd04a', 24); K.noise(0.5, 0.4); lives--; invul = 2.5; ebul = []; if (lives <= 0) { state = 'over'; best = K.saveBest('aeroassault', score); K.card({ title: 'SHOT DOWN', text: 'You reached zone ' + zone + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); } }
+function aim(x, y, sp) { const a = Math.atan2(me.y - y, me.x - x); ebul.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp }); }
+function update(dt) {
+  if (state !== 'play') return;
+  const sp = 110; let dx = 0, dy = 0;
+  if (K.down('left')) dx--; if (K.down('right')) dx++; if (K.down('up')) dy--; if (K.down('down')) dy++;
+  me.x += dx * sp * dt; me.y += dy * sp * dt;
+  if (K.ptr.down) { me.x += (K.ptr.x - me.x) * Math.min(1, dt * 8); me.y += (K.ptr.y - 30 - me.y) * Math.min(1, dt * 8); }
+  me.x = K.clamp(me.x, 10, W - 10); me.y = K.clamp(me.y, 90, H - 14);
+  fireCd -= dt;
+  if ((K.down('a') || K.ptr.down) && fireCd <= 0) { shots.push({ x: me.x - 4, y: me.y - 8 }, { x: me.x + 4, y: me.y - 8 }); fireCd = 0.16; K.beep(1200, 0.03, { vol: 0.03 }); }
+  const cx = me.x, cy = me.y - 70;
+  if (K.hit('b') && bombs.length < 1) { bombs.push({ x: me.x, y: me.y, tx: cx, ty: cy, t: 0 }); K.beep(400, 0.3, { to: 150 }); }
+  const sv = 30; scroll += sv * dt;
+  ground.forEach(g => { g.y += sv * dt; if (g.k === 'tank') g.x += g.vx * dt; if (g.x < 10 || g.x > W - 10) g.vx *= -1; g.cd -= dt; if (g.cd <= 0 && g.y > 0 && g.y < H - 60) { aim(g.x, g.y, 70 + zone * 6); g.cd = K.rnd(1.5, 3) - zone * 0.1; } });
+  ground = ground.filter(g => g.y < H + 20);
+  spawnA -= dt; spawnG -= dt;
+  if (!boss && scroll > 900) { boss = { x: W / 2, y: -40, hp: 4 + zone, cd: 1 }; }
+  if (boss) { if (boss.y < 70) boss.y += sv * dt; boss.cd -= dt; if (boss.cd <= 0) { for (let i = -2; i <= 2; i++) ebul.push({ x: boss.x, y: boss.y, vx: i * 25, vy: 70 + zone * 5 }); boss.cd = 1.8 - zone * 0.08; } }
+  else {
+    if (spawnA <= 0) { const n = K.ri(2, 4), x0 = K.rnd(30, W - 30), k = K.ri(0, 2); for (let i = 0; i < n; i++) air.push({ x: x0, y: -10 - i * 22, k, ph: i * 0.6, hp: k === 2 ? 2 : 1 }); spawnA = K.rnd(1.6, 3) - zone * 0.1; }
+    if (spawnG <= 0) { ground.push({ x: K.rnd(20, W - 20), y: -16, k: Math.random() < 0.5 ? 'tank' : 'turret', vx: K.rnd(-20, 20), cd: K.rnd(1, 2) }); spawnG = K.rnd(1.2, 2.5); }
+  }
+  air.forEach(a => { a.ph += dt; a.y += (60 + zone * 4) * dt; if (a.k === 0) a.x += Math.sin(a.ph * 3) * 60 * dt; if (a.k === 1) a.x += (me.x - a.x) * dt * 0.8; if (a.k === 2 && Math.random() < dt * 0.5) aim(a.x, a.y, 80); });
+  air = air.filter(a => a.y < H + 20);
+  shots.forEach(s => { s.y -= 300 * dt; for (const a of air) if (!a.dead && Math.abs(s.x - a.x) < 9 && Math.abs(s.y - a.y) < 9) { s.dead = true; if (--a.hp <= 0) { a.dead = true; score += 100; boom(a.x, a.y, '#9cf'); K.beep(300, 0.15, { to: 60 }); } break; } });
+  air = air.filter(a => !a.dead); shots = shots.filter(s => !s.dead && s.y > -10);
+  bombs.forEach(b => { b.t += dt / 0.7; b.x = b.x + (b.tx - b.x) * Math.min(1, dt * 4); b.y += (b.ty - b.y) * Math.min(1, dt * 4);
+    if (b.t >= 1) { b.dead = true; boom(b.tx, b.ty, '#ff9a3a', 14); K.noise(0.25, 0.3);
+      ground.forEach(g => { if (Math.hypot(g.x - b.tx, g.y - b.ty) < 14) { g.dead = true; score += g.k === 'tank' ? 300 : 200; boom(g.x, g.y, '#ffd04a', 16); } });
+      if (boss && Math.hypot(boss.x - b.tx, boss.y - b.ty) < 20) { boss.hp--; score += 100; K.beep(200, 0.2, { to: 50 }); if (boss.hp <= 0) { score += 2000; boom(boss.x, boss.y, '#fff', 40); K.tune([392, 523, 659, 784], 0.1); zone++; const s = score, l = lives; startZone(); score = s; lives = l; } }
+    } });
+  bombs = bombs.filter(b => !b.dead); ground = ground.filter(g => !g.dead);
+  ebul.forEach(b => { b.x += b.vx * dt; b.y += b.vy * dt; if (Math.abs(b.x - me.x) < 5 && Math.abs(b.y - me.y) < 6) { b.dead = true; hurt(); } });
+  ebul = ebul.filter(b => !b.dead && b.y < H + 10 && b.y > -20 && b.x > -10 && b.x < W + 10);
+  if (state !== 'play') return;
+  for (const a of air) if (Math.abs(a.x - me.x) < 11 && Math.abs(a.y - me.y) < 11) { a.dead = true; hurt(); }
+  air = air.filter(a => !a.dead);
+  parts.forEach(p => { p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
+  if (invul > 0) invul -= dt;
+  K.set('score', score); K.set('zone', 'ZONE ' + zone); K.set('lives', '✈'.repeat(Math.max(0, lives)));
+}
+function draw(c, t) {
+  c.fillStyle = '#2c5a2a'; c.fillRect(0, 0, W, H);
+  const o = scroll % 80;
+  for (let y = -80 + o; y < H; y += 80) { const r = Math.floor((scroll - o - y) / 80); c.fillStyle = '#244a22'; c.fillRect((r * 37 % 5) * 40, y + 10, 70, 40); c.fillStyle = '#3a6a8a'; c.fillRect(((r * 53 % 7) * 30 + 150) % W, y + 40, 50, 20); c.fillStyle = '#7a6a4a'; c.fillRect(110 + Math.sin(r) * 30, y, 14, 80); }
+  ground.forEach(g => { c.fillStyle = g.k === 'tank' ? '#5a5a3a' : '#666'; c.fillRect(g.x - 8, g.y - 8, 16, 16); c.fillStyle = '#222'; c.beginPath(); c.arc(g.x, g.y, 4, 0, 7); c.fill(); c.strokeStyle = '#222'; c.lineWidth = 2; c.beginPath(); c.moveTo(g.x, g.y); const a = Math.atan2(me.y - g.y, me.x - g.x); c.lineTo(g.x + Math.cos(a) * 9, g.y + Math.sin(a) * 9); c.stroke(); });
+  if (boss) { c.fillStyle = '#555'; c.fillRect(boss.x - 34, boss.y - 22, 68, 44); c.fillStyle = '#333'; c.fillRect(boss.x - 26, boss.y - 14, 52, 28); c.fillStyle = Math.floor(t / 150) % 2 ? '#ff4040' : '#ffb040'; c.beginPath(); c.arc(boss.x, boss.y, 8, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(boss.x - 30, boss.y - 30, 60 * boss.hp / (4 + zone), 3); }
+  bombs.forEach(b => { c.fillStyle = '#222'; c.beginPath(); c.arc(b.x, b.y, 3 - b.t * 1.5, 0, 7); c.fill(); });
+  if (state === 'play') { c.strokeStyle = 'rgba(255,255,90,.8)'; c.lineWidth = 1; c.strokeRect(me.x - 7, me.y - 77, 14, 14); c.beginPath(); c.moveTo(me.x, me.y - 80); c.lineTo(me.x, me.y - 60); c.moveTo(me.x - 10, me.y - 70); c.lineTo(me.x + 10, me.y - 70); c.stroke(); }
+  air.forEach(a => { c.fillStyle = ['#c0d8ff', '#ff9ad0', '#ffd25a'][a.k]; c.beginPath(); c.moveTo(a.x, a.y + 8); c.lineTo(a.x - 9, a.y - 6); c.lineTo(a.x, a.y - 2); c.lineTo(a.x + 9, a.y - 6); c.fill(); });
+  c.fillStyle = '#fff'; shots.forEach(s => c.fillRect(s.x - 1, s.y - 4, 2, 6));
+  c.fillStyle = '#ff5a5a'; ebul.forEach(b => { c.beginPath(); c.arc(b.x, b.y, 2.5, 0, 7); c.fill(); });
+  if (state === 'play' && !(invul > 0 && Math.floor(t / 90) % 2)) { c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(me.x + 10, me.y + 16, 9, 4, 0, 0, 7); c.fill(); c.fillStyle = '#e8f0ff'; c.beginPath(); c.moveTo(me.x, me.y - 11); c.lineTo(me.x + 11, me.y + 7); c.lineTo(me.x, me.y + 3); c.lineTo(me.x - 11, me.y + 7); c.fill(); c.fillStyle = '#5dffa0'; c.fillRect(me.x - 1.5, me.y - 6, 3, 6); }
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+}
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>

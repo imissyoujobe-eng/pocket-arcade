@@ -1,0 +1,358 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Sky Shield</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@700;900&display=swap">
+<style>
+/* Layout: full-screen night sky on a canvas with six cities and three launch bases along the ground; HUD strip on top (score, wave, multiplier); tap anywhere in the sky to fire */
+:root {
+  --panel: #0b1030;
+  --panel-fg: #eef2ff;
+  --cyan: #6ff0ff;
+  --gold: #ffd23f;
+  --gold-deep: #b8860b;
+  --red: #ff4d4d;
+  --display: "Bungee", "Impact", system-ui, sans-serif;
+  --body: "Nunito", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--panel); color: var(--panel-fg); font-family: var(--body); touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.game { height: 100%; min-height: 520px; display: flex; flex-direction: column; }
+.hud { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 8px 16px; }
+.lbl { font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.val { font-family: var(--display); font-size: 1.25rem; color: var(--gold); font-variant-numeric: tabular-nums; }
+.mid { text-align: center; }
+.right { text-align: right; }
+.mult { font-family: var(--display); font-size: 1.25rem; color: var(--cyan); }
+#field { position: relative; flex: 1; min-height: 420px; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(11,16,48,.6); text-align: center; }
+.card { max-width: 340px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.card h1, .card h2 { font-family: var(--display); margin: 0; line-height: 1; color: var(--cyan); text-shadow: 0 4px 0 #1d3b7a; }
+.card h1 { font-size: clamp(2.4rem, 12vw, 3.4rem); }
+.card h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
+.card p { margin: 0; line-height: 1.45; text-shadow: 0 1px 3px #000; }
+.btn { font-family: var(--display); font-size: 1.2rem; color: var(--panel); background: var(--gold); border: 0; border-radius: 12px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 var(--gold-deep); }
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--gold-deep); }
+.btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.banner { position: absolute; left: 0; right: 0; top: 24%; text-align: center; font-family: var(--display); font-size: clamp(1.4rem, 7.5vw, 2.4rem); color: #fff; text-shadow: 0 3px 0 #1d3b7a, 0 0 16px rgba(0,0,0,.5); pointer-events: none; padding-inline: 16px; white-space: pre-line; }
+</style>
+
+<div class="game">
+  <div class="hud">
+    <div><div class="lbl">Score</div><div class="val" id="score">0</div></div>
+    <div class="mid"><div class="lbl">Wave</div><div class="val" id="wave">1</div></div>
+    <div class="right"><div class="lbl">Points</div><div class="mult" id="mult">1×</div></div>
+  </div>
+  <div id="field">
+    <canvas id="cv"></canvas>
+    <div class="banner" id="banner" hidden></div>
+    <div class="overlay" id="start">
+      <div class="card">
+        <h1>Sky Shield</h1>
+        <p>Rockets are raining down on your six cities. Tap the sky to launch an interceptor from the closest base. Its blast knocks out anything that flies into it.</p>
+        <p>Lead your shots, catch several rockets in one blast, and save ammo for the bonus.</p>
+        <button class="btn" id="play">Tap to Defend</button>
+        <p id="best"></p>
+      </div>
+    </div>
+    <div class="overlay" id="over" hidden>
+      <div class="card">
+        <h2 id="overTitle">The End</h2>
+        <p id="overText"></p>
+        <button class="btn" id="again">Defend Again</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('error', function (e) { var b = document.getElementById('banner'); if (b) { b.hidden = false; b.style.fontSize = '14px'; b.textContent = 'Error: ' + e.message; } });
+(function () {
+  const $ = id => document.getElementById(id);
+  const cv = $('cv'), ctx = cv.getContext('2d'), field = $('field');
+  let W = 0, H = 0, U = 1, gy = 0, stars = [];
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = field.clientWidth; H = field.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    U = Math.max(.8, Math.min(W, H) / 400); gy = H - Math.max(44, H * .1);
+    stars = []; for (let i = 0; i < 80; i++) stars.push({ x: Math.random() * W, y: Math.random() * gy * .8, r: Math.random() * 1.3 + .3, tw: Math.random() * 6 });
+  }
+
+  // ---------- sound ----------
+  let ac = null;
+  function audio() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) {} }
+  function noise(dur, vol, freq) {
+    if (!ac) return; const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    const s = ac.createBufferSource(); s.buffer = buf; const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+    const g = ac.createGain(); g.gain.value = vol; s.connect(f).connect(g).connect(ac.destination); s.start();
+  }
+  function tone(f1, f2, len, type, vol, at) {
+    if (!ac) return; const t = ac.currentTime + (at || 0), o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'square'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + len);
+    g.gain.setValueAtTime(vol || .1, t); g.gain.exponentialRampToValueAtTime(.0001, t + len);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + len + .02);
+  }
+  const sfx = {
+    launch: () => { tone(220, 900, .25, 'triangle', .08); noise(.2, .12, 3000); },
+    boom: () => noise(.45, .45, 900),
+    big: () => noise(.9, .9, 400),
+    empty: () => tone(160, 120, .12, 'square', .08),
+    siren: () => { for (let i = 0; i < 2; i++) { tone(500, 900, .35, 'sawtooth', .05, i * .7); tone(900, 500, .35, 'sawtooth', .05, i * .7 + .35); } },
+    tick: at => tone(1200, 1200, .05, 'square', .05, at),
+    city: () => [523, 659, 784, 1047].forEach((n, i) => tone(n, n, .15, 'triangle', .1, i * .1))
+  };
+
+  // ---------- world ----------
+  const BASE_FX = [.07, .5, .93], CITY_FX = [.2, .3, .4, .6, .7, .8];
+  const PALS = [
+    { sky: ['#070d2e', '#16306a', '#35589e'], ground: '#d9a441', ground2: '#b8862e', trail: '#ff4d4d', own: '#6ff0ff', city: '#5ec8ff', boom: ['#ffffff', '#ffd23f', '#ff6b3a', '#6ff0ff'] },
+    { sky: ['#14072a', '#3b1556', '#74306e'], ground: '#4fc16a', ground2: '#35934c', trail: '#ffd23f', own: '#ff7ab8', city: '#ffd23f', boom: ['#ffffff', '#ff7ab8', '#ffd23f', '#b58cff'] },
+    { sky: ['#02141a', '#0a3940', '#1f6b6b'], ground: '#dfe6ea', ground2: '#b5c1c8', trail: '#ff8c1a', own: '#b5ff6b', city: '#ff8c1a', boom: ['#ffffff', '#b5ff6b', '#ff8c1a', '#6ff0ff'] },
+    { sky: ['#1c0606', '#521414', '#a0402a'], ground: '#8fb3de', ground2: '#6a8fbd', trail: '#6ff0ff', own: '#ffffff', city: '#b58cff', boom: ['#ffffff', '#6ff0ff', '#ffd23f', '#ff4d4d'] }
+  ];
+  let wave = 0, mult = 1, score = 0, best = 0, nextCity = 10000, phase = 'title', queue = 0, spawnT = 0, speed = 40, planeT = 0, tallyT = 0, overT = 0;
+  let bases = [], cities = [], incoming = [], planes = [], shots = [], booms = [], pops = [];
+  try { best = +localStorage.getItem('skyshield-best') || 0; } catch (e) {}
+  const pal = () => PALS[Math.floor(Math.max(0, wave - 1) / 2) % PALS.length];
+  const bx = i => W * BASE_FX[i], cxp = i => W * CITY_FX[i];
+  const baseTop = () => gy - 16 * U;
+
+  function banner(t, ms) { const b = $('banner'); b.textContent = t; b.hidden = false; clearTimeout(banner.t); banner.t = setTimeout(() => b.hidden = true, ms || 1300); }
+  function pop(x, y, text, color) { pops.push({ x, y, text, color: color || '#ffd23f', t: 1 }); }
+  function hud() { $('score').textContent = score.toLocaleString(); $('wave').textContent = Math.max(1, wave); $('mult').textContent = mult + '×'; }
+
+  function newGame() {
+    wave = 0; score = 0; nextCity = 10000; incoming = []; planes = []; shots = []; booms = []; pops = [];
+    bases = [0, 1, 2].map(() => ({ ammo: 10, alive: true }));
+    cities = CITY_FX.map((_, i) => ({ alive: true, seed: i * 7 + 3 }));
+    startWave();
+  }
+  function startWave() {
+    wave++; mult = Math.min(6, 1 + Math.floor((wave - 1) / 2));
+    queue = Math.min(30, 8 + wave * 2); spawnT = 1.4;
+    speed = H / Math.max(4.5, 13 - wave * .8);
+    bases.forEach(b => { b.alive = true; b.ammo = 10; });
+    planeT = wave >= 3 ? 5 + Math.random() * 6 : Infinity;
+    phase = 'play'; sfx.siren(); hud();
+    banner('Wave ' + wave + (mult > 1 ? '\n' + mult + '× points' : ''), 1600);
+  }
+  function begin(e) {
+    if (e) e.preventDefault();
+    if ($('start').hidden && $('over').hidden) return;
+    audio(); $('start').hidden = true; $('over').hidden = true; newGame();
+  }
+  $('play').addEventListener('click', begin); $('start').addEventListener('pointerup', begin); $('again').addEventListener('click', begin);
+
+  function pickTarget() {
+    const opts = [];
+    cities.forEach((c, i) => { if (c.alive) opts.push({ k: 'city', i }, { k: 'city', i }, { k: 'city', i }); });
+    bases.forEach((b, i) => { if (b.alive) opts.push({ k: 'base', i }); });
+    if (!opts.length) return { k: 'city', i: Math.floor(Math.random() * 6) };
+    return opts[Math.floor(Math.random() * opts.length)];
+  }
+  function launchEnemy(sx, sy) {
+    const tg = pickTarget();
+    const tx = tg.k === 'city' ? cxp(tg.i) : bx(tg.i), ty = tg.k === 'city' ? gy - 4 * U : baseTop();
+    const d = Math.hypot(tx - sx, ty - sy) || 1;
+    const m = { sx, sy, x: sx, y: sy, tx, ty, vx: (tx - sx) / d * speed, vy: (ty - sy) / d * speed, splitY: null };
+    if (wave >= 2 && Math.random() < Math.min(.45, .12 + wave * .03) && sy < H * .2) m.splitY = H * (.2 + .3 * Math.random());
+    incoming.push(m);
+  }
+  function explode(x, y, R, own) { booms.push({ x, y, t: 0, R, own }); }
+  function boomR(b) { const T1 = .45, T2 = .3, T3 = .45; return b.t < T1 ? b.R * b.t / T1 : b.t < T1 + T2 ? b.R : b.R * Math.max(0, 1 - (b.t - T1 - T2) / T3); }
+
+  function fire(x, y) {
+    if (phase !== 'play') return;
+    if (y > gy - 30 * U) y = gy - 30 * U;
+    let bi = -1, bd = Infinity;
+    bases.forEach((b, i) => { if (b.alive && b.ammo > 0 && Math.abs(bx(i) - x) < bd) { bd = Math.abs(bx(i) - x); bi = i; } });
+    if (bi < 0) { sfx.empty(); pop(x, y, 'NO AMMO', '#ff4d4d'); return; }
+    bases[bi].ammo--;
+    const sx = bx(bi), sy = baseTop() - 8 * U, d = Math.hypot(x - sx, y - sy) || 1, sp = H * (bi === 1 ? 1.35 : .95);
+    shots.push({ sx, sy, x: sx, y: sy, tx: x, ty: y, vx: (x - sx) / d * sp, vy: (y - sy) / d * sp, d, gone: 0 });
+    sfx.launch();
+  }
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); audio(); const r = cv.getBoundingClientRect(); fire(e.clientX - r.left, e.clientY - r.top); });
+
+  function update(dt) {
+    stars.forEach(s => s.tw += dt);
+    pops.forEach(p => { p.t -= dt; p.y -= 24 * dt; }); pops = pops.filter(p => p.t > 0);
+    booms.forEach(b => b.t += dt); booms = booms.filter(b => b.t < 1.2);
+    if (phase === 'title') return;
+    if (phase === 'tally') { tallyT -= dt; if (tallyT <= 0) startWave(); return; }
+    if (phase === 'ending') { overT -= dt; if (overT <= 0) gameOver(); }
+
+    // spawn
+    if (phase === 'play') {
+      spawnT -= dt;
+      if (queue > 0 && spawnT <= 0) {
+        const n = Math.min(queue, 1 + Math.floor(Math.random() * Math.min(4, 1 + wave / 2)));
+        for (let i = 0; i < n; i++) launchEnemy(W * (.03 + .94 * Math.random()), -4);
+        queue -= n; spawnT = Math.max(1, 3.2 - wave * .15) + Math.random() * 1.5;
+      }
+      planeT -= dt;
+      if (planeT <= 0) {
+        planeT = 9 + Math.random() * 8;
+        const left = Math.random() < .5;
+        planes.push({ x: left ? -30 : W + 30, y: H * (.12 + .15 * Math.random()), vx: (left ? 1 : -1) * W / 7, drops: 2, dropT: 1 + Math.random() * 1.5 });
+      }
+    }
+    planes.forEach(p => {
+      p.x += p.vx * dt; p.dropT -= dt;
+      if (p.drops > 0 && p.dropT <= 0 && p.x > 20 && p.x < W - 20) { p.drops--; p.dropT = 1.2 + Math.random() * 1.5; launchEnemy(p.x, p.y + 6 * U); }
+    });
+    planes = planes.filter(p => p.x > -60 && p.x < W + 60 && !p.dead);
+
+    // interceptors
+    for (let i = shots.length - 1; i >= 0; i--) {
+      const s = shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.gone += Math.hypot(s.vx, s.vy) * dt;
+      if (s.gone >= s.d) { shots.splice(i, 1); explode(s.tx, s.ty, 40 * U, true); sfx.boom(); }
+    }
+    // incoming
+    for (let i = incoming.length - 1; i >= 0; i--) {
+      const m = incoming[i];
+      m.x += m.vx * dt; m.y += m.vy * dt;
+      if (m.splitY !== null && m.y >= m.splitY) {
+        m.splitY = null; const k = 1 + (Math.random() < .5 ? 1 : 0);
+        for (let j = 0; j < k; j++) launchEnemy(m.x, m.y);
+        for (let j = 0; j < k; j++) { const c = incoming[incoming.length - 1 - j]; c.sx = m.x; c.sy = m.y; }
+      }
+      if (m.y >= m.ty) {
+        incoming.splice(i, 1); explode(m.tx, m.ty, 30 * U, false); sfx.big();
+        cities.forEach((c, j) => { if (c.alive && Math.abs(cxp(j) - m.tx) < 22 * U) c.alive = false; });
+        bases.forEach((b, j) => { if (b.alive && Math.abs(bx(j) - m.tx) < 22 * U) { b.alive = false; b.ammo = 0; } });
+      }
+    }
+    // blasts catch rockets
+    booms.forEach(b => {
+      if (!b.own) return; const r = boomR(b); if (r <= 0) return;
+      for (let i = incoming.length - 1; i >= 0; i--) {
+        const m = incoming[i];
+        if (Math.hypot(m.x - b.x, m.y - b.y) < r) { incoming.splice(i, 1); score += 25 * mult; pop(m.x, m.y - 10, String(25 * mult)); explode(m.x, m.y, 26 * U, true); sfx.boom(); }
+      }
+      planes.forEach(p => { if (!p.dead && Math.hypot(p.x - b.x, p.y - b.y) < r + 12 * U) { p.dead = true; score += 100 * mult; pop(p.x, p.y - 10, String(100 * mult), '#6ff0ff'); explode(p.x, p.y, 30 * U, true); sfx.big(); } });
+    });
+    planes = planes.filter(p => !p.dead);
+
+    if (phase === 'play' && cities.every(c => !c.alive)) { phase = 'ending'; overT = 2.2; queue = 0; banner('All cities lost!', 2000); }
+    if (phase === 'play' && queue === 0 && !incoming.length && !planes.length && !shots.length && !booms.length) tally();
+    hud();
+  }
+  function tally() {
+    const ammo = bases.reduce((s, b) => s + (b.alive ? b.ammo : 0), 0), alive = cities.filter(c => c.alive).length;
+    const bonus = ammo * 5 * mult + alive * 100 * mult;
+    score += bonus;
+    for (let i = 0; i < Math.min(12, ammo + alive); i++) sfx.tick(i * .07);
+    let text = 'Wave clear!\n' + alive + ' cities • ' + ammo + ' rockets\n+' + bonus.toLocaleString();
+    while (score >= nextCity) {
+      nextCity += 10000;
+      const dead = cities.filter(c => !c.alive);
+      if (dead.length) { dead[Math.floor(Math.random() * dead.length)].alive = true; text += '\nBonus city!'; setTimeout(sfx.city, 600); }
+    }
+    phase = 'tally'; tallyT = 3; banner(text, 2800); hud();
+  }
+  function gameOver() {
+    phase = 'over';
+    const nb = score > best; if (nb) { best = score; try { localStorage.setItem('skyshield-best', best); } catch (e) {} }
+    $('overTitle').textContent = nb ? 'New High Score!' : 'The End';
+    $('overText').textContent = 'You held the line for ' + wave + (wave === 1 ? ' wave' : ' waves') + ' and scored ' + score.toLocaleString() + '. Best: ' + best.toLocaleString() + '.';
+    $('over').hidden = false;
+  }
+
+  // ---------- drawing ----------
+  function drawCity(i, c, P) {
+    const x = cxp(i), w = Math.min(W * .085, 46 * U), y = gy;
+    if (!c.alive) {
+      ctx.fillStyle = '#3a2e2a';
+      ctx.beginPath(); ctx.moveTo(x - w / 2, y); for (let k = 0; k <= 6; k++) ctx.lineTo(x - w / 2 + k * w / 6, y - (k % 2 ? 7 : 3) * U); ctx.lineTo(x + w / 2, y); ctx.fill();
+      return;
+    }
+    const hs = [.55, .9, .7, 1, .6], bw = w / hs.length;
+    hs.forEach((h, k) => {
+      const hh = h * 26 * U, bx0 = x - w / 2 + k * bw;
+      ctx.fillStyle = P.city; ctx.fillRect(bx0, y - hh, bw - 1, hh);
+      ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(bx0 + bw * .6, y - hh, bw * .4 - 1, hh);
+      ctx.fillStyle = '#fff6c0';
+      for (let r = 1; r * 5 * U < hh - 2 * U; r++) if ((c.seed * 13 + k * 7 + r * 3) % 4) ctx.fillRect(bx0 + bw * .25, y - r * 5 * U - 2 * U, Math.max(1, bw * .25), 2 * U);
+    });
+  }
+  function drawBase(i, b, P) {
+    const x = bx(i), top = baseTop();
+    ctx.fillStyle = P.ground2; ctx.beginPath(); ctx.moveTo(x - 34 * U, gy); ctx.quadraticCurveTo(x - 22 * U, top, x, top); ctx.quadraticCurveTo(x + 22 * U, top, x + 34 * U, gy); ctx.fill();
+    if (!b.alive) { ctx.fillStyle = '#2a1e1a'; ctx.beginPath(); ctx.ellipse(x, top + 3 * U, 12 * U, 4 * U, 0, 0, Math.PI * 2); ctx.fill(); return; }
+    const rows = [4, 3, 2, 1]; let n = 0;
+    rows.forEach((cnt, r) => {
+      for (let k = 0; k < cnt; k++, n++) {
+        if (n >= b.ammo) continue;
+        const mx = x + (k - (cnt - 1) / 2) * 7 * U, my = top + 10 * U - r * 6 * U;
+        ctx.fillStyle = P.own; ctx.beginPath(); ctx.moveTo(mx, my - 5 * U); ctx.lineTo(mx + 2.4 * U, my); ctx.lineTo(mx - 2.4 * U, my); ctx.closePath(); ctx.fill();
+      }
+    });
+    if (phase === 'play' && b.ammo <= 3) {
+      ctx.fillStyle = b.ammo ? '#ffd23f' : '#ff4d4d'; ctx.font = Math.round(10 * U) + 'px Bungee, Impact, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(b.ammo ? 'LOW' : 'OUT', x, gy + 16 * U);
+    }
+  }
+  function draw(now) {
+    const P = pal();
+    const g = ctx.createLinearGradient(0, 0, 0, gy);
+    g.addColorStop(0, P.sky[0]); g.addColorStop(.6, P.sky[1]); g.addColorStop(1, P.sky[2]);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, gy);
+    stars.forEach(s => { ctx.fillStyle = 'rgba(255,255,255,' + (.4 + .4 * Math.sin(s.tw * 1.5)) + ')'; ctx.fillRect(s.x, s.y, s.r * 1.4, s.r * 1.4); });
+    ctx.fillStyle = P.ground; ctx.fillRect(0, gy, W, H - gy);
+    ctx.fillStyle = P.ground2; ctx.fillRect(0, gy, W, 3 * U);
+    if (bases.length) { cities.forEach((c, i) => drawCity(i, c, P)); bases.forEach((b, i) => drawBase(i, b, P)); }
+    // incoming
+    ctx.lineWidth = 1.6 * U; ctx.lineCap = 'round';
+    incoming.forEach(m => {
+      ctx.strokeStyle = P.trail; ctx.globalAlpha = .75; ctx.beginPath(); ctx.moveTo(m.sx, m.sy); ctx.lineTo(m.x, m.y); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillStyle = Math.floor(now / 80) % 2 ? '#fff' : P.trail; ctx.fillRect(m.x - 1.8 * U, m.y - 1.8 * U, 3.6 * U, 3.6 * U);
+    });
+    planes.forEach(p => {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.scale((p.vx > 0 ? 1 : -1) * U, U);
+      ctx.fillStyle = '#c9d2e3'; ctx.beginPath(); ctx.ellipse(0, 0, 16, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(-8, -12); ctx.lineTo(-4, -12); ctx.lineTo(6, 0); ctx.lineTo(-4, 12); ctx.lineTo(-8, 12); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(-18, -7); ctx.lineTo(-15, -7); ctx.lineTo(-10, 0); ctx.fill();
+      ctx.fillStyle = P.trail; ctx.fillRect(4, -1.5, 6, 3);
+      ctx.restore();
+    });
+    // interceptors
+    shots.forEach(s => {
+      ctx.strokeStyle = P.own; ctx.lineWidth = 1.6 * U; ctx.beginPath(); ctx.moveTo(s.sx, s.sy); ctx.lineTo(s.x, s.y); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillRect(s.x - 1.5 * U, s.y - 1.5 * U, 3 * U, 3 * U);
+      const k = 5 * U; ctx.strokeStyle = Math.floor(now / 120) % 2 ? '#fff' : P.own; ctx.lineWidth = 2 * U;
+      ctx.beginPath(); ctx.moveTo(s.tx - k, s.ty - k); ctx.lineTo(s.tx + k, s.ty + k); ctx.moveTo(s.tx + k, s.ty - k); ctx.lineTo(s.tx - k, s.ty + k); ctx.stroke();
+    });
+    // blasts
+    booms.forEach(b => {
+      const r = boomR(b); if (r <= 0) return;
+      ctx.fillStyle = P.boom[Math.floor(now / 50 + b.x) % P.boom.length];
+      ctx.globalAlpha = b.own ? .95 : .8; ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = .5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(b.x, b.y, r * .45, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+    pops.forEach(p => { ctx.globalAlpha = Math.max(0, p.t); ctx.fillStyle = p.color; ctx.font = Math.round(12 * U) + 'px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(p.text, p.x, p.y); });
+    ctx.globalAlpha = 1;
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (field.clientWidth !== W || field.clientHeight !== H) resize();
+    if (!W || !H) return;
+    const dt = Math.min(.033, (now - last) / 1000); last = now;
+    update(dt); draw(now);
+  }
+  $('best').textContent = best ? 'High score: ' + best.toLocaleString() : '';
+  bases = [0, 1, 2].map(() => ({ ammo: 10, alive: true }));
+  cities = CITY_FX.map((_, i) => ({ alive: true, seed: i * 7 + 3 }));
+  hud();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>

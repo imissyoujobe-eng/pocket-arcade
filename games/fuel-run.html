@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fuel Run</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Fuel Run: fly up the river, blast boats, choppers and bridges, and fly over fuel depots to refuel.
+K.theme({ bg: '#0c1f14', ink: '#effff2', accent: '#ffd23f', accentInk: '#2a1d00' });
+const W = 240, H = 360, PY = 300, ROW = 8, SEC = 110;
+const c = K.screen(W, H);
+K.hud(['score', 'lives']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'FIRE' }] });
+
+function hash(i) { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); }
+// River shape for row i, worked out from i alone so a respawn rebuilds the same river.
+function geo(i) {
+  let cx = 120 + 30 * Math.sin(i * 0.021) + 18 * Math.sin(i * 0.057 + 1);
+  let hw = 62 + 30 * Math.sin(i * 0.017 + 2) + 14 * Math.sin(i * 0.049);
+  const s = ((i % SEC) + SEC) % SEC, d = Math.min(s, SEC - s);
+  if (i < 40) { const t = Math.max(0, (i - 16) / 24); cx = 120 + (cx - 120) * t; hw = 70 + (hw - 70) * t; }
+  else if (d < 12) { const t = 1 - d / 12; hw = hw + (30 - hw) * t; cx = cx + (120 - cx) * t; }
+  hw = Math.max(32, hw);
+  const g = { l: Math.max(8, cx - hw), r: Math.min(232, cx + hw), il: 0, ir: 0, bridge: i > 0 && s === 0 };
+  if (hw > 80 && d > 16 && i >= 40) { const ih = (hw - 80) * 1.5 * Math.min(1, (d - 16) / 12, (i - 40) / 12); if (ih > 3) { g.il = cx - ih; g.ir = cx + ih; } }
+  return g;
+}
+function solidAt(x, wy) { const g = geo(Math.floor(wy / ROW)); return x < g.l || x > g.r || (g.il && x > g.il && x < g.ir); }
+
+let state = 'title', score, lives, fuel, dist, speed, objs, shots, parts, genUpTo, checkpoint, px, dead, fireT, level, jetT, best = K.best('fuelrun');
+function title() {
+  K.card({ title: 'FUEL RUN', text: 'Fly up the river. Shoot boats, choppers and bridges. Fly over FUEL tanks to fill up, and never touch the riverbank.', best: best ? 'BEST ' + best : '', button: 'Take off', onStart: start });
+}
+function start() { score = 0; lives = 3; checkpoint = 0; respawn(); state = 'play'; hud(); }
+function respawn() {
+  dist = checkpoint * ROW + 16; fuel = 100; px = geo(checkpoint + 2).il ? 60 : 120; dead = 0; fireT = 0; jetT = 4;
+  objs = []; shots = []; parts = []; genUpTo = Math.floor(dist / ROW) + 1; level = Math.floor(checkpoint / SEC) + 1;
+}
+function hud() { K.set('score', score); K.set('lives', '✈'.repeat(Math.max(0, lives))); }
+
+function spawnRow(i) {
+  const g = geo(i);
+  if (g.bridge) { objs.push({ t: 'bridge', wy: i * ROW, x: g.l, w: g.r - g.l, h: 8, hp: 1, row: i }); return; }
+  const s = i % SEC, d = Math.min(s, SEC - s);
+  if (i < 30 || d < 14) return;
+  const lv = Math.floor(i / SEC) + 1, r = hash(i * 7.13);
+  if (r > 0.075 + lv * 0.012) return;
+  const k = hash(i * 3.71), type = k < 0.3 ? 'fuel' : k < 0.7 ? 'ship' : 'heli';
+  const w = type === 'fuel' ? 12 : type === 'ship' ? 18 : 14, h = type === 'fuel' ? 22 : type === 'ship' ? 8 : 10;
+  let lo = g.l + 4, hi = g.r - 4 - w;
+  if (g.il) { if (hash(i * 1.9) < 0.5) hi = g.il - 4 - w; else lo = g.ir + 4; }
+  if (hi <= lo) return;
+  objs.push({ t: type, wy: i * ROW, x: lo + hash(i * 5.3) * (hi - lo), w, h, vx: 0, active: false, spd: (type === 'heli' ? 42 : 28) + lv * 6 });
+}
+const sy = wy => PY - (wy - dist);
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (dead > 0) {
+    dead -= dt; stepParts(dt);
+    if (dead <= 0) { if (lives <= 0) return over(); respawn(); }
+    return;
+  }
+  speed = K.down('up') ? 92 : K.down('down') ? 28 : 52;
+  dist += speed * dt;
+  const mv = 95 * dt; if (K.down('left')) px -= mv; if (K.down('right')) px += mv;
+  px = K.clamp(px, 6, W - 6);
+  fuel -= dt * (3.2 + level * 0.25);
+  // new rows coming into view
+  const top = Math.floor((dist + PY + 20) / ROW);
+  while (genUpTo <= top) spawnRow(genUpTo++);
+  // fire
+  fireT -= dt;
+  if (K.down('a') && fireT <= 0) { shots.push({ x: px, wy: dist + 10 }); fireT = 0.2; K.beep(900, 0.06, { to: 300, vol: 0.04 }); }
+  for (const s of shots) s.wy += 330 * dt;
+  // enemy jets crossing from later rivers on
+  if (level >= 2) { jetT -= dt; if (jetT <= 0) { jetT = K.rnd(4, 8) / level * 2; const left = Math.random() < 0.5; objs.push({ t: 'jet', wy: dist + K.rnd(120, 220), x: left ? -20 : W + 4, w: 16, h: 8, vx: left ? 110 : -110 }); } }
+  // objects
+  for (const o of objs) {
+    const y = sy(o.wy);
+    if (o.t === 'ship' || o.t === 'heli') {
+      if (!o.active && y > 40 && hash(o.wy * 0.37) < 0.65 + level * 0.05) { o.active = true; o.vx = (px > o.x ? 1 : -1) * o.spd; }
+      if (o.active) {
+        const nx = o.x + o.vx * dt;
+        if (solidAt(nx, o.wy + 4) || solidAt(nx + o.w, o.wy + 4)) o.vx = -o.vx; else o.x = nx;
+      }
+    }
+    if (o.t === 'jet') o.x += o.vx * dt;
+  }
+  // shots vs things
+  for (const s of shots) {
+    if (s.dead) continue;
+    if (solidAt(s.x, s.wy) && !geo(Math.floor(s.wy / ROW)).bridge) { s.dead = true; continue; }
+    if (sy(s.wy) < -10) { s.dead = true; continue; }
+    for (const o of objs) {
+      if (o.dead) continue;
+      if (s.x > o.x - 2 && s.x < o.x + o.w + 2 && s.wy > o.wy - 2 && s.wy < o.wy + o.h + 4) {
+        s.dead = true; o.dead = true;
+        const pts = { ship: 30, heli: 60, fuel: 80, jet: 100, bridge: 500 }[o.t];
+        score += pts; hud(); boom(o.x + o.w / 2, sy(o.wy) - o.h / 2, o.t === 'bridge' ? 40 : 16);
+        if (o.t === 'bridge') { checkpoint = o.row; level = Math.floor(o.row / SEC) + 1; K.tune([523, 659, 784], 0.08); }
+        break;
+      }
+    }
+  }
+  shots = shots.filter(s => !s.dead);
+  // player vs world
+  const hit = { x: px - 6, y: 0, w: 12, h: 12 };
+  if (solidAt(px - 5, dist + 2) || solidAt(px + 5, dist + 2) || solidAt(px, dist + 12)) return crash();
+  refuel = false;
+  for (const o of objs) {
+    if (o.dead) continue;
+    const r = { x: o.x, w: o.w, y: o.wy, h: o.h };
+    if (px + 6 > r.x && px - 6 < r.x + r.w && dist + 12 > r.y && dist < r.y + r.h) {
+      if (o.t === 'fuel') { refuel = true; continue; }
+      o.dead = true; boom(o.x + o.w / 2, sy(o.wy), 14); return crash();
+    }
+  }
+  if (refuel) { fuel = Math.min(100, fuel + 34 * dt); if (Math.random() < 0.2) K.beep(1200 + fuel * 6, 0.04, { vol: 0.03 }); }
+  if (fuel <= 0) return crash();
+  if (fuel < 25 && Math.floor(performance.now() / 300) % 2 && Math.random() < 0.1) K.beep(220, 0.08, { vol: 0.04 });
+  objs = objs.filter(o => !o.dead && sy(o.wy) < H + 40 && o.x > -40 && o.x < W + 40);
+  stepParts(dt);
+}
+let refuel = false;
+function stepParts(dt) { for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.l -= dt; } parts = parts.filter(p => p.l > 0); }
+function boom(x, y, n) { K.noise(0.35, 0.25); for (let i = 0; i < n; i++) parts.push({ x, y, vx: K.rnd(-90, 90), vy: K.rnd(-90, 90), l: K.rnd(0.3, 0.8), c: Math.random() < 0.5 ? '#ffb02e' : '#ff5a36' }); }
+function crash() { boom(px, PY + 6, 30); lives--; hud(); dead = 1.4; K.beep(160, 0.6, { type: 'sawtooth', to: 40, vol: 0.08 }); }
+function over() { state = 'over'; best = K.saveBest('fuelrun', score); K.card({ title: 'SPLASHDOWN', text: 'You scored ' + score + ' and made it to river ' + level + '.', best: 'BEST ' + best, button: 'Fly again', onStart: start }); }
+
+function draw(c, t) {
+  c.fillStyle = '#2f8f3a'; c.fillRect(0, 0, W, H);
+  const d = dist || 0, first = Math.floor((d - (H - PY) - 8) / ROW), last = Math.floor((d + PY + 8) / ROW);
+  for (let i = first; i <= last; i++) {
+    const g = geo(i), y = PY - (i * ROW + ROW - d);
+    c.fillStyle = '#2a6fdb'; c.fillRect(g.l, y, g.r - g.l, ROW + 1);
+    c.fillStyle = '#4a8be8'; c.fillRect(g.l, y, 2, ROW + 1); c.fillRect(g.r - 2, y, 2, ROW + 1);
+    if ((i * 37) % 11 === 0) { c.fillStyle = '#1f6b2a'; c.fillRect((i * 53) % 30 + 2, y, 6, 6); c.fillRect(W - 10 - (i * 29) % 30, y, 6, 6); }
+  }
+  for (let i = first; i <= last; i++) {
+    const g = geo(i), y = PY - (i * ROW + ROW - d);
+    if (g.il) { c.fillStyle = '#2f8f3a'; c.fillRect(g.il, y, g.ir - g.il, ROW + 1); c.fillStyle = '#257530'; c.fillRect(g.il, y, 2, ROW + 1); c.fillRect(g.ir - 2, y, 2, ROW + 1); }
+    if (g.bridge) { c.fillStyle = '#555a66'; c.fillRect(0, y - 2, W, 12); c.fillStyle = '#ffd23f'; for (let x = 0; x < W; x += 16) c.fillRect(x, y + 3, 8, 2); }
+  }
+  if (objs) for (const o of objs) drawObj(c, o, sy(o.wy), t);
+  if (shots) { c.fillStyle = '#fff36b'; for (const s of shots) c.fillRect(s.x - 1, sy(s.wy) - 6, 2, 6); }
+  if (state === 'play' && dead <= 0) drawJet(c, px, PY - 13, t);
+  if (parts) for (const p of parts) { c.globalAlpha = Math.min(1, p.l * 2); c.fillStyle = p.c; c.fillRect(p.x - 2, p.y - 2, 4, 4); } c.globalAlpha = 1;
+  // fuel gauge
+  if (state === 'play') {
+    c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(60, H - 22, 120, 16);
+    c.fillStyle = fuel < 25 ? '#ff4f5e' : '#ffd23f'; c.fillRect(62, H - 20, 116 * Math.max(0, fuel) / 100, 12);
+    K.text(c, refuel ? 'FUELING' : 'FUEL', 120, H - 14, 9, '#111');
+    if (dead > 0 && lives > 0) K.text(c, 'GET READY', W / 2, H / 2, 16, '#fff');
+  }
+}
+function drawJet(c, x, y, t) {
+  c.fillStyle = '#ffd23f'; c.fillRect(x - 1, y, 2, 13); c.fillRect(x - 7, y + 6, 14, 3); c.fillRect(x - 4, y + 11, 8, 2);
+  c.fillStyle = '#ff8a1f'; c.fillRect(x - 1, y + 13, 2, 2 + (t / 60 | 0) % 2);
+}
+function drawObj(c, o, y, t) {
+  const x = o.x;
+  if (o.t === 'bridge') { c.fillStyle = '#8a6a3a'; c.fillRect(x, y - 10, o.w, 12); c.fillStyle = '#c99a57'; for (let k = x; k < x + o.w; k += 10) c.fillRect(k, y - 10, 2, 12); c.fillStyle = '#3c2a12'; c.fillRect(x, y + 1, o.w, 2); return; }
+  if (o.t === 'ship') { c.fillStyle = '#1b1b24'; c.fillRect(x, y - 6, o.w, 6); c.fillRect(x + 3, y - 8, o.w - 6, 2); c.fillStyle = '#e8e8f0'; c.fillRect(x + 6, y - 11, 6, 3); return; }
+  if (o.t === 'heli') {
+    const r = (t / 50 | 0) % 2 ? 14 : 8;
+    c.fillStyle = '#1f4d1f'; c.fillRect(x + 2, y - 8, 9, 6); c.fillRect(x + (o.vx < 0 ? 10 : -3), y - 6, 6, 2);
+    c.fillStyle = '#ddd'; c.fillRect(x + 7 - r / 2, y - 10, r, 1); return;
+  }
+  if (o.t === 'fuel') {
+    c.fillStyle = '#e8e8f0'; c.fillRect(x, y - o.h, o.w, o.h); c.fillStyle = '#e63946';
+    for (let k = 0; k < 4; k++) c.fillRect(x + 1, y - o.h + 2 + k * 5, o.w - 2, 2);
+    return;
+  }
+  if (o.t === 'jet') { c.fillStyle = '#c0c6d6'; c.fillRect(x, y - 5, 16, 3); c.fillRect(x + (o.vx > 0 ? 4 : 8), y - 9, 4, 11); }
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

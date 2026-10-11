@@ -1,0 +1,105 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Pub Darts</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600&display=swap">
+<style>
+/* Layout: dartboard fills the top, scoreboard chalkboard strip below; press-drag-release to throw */
+:root{--wall:#1d2a24;--chalk:#f2efe6;--red:#d7263d;--green:#1b998b;--cream:#f4e3c1;--black:#141414;--gold:#ffc145;
+--display:'Bungee',Impact,system-ui,sans-serif;--body:'Rubik',system-ui,sans-serif;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--wall);color:var(--chalk);font-family:var(--body);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 16px;box-sizing:border-box}
+#stage{position:relative;flex:1;min-height:0;width:100%;max-width:560px;display:flex;align-items:center;justify-content:center}
+canvas{width:100%;height:100%;display:block;cursor:crosshair}
+#board{width:100%;max-width:560px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pl{background:#26352e;border:2px solid #34483e;border-radius:10px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center}
+.pl.on{border-color:var(--gold)}
+.pl .n{font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.8}
+.pl .s{font-family:var(--display);font-size:32px;font-variant-numeric:tabular-nums}
+#turn{width:100%;max-width:560px;display:flex;justify-content:space-between;font-size:14px;min-height:20px}
+#turn b{font-family:var(--display);font-weight:400;color:var(--gold)}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(20,28,24,.88);border-radius:12px;padding-inline:16px}
+#overlay h1{font-family:var(--display);font-size:clamp(40px,13vw,72px);margin:0;color:var(--cream);text-shadow:0 4px 0 var(--red)}
+#overlay p{margin:0;max-width:32ch;line-height:1.5}
+.row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.chip{font-family:var(--display);font-size:14px;padding:9px 14px;border-radius:10px;border:2px solid #34483e;background:transparent;color:var(--chalk);cursor:pointer}
+.chip[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
+#go{font-family:var(--display);font-size:20px;padding:12px 32px;border:0;border-radius:999px;background:var(--red);color:#fff;box-shadow:0 5px 0 #8a1526;cursor:pointer}
+button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+</style>
+<div id="app">
+  <div id="stage"><canvas id="c"></canvas>
+    <div id="overlay"><h1>PUB DARTS</h1><p id="msg">Race from 301 down to exactly zero. Press and drag to aim (your hand wobbles a little), then let go to throw.</p>
+      <div class="row" id="opp"><button class="chip" aria-pressed="true" data-o="cpu">vs CPU</button><button class="chip" aria-pressed="false" data-o="2p">2 Players</button></div>
+      <div class="row" id="start"><button class="chip" aria-pressed="true" data-s="301">301</button><button class="chip" aria-pressed="false" data-s="501">501</button></div>
+      <button id="go">Play</button></div>
+  </div>
+  <div id="turn"><span id="who">&nbsp;</span><span id="darts"></span></div>
+  <div id="board"><div class="pl on" id="pl0"><span class="n" id="n0">You</span><span class="s" id="s0">301</span></div><div class="pl" id="pl1"><span class="n" id="n1">CPU</span><span class="s" id="s1">301</span></div></div>
+</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const ORDER=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+// radii as fraction of double-ring outer edge (170mm)
+const R={bull:6.35/170,obull:15.9/170,tIn:99/170,tOut:107/170,dIn:162/170,dOut:1};
+let S,cx,cy,rad,dpr;
+function resize(){const r=$('stage').getBoundingClientRect();dpr=Math.min(devicePixelRatio||1,2);S=Math.min(r.width,r.height);cv.style.width=S+'px';cv.style.height=S+'px';cv.width=S*dpr;cv.height=S*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);cx=cy=S/2;rad=S*.4}
+addEventListener('resize',resize);resize();
+let opp='cpu',startScore=301,scores=[301,301],cur=0,dartsLeft=3,turnStart=301,thrown=[],state='menu',aim=null,aiming=false,wob=0,AC,lastNote='';
+function pick(g,a,cb){$(g).querySelectorAll('.chip').forEach(b=>b.onclick=()=>{$(g).querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));cb(b.dataset[a])})}
+pick('opp','o',v=>opp=v);pick('start','s',v=>startScore=+v);
+function beep(f,d,v=.07,type='triangle'){if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}
+function thunk(){if(!AC)return;const n=AC.sampleRate*.08,b=AC.createBuffer(1,n,AC.sampleRate),d=b.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,4);const s=AC.createBufferSource(),g=AC.createGain();g.gain.value=.6;s.buffer=b;s.connect(g).connect(AC.destination);s.start()}
+function start(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}scores=[startScore,startScore];cur=0;state='play';$('n1').textContent=opp==='cpu'?'CPU':'Player 2';$('n0').textContent=opp==='cpu'?'You':'Player 1';newTurn();$('overlay').hidden=true}
+$('go').onclick=start;
+function newTurn(){dartsLeft=3;thrown=[];turnStart=scores[cur];ui();if(opp==='cpu'&&cur===1)setTimeout(cpuThrow,900)}
+function ui(){$('s0').textContent=scores[0];$('s1').textContent=scores[1];$('pl0').classList.toggle('on',cur===0);$('pl1').classList.toggle('on',cur===1);
+  $('who').innerHTML=(cur===0&&opp==='cpu'?'Your turn':(cur===0?$('n0').textContent:$('n1').textContent)+"'s turn")+(lastNote?` · <b>${lastNote}</b>`:'');$('darts').textContent='🎯'.repeat(dartsLeft)}
+// scoring
+function scoreAt(x,y){const dx=x-cx,dy=y-cy,d=Math.hypot(dx,dy)/rad;if(d>R.dOut)return{v:0,label:'MISS'};
+  if(d<=R.bull)return{v:50,label:'BULLSEYE'};if(d<=R.obull)return{v:25,label:'25'};
+  let ang=Math.atan2(dx,-dy)*180/Math.PI;ang=(ang+360+9)%360;const n=ORDER[Math.floor(ang/18)];
+  if(d>=R.tIn&&d<=R.tOut)return{v:n*3,label:'T'+n};if(d>=R.dIn)return{v:n*2,label:'D'+n};return{v:n,label:''+n}}
+function throwAt(x,y){
+  const sc=scoreAt(x,y);thrown.push({x,y,t:performance.now()});thunk();dartsLeft--;
+  const after=scores[cur]-sc.v;
+  if(after<0){lastNote=sc.label+' — BUST';scores[cur]=turnStart;beep(160,.4,.08,'sawtooth');ui();setTimeout(endTurn,1100);return}
+  scores[cur]=after;lastNote=sc.label+(sc.v?' ('+sc.v+')':'');if(sc.v>=50||sc.label[0]==='T')beep(880,.15);
+  if(after===0){ui();state='over';beep(660,.15);setTimeout(()=>beep(990,.3),150);
+    setTimeout(()=>{$('msg').textContent=(cur===0?$('n0').textContent:$('n1').textContent)+(cur===0&&opp==='cpu'?' win!':' wins!')+' Checked out on '+sc.label+'.';$('go').textContent='Play again';$('overlay').hidden=false},1200);return}
+  ui();if(!dartsLeft)setTimeout(endTurn,1100);else if(opp==='cpu'&&cur===1)setTimeout(cpuThrow,800)}
+function endTurn(){if(state!=='play')return;cur=1-cur;lastNote='';newTurn()}
+// CPU picks a target
+function targetPoint(label){if(label==='BULL')return[cx,cy];const m=label.match(/([TDS]?)(\d+)/);const kind=m[1]||'S',n=+m[2];const i=ORDER.indexOf(n);const a=(i*18)*Math.PI/180;
+  const r=kind==='T'?(R.tIn+R.tOut)/2:kind==='D'?(R.dIn+R.dOut)/2:.8;return[cx+Math.sin(a)*r*rad,cy-Math.cos(a)*r*rad]}
+function cpuThrow(){if(state!=='play'||cur!==1||!dartsLeft)return;const s=scores[1];let t;
+  if(s===50)t='BULL';else if(s<=40&&s%2===0)t='D'+s/2;else if(s<=60&&s>40)t='S'+(s-40);else if(s<=20)t='S'+(s%2?s:s);else if(s<=60)t='S'+Math.min(20,s-2);else t='T20';
+  if(s<=60&&s>40&&s-40>20)t='T'+Math.floor(s/3);
+  const [tx,ty]=targetPoint(t);const spread=rad*.12;const g=()=>(Math.random()+Math.random()+Math.random()-1.5)*spread;throwAt(tx+g(),ty+g())}
+// player input
+function pos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left),y:(e.clientY-r.top)}}
+const touchOffset=e=>e.pointerType==='touch'?-60:0;
+cv.addEventListener('pointerdown',e=>{if(!myTurn())return;aiming=true;const p=pos(e);aim={x:p.x,y:p.y+touchOffset(e)};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{const p=pos(e);if(aiming||(e.pointerType==='mouse'&&myTurn()))aim={x:p.x,y:p.y+touchOffset(e)}});
+cv.addEventListener('pointerup',e=>{if(!aiming)return;aiming=false;const w=wobble();throwAt(aim.x+w[0],aim.y+w[1]);if(e.pointerType!=='mouse')aim=null});
+function myTurn(){return state==='play'&&dartsLeft>0&&!(opp==='cpu'&&cur===1)&&thrown.length<3}
+function wobble(){const t=performance.now()/1000,a=rad*.05;return[Math.sin(t*2.3)*a+Math.sin(t*5.1)*a*.4,Math.cos(t*1.9)*a+Math.sin(t*4.3)*a*.4]}
+// drawing
+function drawBoard(){ctx.fillStyle='#141414';ctx.beginPath();ctx.arc(cx,cy,rad*1.22,0,7);ctx.fill();
+  for(let i=0;i<20;i++){const a0=(i*18-9-90)*Math.PI/180,a1=a0+18*Math.PI/180,dark=i%2===0;
+    for(const [r0,r1,col] of [[R.obull,R.tIn,dark?'#141414':'#f4e3c1'],[R.tIn,R.tOut,dark?'#d7263d':'#1b998b'],[R.tOut,R.dIn,dark?'#141414':'#f4e3c1'],[R.dIn,R.dOut,dark?'#d7263d':'#1b998b']]){
+      ctx.fillStyle=col;ctx.beginPath();ctx.arc(cx,cy,r1*rad,a0,a1);ctx.arc(cx,cy,r0*rad,a1,a0,true);ctx.closePath();ctx.fill()}
+    const am=(i*18-90)*Math.PI/180;ctx.fillStyle='#f2efe6';ctx.font=`${rad*.11}px Bungee, Impact, sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ORDER[i],cx+Math.cos(am)*rad*1.11,cy+Math.sin(am)*rad*1.11)}
+  ctx.fillStyle='#1b998b';ctx.beginPath();ctx.arc(cx,cy,R.obull*rad,0,7);ctx.fill();ctx.fillStyle='#d7263d';ctx.beginPath();ctx.arc(cx,cy,R.bull*rad,0,7);ctx.fill();
+  ctx.strokeStyle='rgba(200,200,200,.5)';ctx.lineWidth=1;for(const r of [R.obull,R.tIn,R.tOut,R.dIn,R.dOut]){ctx.beginPath();ctx.arc(cx,cy,r*rad,0,7);ctx.stroke()}
+  for(let i=0;i<20;i++){const a=(i*18-9-90)*Math.PI/180;ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*R.obull*rad,cy+Math.sin(a)*R.obull*rad);ctx.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad);ctx.stroke()}}
+function drawDart(d,now){const k=Math.min(1,(now-d.t)/120),s=1.6-.6*k;ctx.save();ctx.translate(d.x,d.y);ctx.scale(s,s);
+  ctx.strokeStyle='#bbb';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(10,-14);ctx.stroke();
+  ctx.fillStyle='#333';ctx.fillRect(8,-20,6,8);ctx.fillStyle='#ffc145';ctx.beginPath();ctx.moveTo(14,-20);ctx.lineTo(26,-30);ctx.lineTo(20,-18);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(14,-20);ctx.lineTo(22,-34);ctx.lineTo(12,-24);ctx.fill();
+  ctx.fillStyle='#000';ctx.beginPath();ctx.arc(0,0,2,0,7);ctx.fill();ctx.restore()}
+function loop(now){ctx.clearRect(0,0,S,S);drawBoard();for(const d of thrown)drawDart(d,now);
+  if(aim&&myTurn()){const w=wobble();const x=aim.x+w[0],y=aim.y+w[1];ctx.strokeStyle='#ffc145';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,10,0,7);ctx.moveTo(x-16,y);ctx.lineTo(x+16,y);ctx.moveTo(x,y-16);ctx.lineTo(x,y+16);ctx.stroke();
+    const sc=scoreAt(x,y);ctx.fillStyle='#ffc145';ctx.font='14px Bungee, Impact, sans-serif';ctx.textAlign='left';ctx.fillText(sc.label,x+14,y-14)}
+  requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script>
+
+</body></html>

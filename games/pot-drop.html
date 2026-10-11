@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pot Drop</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Pot Drop: bugs are climbing your building. Run along the rooftop ledge and drop flowerpots on them before they get in.
+K.theme({ bg: '#2a1d14', ink: '#fff6e8', accent: '#7ee04a', accentInk: '#102a00' });
+const W = 240, H = 340, LEDGE = 58, COLS = 6;
+K.screen(W, H);
+K.hud(['score', 'wave', 'house']);
+K.pad({ dpad: 'lr', buttons: [{ id: 'a', label: 'DROP' }] });
+const colX = i => 22 + i * 39;
+const TYPES = [
+  { n: 'Ants', c: '#5a2a1a', v: 16, pts: 10 }, { n: 'Spiders', c: '#3a2a4a', v: 20, pts: 20, zig: 1 },
+  { n: 'Beetles', c: '#1f6b5a', v: 24, pts: 30 }, { n: 'Worms', c: '#ff8fa8', v: 34, pts: 40 }
+];
+let state = 'title', px, pots, bugs, parts, wave, toSpawn, spawnT, score, house, best = K.best('potdrop'), msgT;
+function title() { K.card({ title: 'POT DROP', text: 'Bugs are climbing your building! Slide along the ledge and DROP flowerpots on them. Tap a column to run there and drop. Six bugs get inside and the house is lost.', best: best ? 'BEST ' + best : '', button: 'Defend', onStart: start }); }
+function start() { px = W / 2; pots = []; bugs = []; parts = []; wave = 0; score = 0; house = 6; newWave(); state = 'play'; hud(); }
+function newWave() { toSpawn = 14 + wave * 3; spawnT = 1.5; msgT = 2; }
+function hud() { K.set('score', score); K.set('wave', 'WAVE ' + (wave + 1)); K.set('house', '⌂'.repeat(Math.max(0, house))); }
+function nearestCol(x) { let b = 0; for (let i = 1; i < COLS; i++) if (Math.abs(colX(i) - x) < Math.abs(colX(b) - x)) b = i; return b; }
+let target = null;
+function drop() { if (pots.length < 2) { pots.push({ x: colX(nearestCol(px)), y: LEDGE + 4 }); K.beep(600, 0.08, { to: 300, vol: 0.04 }); } }
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  const mv = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0);
+  if (mv) { target = null; px += mv * 130 * dt; }
+  if (K.ptr.tapped) { target = colX(nearestCol(K.ptr.x)); }
+  if (target !== null) { const dx = target - px; px += K.clamp(dx, -170 * dt, 170 * dt); if (Math.abs(dx) < 1) { px = target; target = null; drop(); } }
+  px = K.clamp(px, colX(0), colX(COLS - 1));
+  if (K.hit('a')) drop();
+  // spawn
+  spawnT -= dt;
+  if (toSpawn > 0 && spawnT <= 0) {
+    const ty = TYPES[Math.min(TYPES.length - 1, Math.floor(Math.random() * Math.min(TYPES.length, 1 + wave)))];
+    const col = K.ri(0, COLS - 1);
+    bugs.push({ col, x: colX(col), y: H + 10, ty, v: ty.v * (1 + wave * 0.08), zt: K.rnd(1, 3) });
+    toSpawn--; spawnT = Math.max(0.5, 1.8 - wave * 0.12) * K.rnd(0.6, 1.3);
+  }
+  for (const b of bugs) {
+    b.y -= b.v * dt;
+    if (b.ty.zig) { b.zt -= dt; if (b.zt <= 0) { b.zt = K.rnd(1, 2.5); b.col = K.clamp(b.col + (Math.random() < .5 ? -1 : 1), 0, COLS - 1); } }
+    b.x += (colX(b.col) - b.x) * Math.min(1, dt * 4);
+    if (b.y < LEDGE + 16) { b.dead = true; house--; hud(); K.beep(140, 0.4, { type: 'sawtooth', to: 70, vol: 0.08 }); if (house <= 0) return over(); }
+  }
+  for (const p of pots) {
+    p.y += 280 * dt;
+    for (const b of bugs) if (!b.dead && Math.abs(b.x - p.x) < 12 && Math.abs(b.y - p.y) < 12) { b.dead = true; p.dead = true; score += b.ty.pts; hud(); smash(p.x, p.y, b.ty.c); break; }
+    if (p.y > H - 8) { p.dead = true; smash(p.x, H - 8, '#b5482b'); }
+  }
+  pots = pots.filter(p => !p.dead); bugs = bugs.filter(b => !b.dead);
+  for (const q of parts) { q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 300 * dt; q.l -= dt; } parts = parts.filter(q => q.l > 0);
+  if (toSpawn <= 0 && !bugs.length) { wave++; score += house * 50; if (wave % 3 === 0 && house < 6) house++; newWave(); hud(); K.tune([523, 659, 784], 0.09); }
+}
+function smash(x, y, col) { K.noise(0.15, 0.2); for (let i = 0; i < 10; i++) parts.push({ x, y, vx: K.rnd(-60, 60), vy: K.rnd(-120, -20), l: K.rnd(0.3, 0.6), c: i % 2 ? col : '#b5482b' }); }
+function over() { state = 'over'; best = K.saveBest('potdrop', score); K.card({ title: 'BUGGED OUT', text: 'The bugs moved in on wave ' + (wave + 1) + '. You scored ' + score + '.', best: 'BEST ' + best, button: 'Try again', onStart: start }); }
+
+function draw(c, t) {
+  c.fillStyle = '#ffb27a'; c.fillRect(0, 0, W, LEDGE);
+  c.fillStyle = '#ffd9a8'; c.beginPath(); c.arc(200, 22, 12, 0, 7); c.fill();
+  // brick wall
+  c.fillStyle = '#9a4a32'; c.fillRect(0, LEDGE, W, H - LEDGE);
+  c.fillStyle = '#7d3a26';
+  for (let y = LEDGE + 10; y < H; y += 10) { c.fillRect(0, y, W, 1); for (let x = (y / 10 % 2) * 10; x < W; x += 20) c.fillRect(x, y - 10, 1, 10); }
+  // windows
+  for (let r = 0; r < 4; r++) for (let i = 0; i < 3; i++) { const x = 30 + i * 70, y = 100 + r * 60; c.fillStyle = '#3a2a1a'; c.fillRect(x, y, 40, 30); c.fillStyle = r * 3 + i < (house || 6) * 2 ? '#ffd86b' : '#2a2a3a'; c.fillRect(x + 3, y + 3, 15, 24); c.fillRect(x + 22, y + 3, 15, 24); }
+  // drainpipe lanes (where bugs climb)
+  c.fillStyle = 'rgba(0,0,0,.12)'; for (let i = 0; i < COLS; i++) c.fillRect(colX(i) - 6, LEDGE + 12, 12, H);
+  // ledge
+  c.fillStyle = '#c8c0b0'; c.fillRect(0, LEDGE, W, 10); c.fillStyle = '#9a9488'; c.fillRect(0, LEDGE + 8, W, 3);
+  if (!bugs) return;
+  for (const b of bugs) drawBug(c, b, t);
+  for (const p of pots) drawPot(c, p.x, p.y);
+  // player
+  const x = Math.round(px);
+  c.fillStyle = '#2a6fdb'; c.fillRect(x - 5, LEDGE - 14, 10, 12); c.fillStyle = '#ffcf9e'; c.fillRect(x - 4, LEDGE - 22, 8, 8);
+  c.fillStyle = '#7ee04a'; c.fillRect(x - 6, LEDGE - 25, 12, 3);
+  c.fillStyle = '#222'; c.fillRect(x - 4, LEDGE - 2, 3, 2); c.fillRect(x + 1, LEDGE - 2, 3, 2);
+  drawPot(c, x, LEDGE - 30);
+  c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(colX(nearestCol(px)) - 1, LEDGE + 12, 2, 6);
+  for (const q of parts) { c.globalAlpha = Math.min(1, q.l * 3); c.fillStyle = q.c; c.fillRect(q.x - 2, q.y - 2, 3, 3); } c.globalAlpha = 1;
+  if (msgT > 0) K.text(c, 'WAVE ' + (wave + 1), W / 2, 30, 16, '#fff');
+}
+function drawPot(c, x, y) { c.fillStyle = '#c8602c'; c.fillRect(x - 6, y - 4, 12, 9); c.fillRect(x - 7, y - 6, 14, 3); c.fillStyle = '#3fa34d'; c.fillRect(x - 4, y - 11, 3, 5); c.fillRect(x + 1, y - 12, 3, 6); c.fillStyle = '#ff5fa2'; c.fillRect(x - 1, y - 14, 3, 3); }
+function drawBug(c, b, t) {
+  const x = Math.round(b.x), y = Math.round(b.y), k = Math.floor(t / 120 + x) % 2;
+  c.fillStyle = b.ty.c;
+  if (b.ty.n === 'Worms') { for (let i = 0; i < 4; i++) c.fillRect(x - 3 + Math.sin(t / 100 + i) * 2, y + i * 4, 6, 4); c.fillStyle = '#000'; c.fillRect(x - 2, y + 1, 1, 1); c.fillRect(x + 1, y + 1, 1, 1); return; }
+  c.fillRect(x - 4, y - 5, 8, 6); c.fillRect(x - 5, y + 1, 10, 7);
+  c.fillStyle = '#111'; for (let i = 0; i < 3; i++) { c.fillRect(x - 8, y + i * 3 + (k ? 0 : 1), 3, 1); c.fillRect(x + 5, y + i * 3 + (k ? 1 : 0), 3, 1); }
+  c.fillStyle = '#fff'; c.fillRect(x - 3, y - 4, 2, 2); c.fillRect(x + 1, y - 4, 2, 2);
+  if (b.ty.n === 'Beetles') { c.fillStyle = '#3fd6b0'; c.fillRect(x, y + 1, 1, 7); }
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

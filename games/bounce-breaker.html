@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bounce Breaker</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Bounce Breaker: paddle and ball brick buster with falling power-up capsules and 12 rounds.
+K.theme({ bg: '#0a0c24', ink: '#eef2ff', accent: '#ff5ac8', accentInk: '#2a0020' });
+const W = 240, H = 300, BW = 20, BH = 9, COLS = 11, TOP = 34;
+K.screen(W, H);
+K.hud(['score', 'round', 'lives']);
+K.pad({ dpad: 'lr', buttons: [{ id: 'a', label: 'LAUNCH' }] });
+
+const LAYOUTS = [
+  r => r >= 1 && r <= 5,
+  (r, c) => r >= 1 && r <= 7 && c >= 5 - Math.min(r, 5) + 1 && c <= 5 + Math.min(r, 5) - 1,
+  (r, c) => r >= 1 && r <= 8 && (r + c) % 2 === 0,
+  (r, c) => r >= 1 && r <= 8 && (c === 0 || c === 10 || r === 1 || r === 8 || (c === 5 && r > 3)),
+  (r, c) => r >= 1 && r <= 9 && c % 3 !== 1,
+  (r, c) => r >= 2 && r <= 9 && Math.abs(c - 5) + Math.abs(r - 5) <= 4,
+];
+const COLORS = ['#fff', '#ff5a5a', '#ffb24a', '#ffe94a', '#5aff7a', '#4ad8ff', '#7a7aff', '#ff5ac8', '#c0c0c0', '#ffd700'];
+let state = 'title', score, lives, round, pad, balls, bricks, caps, lasers, power, powerT, best = K.best('bouncebreaker'), stuck, parts;
+function title() { K.card({ title: 'BOUNCE BREAKER', text: '◀ ▶ or drag to move the paddle. LAUNCH serves the ball. Catch falling capsules: W wide, L laser (LAUNCH fires), M multi-ball, S slow, C catch, + extra life. Silver bricks take 2 hits, gold ones never break.', best: best ? 'BEST ' + best : '', button: 'Play', onStart: start }); }
+function start() { score = 0; lives = 3; round = 1; buildRound(); state = 'play'; }
+function buildRound() {
+  bricks = []; const L = LAYOUTS[(round - 1) % LAYOUTS.length];
+  for (let r = 0; r < 12; r++) for (let c = 0; c < COLS; c++) if (L(r, c)) {
+    let hp = 1, col = COLORS[1 + (r % 7)]; if (round > 2 && r === 1) { hp = 2 + Math.floor(round / 6); col = COLORS[8]; }
+    if (round > 3 && r === 6 && c % 4 === 2) { hp = 99; col = COLORS[9]; }
+    bricks.push({ x: 10 + c * BW, y: TOP + r * BH, hp, col, gold: hp === 99 });
+  }
+  pad = { x: W / 2, w: 40 }; caps = []; lasers = []; parts = []; power = ''; powerT = 0; serve();
+}
+function serve() { balls = [{ x: pad.x, y: H - 26, vx: 0, vy: 0, sp: 150 + round * 6 }]; stuck = balls[0]; stuck.off = 0; }
+function launch(b) { const a = -Math.PI / 2 + K.rnd(-0.4, 0.4); b.vx = Math.cos(a) * b.sp; b.vy = Math.sin(a) * b.sp; }
+function grant(k) {
+  K.tune([660, 880, 1100], 0.05);
+  if (k === '+') { lives++; return; }
+  if (k === 'M') { const b = balls[0]; if (b) for (let i = 0; i < 2; i++) { const n = { ...b }; const a = Math.atan2(b.vy, b.vx) + (i ? 0.4 : -0.4); n.vx = Math.cos(a) * b.sp; n.vy = Math.sin(a) * b.sp; balls.push(n); } return; }
+  power = k; powerT = 15; pad.w = k === 'W' ? 64 : 40;
+  if (k === 'S') balls.forEach(b => { b.sp = Math.max(110, b.sp * 0.7); const m = Math.hypot(b.vx, b.vy) || 1; b.vx *= b.sp / m; b.vy *= b.sp / m; });
+}
+function hitBrick(br) {
+  if (br.gold) { K.beep(1400, 0.04); return; }
+  br.hp--; K.beep(br.hp > 0 ? 900 : 500 + br.y * 2, 0.05);
+  if (br.hp <= 0) { br.dead = true; score += 50 + round * 10; for (let i = 0; i < 6; i++) parts.push({ x: br.x + 10, y: br.y + 4, vx: K.rnd(-50, 50), vy: K.rnd(-50, 50), t: 0.4, c: br.col });
+    if (Math.random() < 0.16) caps.push({ x: br.x + 10, y: br.y, k: 'WLMSC+'[Math.random() < 0.05 ? 5 : K.ri(0, 4)] }); }
+}
+function update(dt) {
+  if (state !== 'play') return;
+  if (K.down('left')) pad.x -= 220 * dt; if (K.down('right')) pad.x += 220 * dt; if (K.ptr.down) pad.x = K.ptr.x;
+  pad.x = K.clamp(pad.x, 8 + pad.w / 2, W - 8 - pad.w / 2);
+  if (powerT > 0) { powerT -= dt; if (powerT <= 0) { power = ''; pad.w = 40; } }
+  if (stuck) { stuck.x = pad.x + (stuck.off || 0); stuck.y = H - 26; if (K.hit('a') || K.ptr.tapped) { launch(stuck); stuck = null; } }
+  else if (power === 'L' && (K.hit('a') || K.ptr.tapped)) { lasers.push({ x: pad.x - pad.w / 2 + 3, y: H - 26 }, { x: pad.x + pad.w / 2 - 3, y: H - 26 }); K.beep(1500, 0.05, { to: 600 }); }
+  const steps = 3;
+  for (let s = 0; s < steps; s++) balls.forEach(b => {
+    if (b === stuck) return; const d = dt / steps;
+    b.x += b.vx * d; b.y += b.vy * d;
+    if (b.x < 11) { b.x = 11; b.vx = Math.abs(b.vx); } if (b.x > W - 11) { b.x = W - 11; b.vx = -Math.abs(b.vx); } if (b.y < TOP - 4) { b.y = TOP - 4; b.vy = Math.abs(b.vy); }
+    if (b.vy > 0 && b.y > H - 26 && b.y < H - 18 && Math.abs(b.x - pad.x) < pad.w / 2 + 3) {
+      const f = (b.x - pad.x) / (pad.w / 2), a = -Math.PI / 2 + f * 1.05; b.sp = Math.min(b.sp + 3, 300); b.vx = Math.cos(a) * b.sp; b.vy = Math.sin(a) * b.sp; K.beep(440, 0.04);
+      if (power === 'C') { stuck = b; b.off = b.x - pad.x; }
+    }
+    for (const br of bricks) { if (br.dead) continue;
+      if (b.x + 3 > br.x && b.x - 3 < br.x + BW - 1 && b.y + 3 > br.y && b.y - 3 < br.y + BH - 1) {
+        const ox = Math.min(b.x + 3 - br.x, br.x + BW - 1 - (b.x - 3)), oy = Math.min(b.y + 3 - br.y, br.y + BH - 1 - (b.y - 3));
+        if (ox < oy) { b.vx = -b.vx; b.x += b.vx > 0 ? ox : -ox; } else { b.vy = -b.vy; b.y += b.vy > 0 ? oy : -oy; }
+        hitBrick(br); break; }
+    }
+  });
+  balls = balls.filter(b => b.y < H + 6);
+  lasers.forEach(l => { l.y -= 300 * dt; for (const br of bricks) if (!br.dead && l.x > br.x && l.x < br.x + BW && l.y < br.y + BH && l.y > br.y) { l.dead = true; hitBrick(br); break; } });
+  lasers = lasers.filter(l => !l.dead && l.y > TOP - 10);
+  caps.forEach(cp => { cp.y += 60 * dt; if (cp.y > H - 28 && cp.y < H - 16 && Math.abs(cp.x - pad.x) < pad.w / 2 + 6) { cp.dead = true; grant(cp.k); score += 100; } });
+  caps = caps.filter(cp => !cp.dead && cp.y < H);
+  bricks = bricks.filter(b => !b.dead);
+  parts.forEach(p => { p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
+  if (!balls.length) { lives--; K.beep(200, 0.5, { to: 60 }); power = ''; pad.w = 40; caps = [];
+    if (lives <= 0) { state = 'over'; best = K.saveBest('bouncebreaker', score); K.card({ title: 'GAME OVER', text: 'You reached round ' + round + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); return; }
+    serve(); }
+  if (!bricks.some(b => !b.gold)) { score += 1000; round++; K.tune([523, 659, 784, 1046], 0.1);
+    if (round > 12) { state = 'over'; best = K.saveBest('bouncebreaker', score); K.card({ title: 'ALL CLEAR!', text: 'You beat all 12 rounds with ' + score + ' points!', best: 'BEST ' + best, button: 'Again', onStart: start }); return; }
+    buildRound(); }
+  K.set('score', score); K.set('round', 'RD ' + round); K.set('lives', '●'.repeat(Math.max(0, lives - 1)));
+}
+function draw(c, t) {
+  c.fillStyle = '#0a0c24'; c.fillRect(0, 0, W, H);
+  c.strokeStyle = 'rgba(120,130,255,.12)'; for (let y = TOP; y < H; y += 16) for (let x = 8 + ((y / 16) % 2) * 8; x < W; x += 16) { c.strokeRect(x, y, 8, 8); }
+  c.fillStyle = '#8a8ab0'; c.fillRect(0, TOP - 10, 8, H); c.fillRect(W - 8, TOP - 10, 8, H); c.fillRect(0, TOP - 10, W, 4);
+  bricks.forEach(b => { c.fillStyle = b.col; c.fillRect(b.x, b.y, BW - 1, BH - 1); c.fillStyle = 'rgba(255,255,255,.35)'; c.fillRect(b.x, b.y, BW - 1, 2); c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(b.x, b.y + BH - 3, BW - 1, 2); if (b.gold && Math.floor(t / 300) % 4 === 0) { c.fillStyle = '#fff'; c.fillRect(b.x + 3, b.y + 2, 4, 2); } });
+  caps.forEach(cp => { c.fillStyle = { W: '#4a8aff', L: '#ff4a4a', M: '#4affd8', S: '#ffb24a', C: '#5aff5a', '+': '#c0c0c0' }[cp.k]; c.beginPath(); c.ellipse(cp.x, cp.y, 9, 4.5, 0, 0, 7); c.fill(); K.text(c, cp.k, cp.x, cp.y + 0.5, 7, '#fff'); });
+  c.fillStyle = power === 'L' ? '#ff6a6a' : '#c8d0ff'; c.fillRect(pad.x - pad.w / 2, H - 22, pad.w, 6); c.fillStyle = '#ff5ac8'; c.fillRect(pad.x - pad.w / 2, H - 22, 5, 6); c.fillRect(pad.x + pad.w / 2 - 5, H - 22, 5, 6);
+  c.fillStyle = '#ff4a4a'; lasers.forEach(l => c.fillRect(l.x - 1, l.y - 5, 2, 7));
+  c.fillStyle = '#fff'; balls.forEach(b => { c.beginPath(); c.arc(b.x, b.y, 3, 0, 7); c.fill(); });
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+  if (stuck && state === 'play') K.text(c, 'LAUNCH!', W / 2, H - 60, 10, '#ff5ac8');
+  if (power) K.text(c, { W: 'WIDE', L: 'LASER', S: 'SLOW', C: 'CATCH' }[power] || '', W - 30, TOP - 18, 8, '#fff');
+}
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>

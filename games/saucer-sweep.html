@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Saucer Sweep</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Saucer Sweep: hover over the alien plains and zap the ground cannons before they lock on and fire back.
+K.theme({ bg: '#120a24', ink: '#f2ecff', accent: '#7cff6b', accentInk: '#0a2a00' });
+const W = 320, H = 240, GROUND = 204, SKY_LO = 34, SKY_HI = 140;
+K.screen(W, H);
+K.hud(['score', 'wave', 'lives']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'ZAP' }] });
+
+let state = 'title', ship, cannons, beams, parts, wave, score, lives, heat, dead, best = K.best('saucer'), msgT, stars;
+function title() { K.card({ title: 'SAUCER SWEEP', text: 'Fly your saucer over the plains and ZAP the ground cannons below. When a cannon\'s red sight finds you, slide out of the way before it fires. Too much zapping overheats your gun.', best: best ? 'BEST ' + best : '', button: 'Launch', onStart: start }); }
+function start() { score = 0; lives = 4; wave = 0; parts = []; stars = Array.from({ length: 40 }, () => ({ x: Math.random() * W, y: Math.random() * 120, b: Math.random() })); newWave(); state = 'play'; hud(); }
+function newWave() {
+  ship = { x: W / 2, y: 70, vx: 0, vy: 0 }; beams = []; heat = 0; dead = 0; msgT = 1.8;
+  cannons = []; const n = 3 + Math.min(3, Math.floor(wave / 2));
+  for (let i = 0; i < n; i++) cannons.push({ x: 30 + (W - 60) * (i + 0.5) / n, vx: (Math.random() < .5 ? -1 : 1) * K.rnd(20, 34) * (1 + wave * 0.1), lock: 0, cd: K.rnd(1.5, 3.5), hp: 1 + (wave >= 4 ? 1 : 0) });
+}
+function hud() { K.set('score', score); K.set('wave', 'WAVE ' + (wave + 1)); K.set('lives', '◉'.repeat(Math.max(0, lives))); }
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 120 * dt; p.l -= dt; } parts = parts.filter(p => p.l > 0);
+  for (const b of beams) b.l -= dt; beams = beams.filter(b => b.l > 0);
+  if (dead > 0) { dead -= dt; if (dead <= 0) { if (lives <= 0) return over(); ship = { x: W / 2, y: 60, vx: 0, vy: 0 }; for (const c of cannons) { c.lock = 0; c.cd = K.rnd(1.5, 3); } } return; }
+  const ax = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0), ay = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
+  ship.vx += ax * 500 * dt; ship.vy += ay * 400 * dt;
+  if (K.ptr.down && K.ptr.y < SKY_HI + 30) { ship.vx += K.clamp(K.ptr.x - ship.x, -1, 1) * 500 * dt; ship.vy += K.clamp(K.ptr.y - ship.y, -1, 1) * 400 * dt; }
+  ship.vx *= Math.pow(0.03, dt); ship.vy *= Math.pow(0.03, dt);
+  ship.x = K.clamp(ship.x + ship.vx * dt, 14, W - 14); ship.y = K.clamp(ship.y + ship.vy * dt, SKY_LO, SKY_HI);
+  heat = Math.max(0, heat - dt * 22);
+  // fire: a beam slanted the way you're drifting
+  if ((K.hit('a') || (K.ptr.tapped && K.ptr.y > SKY_HI + 30)) && heat < 80) {
+    const slant = K.clamp(ship.vx / 120, -0.6, 0.6), gx = ship.x + slant * (GROUND - ship.y);
+    beams.push({ x1: ship.x, y1: ship.y + 6, x2: gx, y2: GROUND, l: 0.18, mine: true }); heat += 26;
+    K.beep(1600, 0.12, { to: 200, vol: 0.05 });
+    for (const c of cannons) if (c.hp > 0 && Math.abs(c.x - gx) < 12) {
+      c.hp--; if (c.hp <= 0) { score += 100 + wave * 25; hud(); boom(c.x, GROUND - 6, '#ff8a1f', 24); } else { c.lock = 0; K.beep(400, 0.1, { vol: 0.05 }); }
+    }
+  }
+  for (const c of cannons) {
+    if (c.hp <= 0) continue;
+    c.x += c.vx * dt; if (c.x < 14 || c.x > W - 14) c.vx = -c.vx;
+    c.cd -= dt;
+    if (c.cd <= 0) {
+      // lock on: the sight tracks you, then fires straight up where it last saw you
+      c.lock += dt;
+      c.aim = c.aim == null ? ship.x : c.aim + K.clamp(ship.x - c.aim, -60 * dt, 60 * dt);
+      if (c.lock > 1.0 - Math.min(0.45, wave * 0.06)) {
+        beams.push({ x1: c.x, y1: GROUND - 10, x2: c.aim, y2: 0, l: 0.25, mine: false }); K.beep(300, 0.2, { type: 'sawtooth', to: 900, vol: 0.05 });
+        const tx = c.x + (c.aim - c.x) * (GROUND - 10 - ship.y) / (GROUND - 10);
+        if (Math.abs(tx - ship.x) < 12) { lives--; hud(); dead = 1.6; boom(ship.x, ship.y, '#7cff6b', 30); }
+        c.lock = 0; c.aim = null; c.cd = K.rnd(2, 4) / (1 + wave * 0.12);
+      }
+    }
+  }
+  if (!cannons.some(c => c.hp > 0) && dead <= 0) { wave++; score += 300; hud(); K.tune([523, 659, 784, 1047], 0.08); newWave(); }
+}
+function boom(x, y, col, n) { K.noise(0.4, 0.3); for (let i = 0; i < n; i++) parts.push({ x, y, vx: K.rnd(-90, 90), vy: K.rnd(-120, 20), l: K.rnd(0.4, 1), c: Math.random() < .5 ? col : '#fff' }); }
+function over() { state = 'over'; best = K.saveBest('saucer', score); K.card({ title: 'SHOT DOWN', text: 'You cleared ' + wave + ' wave' + (wave === 1 ? '' : 's') + ' and scored ' + score + '.', best: 'BEST ' + best, button: 'Fly again', onStart: start }); }
+
+function draw(c, t) {
+  const g = c.createLinearGradient(0, 0, 0, GROUND); g.addColorStop(0, '#120a24'); g.addColorStop(1, '#5a2a6a'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  if (stars) for (const s of stars) { c.fillStyle = 'rgba(255,255,255,' + (0.3 + 0.5 * Math.abs(Math.sin(t / 700 + s.b * 9))) + ')'; c.fillRect(s.x, s.y, 1, 1); }
+  c.fillStyle = '#ff8fc7'; c.beginPath(); c.arc(260, 40, 18, 0, 7); c.fill(); c.fillStyle = '#5a2a6a'; c.beginPath(); c.arc(268, 36, 16, 0, 7); c.fill();
+  c.fillStyle = '#3a1f4a'; c.beginPath(); c.moveTo(0, GROUND); for (let x = 0; x <= W; x += 16) c.lineTo(x, GROUND - 22 - Math.abs(Math.sin(x / 37)) * 26); c.lineTo(W, GROUND); c.fill();
+  c.fillStyle = '#2a1636'; c.fillRect(0, GROUND, W, H - GROUND); c.fillStyle = '#7cff6b'; c.fillRect(0, GROUND, W, 2);
+  if (!cannons) return;
+  for (const cn of cannons) {
+    if (cn.hp <= 0) continue;
+    const x = Math.round(cn.x);
+    if (cn.lock > 0 && cn.aim != null) { c.strokeStyle = 'rgba(255,60,80,' + (0.3 + cn.lock * 0.6) + ')'; c.lineWidth = 1; c.setLineDash([4, 4]); c.beginPath(); c.moveTo(x, GROUND - 10); c.lineTo(cn.aim, 0); c.stroke(); c.setLineDash([]); }
+    c.fillStyle = cn.hp > 1 ? '#c0c6d6' : '#8a93a6'; c.fillRect(x - 12, GROUND - 8, 24, 8); c.fillStyle = '#5a6070'; c.fillRect(x - 7, GROUND - 13, 14, 6);
+    c.fillStyle = cn.lock > 0 ? '#ff3b5c' : '#ffd23f'; c.fillRect(x - 2, GROUND - 19, 4, 7);
+    c.fillStyle = '#222'; for (let k = -10; k < 12; k += 5) c.fillRect(x + k, GROUND - 2, 3, 2);
+  }
+  for (const b of beams) { c.strokeStyle = b.mine ? '#7cff6b' : '#ff3b5c'; c.globalAlpha = Math.min(1, b.l * 6); c.lineWidth = b.mine ? 3 : 4; c.beginPath(); c.moveTo(b.x1, b.y1); c.lineTo(b.x2, b.y2); c.stroke(); c.globalAlpha = 1; }
+  if (state === 'play' && dead <= 0) {
+    const x = Math.round(ship.x), y = Math.round(ship.y);
+    c.fillStyle = '#9ad8ff'; c.beginPath(); c.ellipse(x, y - 4, 7, 5, 0, Math.PI, 0); c.fill();
+    c.fillStyle = '#c0c6d6'; c.beginPath(); c.ellipse(x, y, 16, 5, 0, 0, 7); c.fill();
+    for (let k = -2; k <= 2; k++) { c.fillStyle = Math.floor(t / 120 + k) % 3 ? '#7cff6b' : '#ffd23f'; c.fillRect(x + k * 6 - 1, y - 1, 2, 2); }
+    c.fillStyle = 'rgba(124,255,107,.15)'; c.beginPath(); c.moveTo(x - 8, y + 4); c.lineTo(x + 8, y + 4); c.lineTo(x + 14, GROUND); c.lineTo(x - 14, GROUND); c.fill();
+  }
+  for (const p of parts) { c.globalAlpha = Math.min(1, p.l * 2); c.fillStyle = p.c; c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); } c.globalAlpha = 1;
+  // heat gauge
+  c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(8, H - 26, 80, 8); c.fillStyle = heat > 70 ? '#ff3b5c' : '#ffd23f'; c.fillRect(9, H - 25, 78 * Math.min(1, heat / 100), 6);
+  K.text(c, 'HEAT', 106, H - 22, 7, '#ccc');
+  if (msgT > 0) K.text(c, 'WAVE ' + (wave + 1), W / 2, 110, 16, '#7cff6b');
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

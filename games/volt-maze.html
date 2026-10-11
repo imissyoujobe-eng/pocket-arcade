@@ -1,0 +1,177 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Volt Maze</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600&display=swap">
+<style>
+/* Layout: one portrait arcade screen; HUD strip above, touch zones on the canvas (left drag = move, right hold = action) */
+:root{--bg:#060a14;--panel:#111a2e;--ink:#eaf0ff;--dim:#8f9bbd;--acc:#3a7bff;--acc2:#7cffb2;--display:'Bungee',Impact,system-ui,sans-serif;--body:'Rubik',system-ui,sans-serif;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding-inline:16px;padding-block:6px;box-sizing:border-box}
+#hud{width:min(100%,440px);display:flex;justify-content:space-between;align-items:center;gap:8px;font-family:var(--display);font-size:clamp(14px,4.4vw,19px);font-variant-numeric:tabular-nums}
+#hud .lbl{display:block;font-family:var(--body);font-size:10px;letter-spacing:.12em;color:var(--dim);font-weight:600}
+#hud .c{text-align:center}#hud .r{text-align:right}
+#hud .btns{display:flex;gap:6px}
+.ib{font:600 12px var(--body);letter-spacing:.06em;color:var(--ink);background:var(--panel);border:1px solid #26314f;border-radius:8px;padding:6px 8px;cursor:pointer}
+#stage{position:relative;width:min(100%,440px,calc((100vh - 90px) * 2 / 3));width:min(100%,440px,calc((100dvh - 90px) * 2 / 3));aspect-ratio:2/3}
+canvas{width:100%;height:100%;display:block;border-radius:10px;box-shadow:0 0 0 2px #1a2440,0 0 40px -10px var(--acc)}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(6,10,20,.84);border-radius:10px;padding-inline:20px;backdrop-filter:blur(2px)}
+#overlay h1{font-family:var(--display);font-size:clamp(34px,11vw,58px);line-height:1;margin:0;color:var(--acc);text-shadow:0 0 22px var(--acc),3px 3px 0 var(--acc2);text-wrap:balance}
+#overlay p{margin:0;max-width:30ch;line-height:1.5}
+#overlay .how{font-size:12px;color:var(--dim);max-width:34ch}
+#overlay .best{font-family:var(--display);font-size:14px;color:var(--acc2)}
+#go{font-family:var(--display);font-size:20px;padding:12px 34px;border:0;border-radius:999px;background:var(--acc);color:#06101a;box-shadow:0 5px 0 rgba(0,0,0,.45);cursor:pointer}
+button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid var(--acc2);outline-offset:3px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){canvas{box-shadow:0 0 0 2px #1a2440}}
+</style>
+<div id="app">
+  <div id="hud"><div><span class="lbl" id="l1">SCORE</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">ROOM</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">LIVES</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
+  <div id="stage"><canvas id="c" width="400" height="600"></canvas>
+    <div id="overlay"><h1>Volt Maze</h1><p id="msg">Blast the robots and escape room after room. The walls are electrified, and the Seeker comes for anyone who lingers.</p><p class="how">Left side: drag to walk. Right side: tap to fire, or hold to stand still and aim with the stick. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+  </div>
+</div>
+<script>
+const GAME_ID='volt-maze';
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const W=cv.width,H=cv.height,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
+let AC,muted=false;
+try{muted=localStorage.getItem('arcade_muted')==='1'}catch(e){}
+function setMuteLabel(){$('mu').textContent=muted?'MUTE':'SND'}setMuteLabel();
+$('mu').onclick=()=>{muted=!muted;setMuteLabel();try{localStorage.setItem('arcade_muted',muted?'1':'0')}catch(e){}};
+function beep(f,d,v=.05,type='square',slide){if(!AC||muted)return;try{const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,slide),t+d);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0008,t+d);o.connect(g).connect(AC.destination);o.start(t);o.stop(t+d+.02)}catch(e){}}
+function noise(d,v=.08,f=800){if(!AC||muted)return;try{const t=AC.currentTime,n=Math.floor(AC.sampleRate*d),b=AC.createBuffer(1,n,AC.sampleRate),a=b.getChannelData(0);for(let i=0;i<n;i++)a[i]=(Math.random()*2-1)*(1-i/n);const s=AC.createBufferSource(),fl=AC.createBiquadFilter(),g=AC.createGain();s.buffer=b;fl.type='lowpass';fl.frequency.value=f;g.gain.value=v;s.connect(fl).connect(g).connect(AC.destination);s.start(t)}catch(e){}}
+function jingle(notes,step=.09,type='square',v=.05){notes.forEach((n,i)=>setTimeout(()=>beep(n,step*1.4,v,type),i*step*1000))}
+const keys={};
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=1;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();if(state!=='play'&&k==='enter')startGame();if(k==='p'&&(state==='play'||state==='paused'))togglePause()});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0});
+let joy=null,fireId=null;const coarse=matchMedia('(pointer:coarse)').matches;
+function cpos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
+cv.addEventListener('pointerdown',e=>{const p=cpos(e);try{cv.setPointerCapture(e.pointerId)}catch(_){}if((p.x<W*.55||!ACTION_LABEL)&&!joy)joy={id:e.pointerId,x0:p.x,y0:p.y,x:p.x,y:p.y};else{fireId=e.pointerId;tapPt=p}e.preventDefault()});
+cv.addEventListener('pointermove',e=>{if(joy&&e.pointerId===joy.id){const p=cpos(e);joy.x=p.x;joy.y=p.y;const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>55){joy.x0=joy.x-dx/m*55;joy.y0=joy.y-dy/m*55}}});
+function up(e){if(joy&&e.pointerId===joy.id)joy=null;if(e.pointerId===fireId)fireId=null}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+let tapPt=null;const inp={x:0,y:0,fire:false,fireTap:false,up:false,upTap:false};let prevFire=false,prevUp=false;
+function readInput(){let x=0,y=0;if(keys.arrowleft||keys.a)x--;if(keys.arrowright||keys.d)x++;if(keys.arrowup||keys.w)y--;if(keys.arrowdown||keys.s)y++;
+ if(joy){const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>7){const k=Math.min(1,m/38);x=dx/m*k;y=dy/m*k}}
+ const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f}
+function drawJoy(){if(!joy&&!coarse)return;ctx.save();if(joy){ctx.globalAlpha=.3;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.x0,joy.y0,42,0,TAU);ctx.stroke();ctx.fillStyle='#fff';const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy),k=m>42?42/m:1;ctx.beginPath();ctx.arc(joy.x0+dx*k,joy.y0+dy*k,17,0,TAU);ctx.fill()}
+ if(coarse&&state==='play'&&ACTION_LABEL){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(W-58,H-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,W-58,H-58)}ctx.restore()}
+let ACTION_LABEL='FIRE';
+/* juice: particles, floating text, screen shake */
+let parts=[],floats=[],shake=0,flash=0,flashCol='#fff';
+function burst(x,y,col,n=18,sp=160,life=.7,size=3){for(let i=0;i<n;i++){const a=Math.random()*TAU,s=Math.random()*sp;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:life*rnd(.5,1),L:life,c:Array.isArray(col)?col[i%col.length]:col,s:size*rnd(.6,1.3)})}}
+function floatText(x,y,t,col='#fff'){floats.push({x,y,t,c:col,l:1})}
+function kick(s){shake=Math.max(shake,s)}
+function updFx(dt){for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.pow(.2,dt);p.vy*=Math.pow(.2,dt);p.vy+=(p.g||0)*dt;p.l-=dt}parts=parts.filter(p=>p.l>0);for(const f of floats){f.y-=40*dt;f.l-=dt}floats=floats.filter(f=>f.l>0);shake=Math.max(0,shake-dt*30);flash=Math.max(0,flash-dt*3)}
+function drawFx(){for(const p of parts){ctx.globalAlpha=Math.max(0,p.l/p.L);ctx.fillStyle=p.c;ctx.fillRect(p.x-p.s/2,p.y-p.s/2,p.s,p.s)}ctx.globalAlpha=1;ctx.textAlign='center';ctx.font='14px Bungee, Impact, sans-serif';for(const f of floats){ctx.globalAlpha=Math.min(1,f.l*2);ctx.fillStyle='#000';ctx.fillText(f.t,f.x+1.5,f.y+1.5);ctx.fillStyle=f.c;ctx.fillText(f.t,f.x,f.y)}ctx.globalAlpha=1;if(flash>0){ctx.globalAlpha=flash*.5;ctx.fillStyle=flashCol;ctx.fillRect(0,0,W,H);ctx.globalAlpha=1}}
+let banner=null;function showBanner(t,sub='',dur=1.6){banner={t,sub,l:dur,L:dur}}
+function drawBanner(dt){if(!banner)return;banner.l-=dt;if(banner.l<=0){banner=null;return}const a=Math.min(1,banner.l*3,(banner.L-banner.l)*6);ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,H/2-46,W,banner.sub?84:64);ctx.textAlign='center';ctx.font='30px Bungee, Impact, sans-serif';ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc');ctx.fillText(banner.t,W/2,H/2-4);if(banner.sub){ctx.font='14px Rubik, sans-serif';ctx.fillStyle='#fff';ctx.fillText(banner.sub,W/2,H/2+24)}ctx.restore()}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+let state='menu',score=0,best=0;
+try{best=+localStorage.getItem('best_'+GAME_ID)||0}catch(e){}
+function showBest(){$('bestline').textContent=best?'BEST '+best:''}showBest();
+function saveBest(){if(score>best){best=score;try{localStorage.setItem('best_'+GAME_ID,best)}catch(e){}return true}return false}
+function startGame(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==='suspended')AC.resume();$('overlay').hidden=true;try{document.activeElement.blur()}catch(e){}parts=[];floats=[];banner=null;state='play';reset();jingle([523,659,784,1047],.07)}
+$('go').onclick=startGame;
+function gameOver(msg,useBest=true){if(state!=='play')return;state='over';let nb=false;if(useBest)nb=saveBest();$('msg').textContent=msg+(nb?' New best!':'');showBest();$('go').textContent='Play again';jingle([392,330,262,196],.14,'triangle',.06);setTimeout(()=>{$('overlay').hidden=false},1100)}
+function togglePause(){if(state==='play'){state='paused';$('pz').textContent='▶'}else if(state==='paused'){state='play';$('pz').textContent='II';last=performance.now()}}
+$('pz').onclick=togglePause;
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause()});
+let last=performance.now(),T=0;
+function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(state==='play'){T+=dt;update(dt);updFx(dt)}else if(state==='over'||state==='menu')updFx(dt);
+ ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
+ if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',W/2,H/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',W/2,H/2+28)}
+ requestAnimationFrame(frame)}
+</script>
+<script>
+// VOLT MAZE — escape room after room of electrified maze. Blast the robots, never touch the walls, leave before the Seeker arrives.
+const X0=14,Y0=14,X1=386,Y1=556,TH=6,DOOR=64,COLS=3,ROWS=4,CW=(X1-X0)/COLS,CH=(Y1-Y0)/ROWS;
+let walls,pl,bul,robots,rbul,seeker,seekT,lives,level,entry,deadT,roomBots,rooms,exitT,robotCol;
+ACTION_LABEL='FIRE';
+const DOORS={L:{x:X0,y:(Y0+Y1)/2},R:{x:X1,y:(Y0+Y1)/2},T:{x:(X0+X1)/2,y:Y0},B:{x:(X0+X1)/2,y:Y1}};
+const OPP={L:'R',R:'L',T:'B',B:'T'};
+function reset(){score=0;lives=3;level=1;rooms=0;entry='L';newRoom();hud()}
+function hud(){$('h1').textContent=score;$('h2').textContent=rooms+1;$('h3').textContent='◆'.repeat(Math.max(0,lives))||'–'}
+function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function box(o,w,h){return{x:o.x-w/2,y:o.y-h/2,w,h}}
+function newRoom(){walls=[];const hx=(X0+X1)/2,hy=(Y0+Y1)/2,d=DOOR/2;
+ const side=(k,seg)=>{if(k===entry){walls.push(seg(true))}else seg(false).forEach(w=>walls.push(w))};
+ // outer walls with a door gap on every side except the one you came in through
+ const top=open=>open?{x:X0,y:Y0-TH/2,w:X1-X0,h:TH}:[{x:X0,y:Y0-TH/2,w:hx-d-X0,h:TH},{x:hx+d,y:Y0-TH/2,w:X1-hx-d,h:TH}];
+ const bot=open=>open?{x:X0,y:Y1-TH/2,w:X1-X0,h:TH}:[{x:X0,y:Y1-TH/2,w:hx-d-X0,h:TH},{x:hx+d,y:Y1-TH/2,w:X1-hx-d,h:TH}];
+ const lef=open=>open?{x:X0-TH/2,y:Y0,w:TH,h:Y1-Y0}:[{x:X0-TH/2,y:Y0,w:TH,h:hy-d-Y0},{x:X0-TH/2,y:hy+d,w:TH,h:Y1-hy-d}];
+ const rig=open=>open?{x:X1-TH/2,y:Y0,w:TH,h:Y1-Y0}:[{x:X1-TH/2,y:Y0,w:TH,h:hy-d-Y0},{x:X1-TH/2,y:hy+d,w:TH,h:Y1-hy-d}];
+ side('T',top);side('B',bot);side('L',lef);side('R',rig);
+ const zones=Object.values(DOORS).map(p=>({x:p.x-50,y:p.y-50,w:100,h:100}));
+ for(let i=1;i<COLS;i++)for(let j=1;j<ROWS;j++){const nx=X0+i*CW,ny=Y0+j*CH;let w,tries=0;
+  do{const dir=Math.floor(Math.random()*4);w=dir===0?{x:nx-TH/2,y:ny-CH,w:TH,h:CH+TH/2}:dir===1?{x:nx-TH/2,y:ny-TH/2,w:TH,h:CH}:dir===2?{x:nx-CW,y:ny-TH/2,w:CW+TH/2,h:TH}:{x:nx-TH/2,y:ny-TH/2,w:CW,h:TH};tries++}while(zones.some(z=>hit(z,w))&&tries<20);walls.push(w)}
+ const e=DOORS[entry];pl={x:e.x+(entry==='L'?22:entry==='R'?-22:0),y:e.y+(entry==='T'?24:entry==='B'?-24:0),fx:entry==='R'?-1:1,fy:0,walk:0,inv:1.2};
+ bul=[];rbul=[];deadT=0;exitT=0;seeker=null;seekT=Math.max(7,16-level*.8);robotCol=['#ffd23f','#ff7a1f','#ff3d8b','#38f2ff','#9dff5a','#c08bff','#ffffff'][(level-1)%7];
+ robots=[];const n=Math.min(11,4+level);let tries=0;
+ while(robots.length<n&&tries<500){tries++;const r={x:rnd(X0+20,X1-20),y:rnd(Y0+20,Y1-20),moveT:rnd(0,2),fireT:rnd(1.5,3.5),t:Math.random()*9};
+  if(dist(r.x,r.y,pl.x,pl.y)<150)continue;if(walls.some(w=>hit(box(r,22,26),w)))continue;if(robots.some(o=>dist(o.x,o.y,r.x,r.y)<34))continue;robots.push(r)}
+ roomBots=robots.length;showBanner('ROOM '+(rooms+1),roomBots+' robots',1.1)}
+function killPlayer(why){if(deadT>0)return;deadT=1.8;lives--;burst(pl.x,pl.y,['#7cffb2','#fff','#38f2ff'],40,220,1,3);kick(10);flash=.7;flashCol='#38f2ff';noise(.5,.12,2200);beep(1200,.6,.06,'sawtooth',60);showBanner(why,lives>0?'Lives left: '+lives:'',1.6);hud()}
+function killRobot(r,pts=50){if(r.dead)return;r.dead=true;score+=pts;floatText(r.x,r.y-14,'+'+pts,robotCol);burst(r.x,r.y,[robotCol,'#fff','#888'],22,170,.8,3);kick(3);noise(.2,.07,1800);hud()}
+function update(dt){
+ if(deadT>0){deadT-=dt;if(deadT<=0){if(lives<=0)gameOver('Game over. Score '+score+'.');else{entry='L';newRoom()}}return}
+ if(exitT>0)return;
+ pl.inv-=dt;
+ // move (you stand still to shoot while fire is held, like the classic)
+ const firing=inp.fire;const mv=Math.hypot(inp.x,inp.y)>.25;
+ if(mv){const a=Math.atan2(inp.y,inp.x),s=Math.round(a/(Math.PI/4))*(Math.PI/4);pl.fx=Math.round(Math.cos(s));pl.fy=Math.round(Math.sin(s))}
+ if(!firing&&mv){pl.x+=inp.x*92*dt;pl.y+=inp.y*92*dt;pl.walk+=dt*10}
+ if(inp.fireTap||(firing&&mv&&bul.length===0)){if(bul.length<2){const n=Math.hypot(pl.fx,pl.fy)||1;bul.push({x:pl.x+pl.fx*10,y:pl.y-3+pl.fy*10,vx:pl.fx/n*340,vy:pl.fy/n*340});beep(1400,.07,.04,'square',500)}}
+ const pb=box(pl,10,20);
+ if(pl.inv<=0&&walls.some(w=>hit(pb,w))){killPlayer('ZAPPED!');return}
+ // leaving the room
+ const out=pl.x<X0-6?'L':pl.x>X1+6?'R':pl.y<Y0-8?'T':pl.y>Y1+8?'B':null;
+ if(out){const alive=robots.filter(r=>!r.dead).length;if(alive===0&&roomBots>0){const b=10*roomBots*level;score+=b;showBanner('BONUS +'+b,'Room cleared',1.2);jingle([784,988,1175,1568],.07)}
+  rooms++;if(rooms%3===0)level++;entry=OPP[out];exitT=.4;setTimeout(()=>{newRoom();exitT=0;hud()},350);return}
+ for(const b of bul){b.x+=b.vx*dt;b.y+=b.vy*dt;const bb={x:b.x-2,y:b.y-2,w:4,h:4};if(walls.some(w=>hit(bb,w))){b.dead=true;burst(b.x,b.y,'#38f2ff',5,60,.25,2)}
+  for(const r of robots)if(!r.dead&&hit(bb,box(r,18,24))){killRobot(r);b.dead=true}
+  if(b.x<0||b.x>W||b.y<0||b.y>H)b.dead=true}
+ bul=bul.filter(b=>!b.dead);
+ // robots: lurch toward you, fire when lined up, die on walls and each other
+ const spd=16+level*4,maxShots=Math.min(5,1+Math.floor(level/2));
+ for(const r of robots){if(r.dead)continue;r.t+=dt;r.moveT-=dt;
+  if(r.moveT<0){if(r.moveT<-1.1)r.moveT=rnd(.6,1.8);else{const dx=pl.x-r.x,dy=pl.y-r.y;if(Math.abs(dx)>Math.abs(dy))r.x+=Math.sign(dx)*spd*dt;else r.y+=Math.sign(dy)*spd*dt}}
+  r.fireT-=dt;const dx=pl.x-r.x,dy=pl.y-r.y;const lined=Math.abs(dx)<8||Math.abs(dy)<8||Math.abs(Math.abs(dx)-Math.abs(dy))<10;
+  if(r.fireT<=0&&lined&&rbul.length<maxShots&&Math.hypot(dx,dy)<320){r.fireT=rnd(1.4,3)-Math.min(.8,level*.08);const sx=Math.abs(dx)<8?0:Math.sign(dx),sy=Math.abs(dy)<8?0:Math.sign(dy),n=Math.hypot(sx,sy)||1,v=130+level*12;rbul.push({x:r.x,y:r.y,vx:sx/n*v,vy:sy/n*v});beep(500,.1,.03,'sawtooth',300)}
+  const rb=box(r,18,24);if(walls.some(w=>hit(rb,w)))killRobot(r,50);}
+ for(let i=0;i<robots.length;i++)for(let j=i+1;j<robots.length;j++){const a=robots[i],b=robots[j];if(!a.dead&&!b.dead&&dist(a.x,a.y,b.x,b.y)<18){killRobot(a);killRobot(b)}}
+ for(const b of rbul){b.x+=b.vx*dt;b.y+=b.vy*dt;const bb={x:b.x-2,y:b.y-2,w:4,h:4};if(walls.some(w=>hit(bb,w)))b.dead=true;
+  for(const r of robots)if(!r.dead&&hit(bb,box(r,14,20))&&Math.hypot(b.x-r.x,b.y-r.y)>14){killRobot(r,25);b.dead=true}
+  if(pl.inv<=0&&hit(bb,pb)){killPlayer('SHOT DOWN');b.dead=true}}
+ rbul=rbul.filter(b=>!b.dead&&b.x>0&&b.x<W&&b.y>0&&b.y<H);
+ for(const r of robots)if(!r.dead&&pl.inv<=0&&hit(box(r,18,24),pb)){killPlayer('GRABBED!');return}
+ // the Seeker: an unstoppable spark that drifts through walls once you linger
+ seekT-=dt;if(seekT<=0&&!seeker){const e=DOORS[entry];seeker={x:e.x,y:e.y,t:0};showBanner('SEEKER INCOMING','Find an exit!',1.3);jingle([220,185,156],.12,'sawtooth',.05)}
+ if(seeker){seeker.t+=dt;const dx=pl.x-seeker.x,dy=pl.y-seeker.y,m=Math.hypot(dx,dy)||1,v=50+level*4;seeker.x+=dx/m*v*dt;seeker.y+=dy/m*v*dt+Math.sin(seeker.t*9)*40*dt;
+  if(Math.random()<dt*20)parts.push({x:seeker.x,y:seeker.y,vx:rnd(-30,30),vy:rnd(-30,30),l:.4,L:.4,c:'#ff3df2',s:3});
+  if(pl.inv<=0&&m<16){killPlayer('CAUGHT BY THE SEEKER');return}}
+}
+function drawRobot(r){const bob=Math.sin(r.t*6)*1.2;ctx.save();ctx.translate(r.x,r.y+bob);
+ ctx.fillStyle=robotCol;rr(-8,-11,16,12,3);ctx.fill();ctx.fillStyle='#0a0f1e';ctx.fillRect(-6,-8,12,4);
+ const ex=clamp((pl.x-r.x)/40,-1,1)*3;ctx.fillStyle='#ff2b2b';ctx.fillRect(-2+ex,-8,4,4);
+ ctx.fillStyle=robotCol;ctx.fillRect(-6,2,12,6);ctx.fillRect(-10,-6,2,9);ctx.fillRect(8,-6,2,9);
+ const leg=Math.sin(r.t*10)*2;ctx.fillRect(-5,8,3,5+leg);ctx.fillRect(2,8,3,5-leg);ctx.fillStyle='#0a0f1e';ctx.fillRect(-1,-15,2,4);ctx.restore()}
+function drawPlayer(){if(deadT>0)return;if(pl.inv>0&&Math.floor(T*12)%2)return;ctx.save();ctx.translate(pl.x,pl.y);const w=Math.sin(pl.walk)*4;
+ ctx.strokeStyle='#7cffb2';ctx.fillStyle='#7cffb2';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.beginPath();ctx.arc(0,-9,3.6,0,TAU);ctx.fill();
+ ctx.beginPath();ctx.moveTo(0,-5);ctx.lineTo(0,4);ctx.moveTo(0,4);ctx.lineTo(-3,10+w*.4);ctx.moveTo(0,4);ctx.lineTo(3,10-w*.4);
+ ctx.moveTo(0,-3);ctx.lineTo(pl.fx*7,-3+pl.fy*7);ctx.moveTo(0,-3);ctx.lineTo(-pl.fx*3-2,1);ctx.stroke();ctx.restore()}
+function draw(){ctx.fillStyle='#04060d';ctx.fillRect(0,0,W,H);
+ ctx.strokeStyle='rgba(56,120,255,.07)';ctx.lineWidth=1;for(let x=X0;x<X1;x+=20){ctx.beginPath();ctx.moveTo(x,Y0);ctx.lineTo(x,Y1);ctx.stroke()}for(let y=Y0;y<Y1;y+=20){ctx.beginPath();ctx.moveTo(X0,y);ctx.lineTo(X1,y);ctx.stroke()}
+ const pulse=.6+Math.sin(T*6)*.2;ctx.shadowColor='#3a7bff';ctx.shadowBlur=12*pulse;ctx.fillStyle='#3a7bff';for(const w of walls)ctx.fillRect(w.x,w.y,w.w,w.h);ctx.shadowBlur=0;
+ ctx.fillStyle='#bcd3ff';for(const w of walls){if(Math.random()<.04){const sx=w.x+Math.random()*w.w,sy=w.y+Math.random()*w.h;ctx.fillRect(sx-1,sy-1,3,3)}}
+ for(const r of robots)if(!r.dead)drawRobot(r);
+ ctx.fillStyle='#fff';for(const b of bul){ctx.shadowColor='#7cffb2';ctx.shadowBlur=8;ctx.fillRect(b.x-2,b.y-2,4,4)}ctx.shadowBlur=0;
+ ctx.fillStyle='#ff5a5a';for(const b of rbul)ctx.fillRect(b.x-2,b.y-2,4,4);
+ drawPlayer();
+ if(seeker){const s=9+Math.sin(seeker.t*12)*2;ctx.save();ctx.translate(seeker.x,seeker.y);ctx.rotate(seeker.t*5);ctx.fillStyle='#ff3df2';ctx.shadowColor='#ff3df2';ctx.shadowBlur=16;ctx.beginPath();for(let i=0;i<10;i++){const a=i/10*TAU,rad=i%2?s*.45:s;ctx.lineTo(Math.cos(a)*rad,Math.sin(a)*rad)}ctx.fill();ctx.restore();ctx.shadowBlur=0}
+ const alive=robots.filter(r=>!r.dead).length;ctx.fillStyle='#8f9bbd';ctx.font='11px Rubik, sans-serif';ctx.textAlign='left';ctx.fillText('ROBOTS LEFT '+alive,X0,H-22);ctx.textAlign='right';
+ ctx.fillText(seeker?'SEEKER HUNTING':'SEEKER IN '+Math.max(0,Math.ceil(seekT))+'s',X1,H-22);ctx.textAlign='center';ctx.fillStyle='#55627f';ctx.fillText('Hold fire to stand and aim',W/2,H-6)}
+
+reset();requestAnimationFrame(frame);
+</script>
+
+</body></html>

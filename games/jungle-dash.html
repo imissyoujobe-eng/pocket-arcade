@@ -1,0 +1,448 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Jungle Dash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@700;900&display=swap">
+<style>
+/* Layout: side-scrolling jungle on a canvas; HUD strip on top (score, time, lives); thumb controls at the bottom — walk on the left, jump on the right */
+:root {
+  --panel: #10281a;
+  --panel-fg: #f4f1dc;
+  --gold: #ffd23f;
+  --gold-deep: #b8860b;
+  --leaf: #4caf50;
+  --leaf-deep: #22692a;
+  --display: "Bungee", "Impact", system-ui, sans-serif;
+  --body: "Nunito", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--panel); color: var(--panel-fg); font-family: var(--body); touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.game { height: 100%; min-height: 560px; display: flex; flex-direction: column; }
+.hud { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 8px 16px; }
+.lbl { font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.val { font-family: var(--display); font-size: 1.25rem; color: var(--gold); font-variant-numeric: tabular-nums; }
+.time { font-family: var(--display); font-size: 1.7rem; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.time.low { color: #ff6b5b; }
+.lives { display: flex; gap: 4px; justify-content: flex-end; }
+.lives svg { width: 22px; height: 14px; }
+#field { position: relative; flex: 1; min-height: 360px; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.controls { display: flex; justify-content: space-between; gap: 10px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.pair { display: flex; gap: 10px; }
+.ctl { font-family: var(--display); font-size: 1rem; color: #fff; border: 0; border-radius: 16px; width: 76px; height: 68px; display: grid; place-items: center; cursor: pointer; touch-action: none; background: #2c4a36; box-shadow: 0 5px 0 #06140b; }
+.ctl.jump { width: 150px; background: var(--gold); color: var(--panel); box-shadow: 0 5px 0 var(--gold-deep); font-size: 1.2rem; }
+.ctl.on { transform: translateY(4px); box-shadow: 0 1px 0 #06140b; filter: brightness(1.15); }
+.ctl svg { width: 30px; height: 30px; }
+.ctl:focus-visible, .btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(16,40,26,.62); text-align: center; }
+.card { max-width: 350px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.card h1, .card h2 { font-family: var(--display); margin: 0; line-height: 1; color: var(--gold); text-shadow: 0 4px 0 var(--leaf-deep); }
+.card h1 { font-size: clamp(2.4rem, 12vw, 3.4rem); }
+.card h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
+.card p { margin: 0; line-height: 1.45; text-shadow: 0 1px 3px #000; }
+.card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; text-shadow: 0 1px 3px #000; }
+.btn { font-family: var(--display); font-size: 1.2rem; color: var(--panel); background: var(--gold); border: 0; border-radius: 12px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 var(--gold-deep); }
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--gold-deep); }
+.banner { position: absolute; left: 0; right: 0; top: 16%; text-align: center; font-family: var(--display); font-size: clamp(1.5rem, 8vw, 2.5rem); color: #fff; text-shadow: 0 3px 0 var(--leaf-deep), 0 0 16px rgba(0,0,0,.5); pointer-events: none; padding-inline: 16px; }
+</style>
+
+<div class="game">
+  <div class="hud">
+    <div><div class="lbl">Score</div><div class="val" id="score">0</div></div>
+    <div><div class="lbl" style="text-align:center">Time</div><div class="time" id="time">3:00</div></div>
+    <div><div class="lbl" style="text-align:right">Lives</div><div class="lives" id="lives"></div></div>
+  </div>
+  <div id="field">
+    <canvas id="cv"></canvas>
+    <div class="banner" id="banner" hidden></div>
+    <div class="overlay" id="start">
+      <div class="card">
+        <h1>Jungle Dash</h1>
+        <ul>
+          <li><b>◀ ▶</b> run through the jungle</li>
+          <li><b>JUMP</b> over pits, snakes and logs</li>
+          <li>Jump into a vine to grab it, JUMP again to let go</li>
+          <li>Hop on the crocs only when their mouths are shut!</li>
+        </ul>
+        <p>Grab treasure and reach the temple before time runs out.</p>
+        <button class="btn" id="play">Tap to Explore</button>
+        <p id="best"></p>
+      </div>
+    </div>
+    <div class="overlay" id="over" hidden>
+      <div class="card">
+        <h2 id="overTitle">Game Over</h2>
+        <p id="overText"></p>
+        <button class="btn" id="again">Explore Again</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="pair">
+      <button class="ctl" id="left" aria-label="Run left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="ctl" id="right" aria-label="Run right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <button class="ctl jump" id="jump">JUMP</button>
+  </div>
+</div>
+
+<script>
+window.addEventListener('error', function (e) { var b = document.getElementById('banner'); if (b) { b.hidden = false; b.style.fontSize = '14px'; b.textContent = 'Error: ' + e.message; } });
+(function () {
+  const $ = id => document.getElementById(id);
+  const cv = $('cv'), ctx = cv.getContext('2d'), field = $('field');
+  let W = 0, H = 0, S = 1, baseY = 0;
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = field.clientWidth; H = field.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    S = Math.min(H / 300, W / 400); baseY = H * 0.68;
+  }
+
+  // ---------- world ----------
+  const ROOM = 460, ROOMS = 18, VINE_TOP = 260, VINE_L = 190, HANG = 54;
+  const TREASURES = [{ k: 'bag', v: 1000 }, { k: 'bar', v: 2000 }, { k: 'gem', v: 4000 }];
+  let rooms = [], END = 0;
+  function buildWorld() {
+    rooms = [];
+    const types = ['pit', 'vine', 'logs', 'croc', 'tar', 'snake', 'logs2', 'vine2'];
+    let prev = '';
+    for (let i = 0; i < ROOMS; i++) {
+      const r = i * ROOM; let t;
+      if (i === 0) t = 'start'; else { do { t = types[Math.floor(Math.random() * types.length)]; } while (t === prev); }
+      prev = t;
+      const R = { x0: r, type: t, pits: [], vines: [], logs: [], snakes: [], croc: null, tar: null, tre: null };
+      if (t === 'pit') R.pits.push([r + 170, r + 240], [r + 310, r + 380]);
+      if (t === 'vine') { R.pits.push([r + 140, r + 380]); R.vines.push({ px: r + 260, ph: Math.random() * 6 }); }
+      if (t === 'vine2') { R.croc = { a: r + 140, b: r + 380, heads: [], ph: 0 }; R.vines.push({ px: r + 260, ph: Math.random() * 6 }); }
+      if (t === 'logs') for (let k = 0; k < 3; k++) R.logs.push({ x: r + 200 + k * 90, roll: true, a: 0 });
+      if (t === 'logs2') R.logs.push({ x: r + 180, roll: false, a: 0 }, { x: r + 300, roll: false, a: 0 }, { x: r + 400, roll: true, a: 0 });
+      if (t === 'croc') R.croc = { a: r + 130, b: r + 390, heads: [r + 200, r + 260, r + 320], ph: Math.random() * 3 };
+      if (t === 'tar') R.tar = { c: r + 260, max: 120, ph: Math.random() * 5 };
+      if (t === 'snake') { R.pits.push([r + 130, r + 200]); R.snakes.push(r + 310); }
+      if (i > 0 && Math.random() < .7) { const T = TREASURES[Math.random() < .5 ? 0 : Math.random() < .6 ? 1 : 2]; R.tre = { x: r + ROOM - 30, k: T.k, v: T.v, got: false }; }
+      rooms.push(R);
+    }
+    END = ROOMS * ROOM + 160;
+  }
+  function tarHalf(T, t) { const p = ((t + T.ph) % 5) / 5; let f; if (p < .4) f = 0; else if (p < .52) f = (p - .4) / .12; else if (p < .88) f = 1; else f = 1 - (p - .88) / .12; return T.max * f; }
+  function crocOpen(C, t) { return ((t + C.ph) % 3) < 1.1; }
+  function vineEnd(v, t) {
+    const a = .62 * Math.sin(2.1 * t + v.ph);
+    return { x: v.px + VINE_L * Math.sin(a), y: VINE_TOP - VINE_L * Math.cos(a), vx: VINE_L * Math.cos(a) * .62 * 2.1 * Math.cos(2.1 * t + v.ph) };
+  }
+  function roomAt(x) { return rooms[Math.max(0, Math.min(rooms.length - 1, Math.floor(x / ROOM)))]; }
+  function holeAt(x, t) {
+    const R = roomAt(x);
+    for (const [a, b] of R.pits) if (x > a + 8 && x < b - 8) return 'pit';
+    if (R.croc) { const C = R.croc; if (x > C.a + 6 && x < C.b - 6) { for (const h of C.heads) if (Math.abs(x - h) < 17) return crocOpen(C, t) ? 'croc' : null; return 'water'; } }
+    if (R.tar) { const hw = tarHalf(R.tar, t); if (hw > 10 && Math.abs(x - R.tar.c) < hw - 8) return 'tar'; }
+    return null;
+  }
+
+  // ---------- sound ----------
+  let ac = null;
+  function audio() { try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); if (ac.state === 'suspended') ac.resume(); } catch (e) {} }
+  function tone(f1, f2, len, type, vol, at) {
+    if (!ac) return; const t = ac.currentTime + (at || 0), o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'square'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + len);
+    g.gain.setValueAtTime(vol || .1, t); g.gain.exponentialRampToValueAtTime(.0001, t + len);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + len + .02);
+  }
+  function noise(dur, vol, freq) {
+    if (!ac) return; const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    const s = ac.createBufferSource(); s.buffer = buf; const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+    const g = ac.createGain(); g.gain.value = vol; s.connect(f).connect(g).connect(ac.destination); s.start();
+  }
+  const sfx = {
+    jump: () => tone(300, 700, .15, 'square', .07),
+    grab: () => tone(900, 1200, .06, 'triangle', .1),
+    land: () => noise(.06, .15, 400),
+    thud: () => noise(.2, .6, 500),
+    coin: () => { tone(880, 880, .08, 'triangle', .12); tone(1320, 1320, .12, 'triangle', .12, .08); tone(1760, 1760, .2, 'triangle', .12, .18); },
+    die: () => tone(600, 90, .7, 'sawtooth', .1),
+    win: () => [523, 659, 784, 1047, 1319].forEach((n, i) => tone(n, n, .18, 'square', .09, i * .12))
+  };
+
+  // ---------- input ----------
+  const keys = { left: false, right: false, jump: false };
+  let jumpQ = false;
+  Object.keys(keys).forEach(k => {
+    const el = $(k);
+    const on = e => { e.preventDefault(); audio(); if (k === 'jump' && !keys.jump) jumpQ = true; keys[k] = true; el.classList.add('on'); try { el.setPointerCapture(e.pointerId); } catch (_) {} };
+    const off = () => { keys[k] = false; el.classList.remove('on'); };
+    el.addEventListener('pointerdown', on); el.addEventListener('pointerup', off);
+    el.addEventListener('pointercancel', off); el.addEventListener('lostpointercapture', off);
+    el.addEventListener('contextmenu', e => e.preventDefault());
+  });
+  const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'jump', ArrowUp: 'jump', KeyW: 'jump' };
+  addEventListener('keydown', e => { const k = KEYMAP[e.code]; if (k) { e.preventDefault(); audio(); if (k === 'jump' && !keys.jump) jumpQ = true; keys[k] = true; $(k).classList.add('on'); } });
+  addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) { keys[k] = false; $(k).classList.remove('on'); } });
+
+  // ---------- state ----------
+  let P, phase = 'title', score = 0, lives = 3, timeLeft = 180, clock = 0, pops = [], best = 0, cam = 0, deadT = 0, deathKind = '';
+  try { best = +localStorage.getItem('jungledash-best') || 0; } catch (e) {}
+  function newPlayer(x) { P = { x, y: 0, vx: 0, vy: 0, air: false, vine: null, face: 1, run: 0, stumble: 0, hitCd: 0, grabCd: 0, inv: 1.2 }; }
+  function banner(t, ms) { const b = $('banner'); b.textContent = t; b.hidden = false; clearTimeout(banner.t); banner.t = setTimeout(() => b.hidden = true, ms || 1100); }
+  function pop(x, h, text, color) { pops.push({ x, h, text, color, t: 1 }); }
+  const HAT = '<svg viewBox="0 0 22 14" aria-hidden="true"><ellipse cx="11" cy="11" rx="10.5" ry="2.8" fill="#c9a45c"/><rect x="5" y="2" width="12" height="9" rx="3" fill="#c9a45c"/><rect x="5" y="7" width="12" height="2" fill="#7a3b1e"/></svg>';
+  let lastHud = '';
+  function hud() {
+    const t = Math.ceil(timeLeft), m = Math.floor(t / 60), s = t % 60;
+    const key = score + '|' + t + '|' + lives;
+    if (key === lastHud) return; lastHud = key;
+    $('score').textContent = score.toLocaleString();
+    $('time').textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    $('time').classList.toggle('low', phase === 'play' && timeLeft < 20);
+    $('lives').innerHTML = HAT.repeat(Math.max(0, lives));
+  }
+  function newGame() { buildWorld(); score = 0; lives = 3; timeLeft = 180; pops = []; newPlayer(40); phase = 'play'; lastHud = ''; banner('Go!', 700); hud(); }
+  function begin(e) {
+    if (e) e.preventDefault();
+    if ($('start').hidden && $('over').hidden) return;
+    audio(); $('start').hidden = true; $('over').hidden = true; newGame();
+  }
+  $('play').addEventListener('click', begin); $('start').addEventListener('pointerup', begin); $('again').addEventListener('click', begin);
+
+  const DEATH_TEXT = { pit: 'Fell in!', water: 'Splash!', croc: 'Chomp!', tar: 'Stuck in the tar!', snake: 'Snake bite!' };
+  function die(kind) { phase = 'dying'; deadT = 1.1; deathKind = kind; P.vine = null; P.air = false; sfx.die(); banner(DEATH_TEXT[kind] || 'Ouch!', 1000); }
+  function treasures() { const all = rooms.filter(r => r.tre), got = all.filter(r => r.tre.got); return got.length + ' of ' + all.length; }
+  function saveBest() { const nb = score > best; if (nb) { best = score; try { localStorage.setItem('jungledash-best', best); } catch (e) {} } return nb; }
+  function gameOver(timeUp) {
+    phase = 'over'; const nb = saveBest();
+    $('overTitle').textContent = nb ? 'New High Score!' : timeUp ? "Time's Up" : 'Game Over';
+    $('overText').textContent = 'You found ' + treasures() + ' treasures and scored ' + score.toLocaleString() + '. Best: ' + best.toLocaleString() + '.';
+    setTimeout(() => { $('over').hidden = false; }, 900); hud();
+  }
+  function win() {
+    phase = 'win'; sfx.win();
+    const bonus = Math.floor(timeLeft) * 20 + lives * 1000; score += bonus; const nb = saveBest();
+    $('overTitle').textContent = nb ? 'New High Score!' : 'You Made It!';
+    $('overText').textContent = 'You reached the temple with ' + treasures() + ' treasures. Time and lives bonus +' + bonus.toLocaleString() + '. Score ' + score.toLocaleString() + '. Best: ' + best.toLocaleString() + '.';
+    banner('Temple reached!', 1500);
+    setTimeout(() => { $('over').hidden = false; }, 1400); lastHud = ''; hud();
+  }
+
+  function update(dt) {
+    clock += dt;
+    rooms.forEach(R => R.logs.forEach(L => { if (L.roll) { L.x -= 70 * dt; L.a -= 70 * dt / 12; if (L.x < R.x0 + 60) L.x = R.x0 + ROOM - 20; } }));
+    pops.forEach(p => { p.t -= dt; p.h += 40 * dt; }); pops = pops.filter(p => p.t > 0);
+    if (phase === 'dying') {
+      deadT -= dt;
+      if (deathKind !== 'snake' && deathKind !== 'croc') P.y -= 70 * dt;
+      if (deadT <= 0) {
+        lives--; lastHud = ''; hud();
+        if (lives <= 0) return gameOver(false);
+        newPlayer(roomAt(P.x).x0 + 30); phase = 'play';
+      }
+      return;
+    }
+    if (phase !== 'play') return;
+    timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; return gameOver(true); }
+    const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    if (dir && !P.air) P.face = dir;
+    P.hitCd -= dt; P.grabCd -= dt; P.inv -= dt;
+    const jump = jumpQ; jumpQ = false;
+    if (P.vine) {
+      const e = vineEnd(P.vine, clock); P.x = e.x; P.y = e.y - HANG;
+      if (dir) P.face = dir;
+      if (jump) { P.vine = null; P.air = true; const d = dir || (e.vx >= 0 ? 1 : -1); P.face = d; P.vx = d * 175; P.vy = 230; P.grabCd = .4; sfx.jump(); }
+    } else if (!P.air) {
+      let sp = dir * 140; if (P.stumble > 0) { P.stumble -= dt; sp *= .25; }
+      P.vx = sp; P.x += sp * dt; if (sp) P.run += dt * 14;
+      if (jump) { P.air = true; P.vy = 340; sfx.jump(); }
+      else { const h = holeAt(P.x, clock); if (h) return die(h); }
+    } else {
+      P.vy -= 1000 * dt; P.x += P.vx * dt; P.y += P.vy * dt;
+      if (P.grabCd <= 0) for (const v of roomAt(P.x).vines) { const e = vineEnd(v, clock); if (Math.hypot(e.x - P.x, e.y - (P.y + 44)) < 38) { P.vine = v; P.air = false; P.vy = 0; sfx.grab(); break; } }
+      if (!P.vine && P.y <= 0) { P.y = 0; P.air = false; const h = holeAt(P.x, clock); if (h) return die(h); sfx.land(); }
+    }
+    P.x = Math.max(16, P.x);
+
+    const R = roomAt(P.x);
+    if (P.y < 16 && P.hitCd <= 0) for (const L of R.logs) if (Math.abs(P.x - L.x) < 20) { score = Math.max(0, score - 100); P.hitCd = .9; P.stumble = .45; pop(P.x, 60, '-100', '#ff6b6b'); sfx.thud(); break; }
+    if (P.inv <= 0) for (const s of R.snakes) if (Math.abs(P.x - s) < 18 && P.y < 22) return die('snake');
+    if (R.tre && !R.tre.got && Math.abs(P.x - R.tre.x) < 22 && P.y < 44) { R.tre.got = true; score += R.tre.v; pop(R.tre.x, 60, '+' + R.tre.v, '#ffd23f'); sfx.coin(); }
+    if (P.x >= END) win();
+  }
+
+  // ---------- drawing ----------
+  const sx = x => (x - cam) * S, sy = h => baseY - h * S;
+  function hash(i) { const s = Math.sin(i * 127.1) * 43758.5453; return s - Math.floor(s); }
+  function drawBackdrop() {
+    const g = ctx.createLinearGradient(0, 0, 0, baseY);
+    g.addColorStop(0, '#0e3a22'); g.addColorStop(.55, '#2f7a45'); g.addColorStop(1, '#93c96d');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, baseY);
+    const vw = W / S;
+    [[.3, 100, '#2a6340', 10], [.6, 170, '#4a3522', 20]].forEach(([par, step, col, wBase]) => {
+      const off = cam * par;
+      ctx.fillStyle = col;
+      for (let i = Math.floor(off / step) - 1; i * step - off < vw + step; i++) {
+        const x = (i * step - off + hash(i + par * 10) * step * .5) * S, w = (wBase + hash(i * 3 + par) * 10) * S;
+        ctx.fillRect(x, 0, w, baseY);
+        if (par > .5) { ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.fillRect(x + w * .6, 0, w * .4, baseY); ctx.fillStyle = col; }
+      }
+    });
+    // canopy
+    ctx.fillStyle = '#0a2616'; ctx.fillRect(0, 0, W, 22 * S);
+    const off = cam * .7, st = 34;
+    for (let i = Math.floor(off / st) - 1; i * st - off < vw + st; i++) { ctx.beginPath(); ctx.arc((i * st - off) * S, (22 + hash(i) * 8) * S, (18 + hash(i + 5) * 10) * S, 0, Math.PI * 2); ctx.fill(); }
+    // ground
+    ctx.fillStyle = '#8a6a3a'; ctx.fillRect(0, baseY, W, 34 * S);
+    ctx.fillStyle = '#5aa64a'; ctx.fillRect(0, baseY - 3 * S, W, 7 * S);
+    ctx.fillStyle = '#2b1f14'; ctx.fillRect(0, baseY + 34 * S, W, H);
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1;
+    const bw = 40, bh = 16, boff = cam;
+    for (let r = 0; baseY + (34 + r * bh) * S < H; r++) {
+      const y = baseY + (34 + r * bh) * S; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      for (let i = Math.floor(boff / bw) - 1; i * bw - boff < vw + bw; i++) { const x = (i * bw - boff + (r % 2) * bw / 2) * S; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + bh * S); ctx.stroke(); }
+    }
+  }
+  function holeRect(a, b, fill, water) {
+    const x = sx(a), w = (b - a) * S;
+    ctx.fillStyle = fill; ctx.fillRect(x, baseY - 3 * S, w, 37 * S);
+    if (water) { ctx.fillStyle = water; ctx.fillRect(x, baseY + 24 * S, w, 10 * S); }
+  }
+  function drawCroc(x, open) {
+    const X = sx(x), Y = baseY + 1 * S;
+    ctx.fillStyle = '#2f6b2a';
+    ctx.beginPath(); ctx.ellipse(X, Y + 4 * S, 22 * S, 5 * S, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#3f8f35';
+    ctx.fillRect(X - 18 * S, Y - 4 * S, 36 * S, 6 * S);
+    ctx.beginPath(); ctx.arc(X + 10 * S, Y - 5 * S, 3 * S, 0, Math.PI * 2); ctx.arc(X + 2 * S, Y - 5 * S, 3 * S, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ffe36b'; ctx.beginPath(); ctx.arc(X + 10 * S, Y - 6 * S, 1.3 * S, 0, Math.PI * 2); ctx.arc(X + 2 * S, Y - 6 * S, 1.3 * S, 0, Math.PI * 2); ctx.fill();
+    if (open) {
+      ctx.save(); ctx.translate(X - 14 * S, Y - 3 * S); ctx.rotate(-.7);
+      ctx.fillStyle = '#c0392b'; ctx.fillRect(-4 * S, 0, 30 * S, 5 * S);
+      ctx.fillStyle = '#3f8f35'; ctx.fillRect(-4 * S, -4 * S, 30 * S, 5 * S);
+      ctx.fillStyle = '#fff'; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo((i * 6) * S, 1 * S); ctx.lineTo((i * 6 + 3) * S, 4 * S); ctx.lineTo((i * 6 + 6) * S, 1 * S); ctx.fill(); }
+      ctx.restore();
+    }
+  }
+  function drawTreasure(T) {
+    const X = sx(T.x), Y = baseY - 3 * S, bob = Math.sin(clock * 3 + T.x) * 2 * S;
+    ctx.save(); ctx.translate(X, Y - bob); ctx.scale(S, S);
+    if (T.k === 'bag') {
+      ctx.fillStyle = '#b07a3a'; ctx.beginPath(); ctx.ellipse(0, -9, 9, 9, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(-4, -22, 8, 6); ctx.fillStyle = '#ffd23f'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('$', 0, -5);
+    } else if (T.k === 'bar') {
+      ctx.fillStyle = '#e6a800'; ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(12, 0); ctx.lineTo(8, -10); ctx.lineTo(-8, -10); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffe680'; ctx.fillRect(-7, -9, 14, 3);
+    } else {
+      ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, -7, 7, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#6ff0ff'; ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(6, -18); ctx.lineTo(0, -12); ctx.lineTo(-6, -18); ctx.closePath(); ctx.fill();
+    }
+    const tw = (Math.sin(clock * 6 + T.x) + 1) / 2;
+    ctx.fillStyle = 'rgba(255,255,255,' + tw + ')'; ctx.fillRect(6, -22, 2, 6); ctx.fillRect(4, -20, 6, 2);
+    ctx.restore();
+  }
+  function drawRoom(R) {
+    R.pits.forEach(([a, b]) => holeRect(a, b, '#050805', '#1c4d6e'));
+    if (R.croc) {
+      const C = R.croc; holeRect(C.a, C.b, '#1f6fa3');
+      ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1.5 * S;
+      for (let i = 0; i < 4; i++) { const x = C.a + 20 + ((clock * 20 + i * 60) % (C.b - C.a - 40)); ctx.beginPath(); ctx.moveTo(sx(x), baseY + (6 + i * 6) * S); ctx.lineTo(sx(x + 18), baseY + (6 + i * 6) * S); ctx.stroke(); }
+      const open = crocOpen(C, clock); C.heads.forEach(h => drawCroc(h, open));
+    }
+    if (R.tar) {
+      const hw = tarHalf(R.tar, clock);
+      if (hw > 1) { holeRect(R.tar.c - hw, R.tar.c + hw, '#141014'); ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.ellipse(sx(R.tar.c), baseY + 4 * S, hw * .6 * S, 2 * S, 0, 0, Math.PI * 2); ctx.fill(); }
+    }
+    R.vines.forEach(v => {
+      const e = vineEnd(v, clock);
+      ctx.strokeStyle = '#3d8b2f'; ctx.lineWidth = 3.5 * S; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(sx(v.px), sy(VINE_TOP)); ctx.lineTo(sx(e.x), sy(e.y)); ctx.stroke();
+      ctx.fillStyle = '#5cc24a';
+      for (let k = 1; k < 5; k++) { const t = k / 5, x = v.px + (e.x - v.px) * t, y = VINE_TOP + (e.y - VINE_TOP) * t; ctx.beginPath(); ctx.ellipse(sx(x) + 4 * S * (k % 2 ? 1 : -1), sy(y), 4 * S, 2 * S, k % 2 ? .5 : -.5, 0, Math.PI * 2); ctx.fill(); }
+    });
+    R.logs.forEach(L => {
+      const X = sx(L.x), Y = sy(11);
+      ctx.fillStyle = '#6b3f1e'; ctx.beginPath(); ctx.arc(X, Y, 12 * S, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c8894a'; ctx.lineWidth = 1.5 * S;
+      ctx.beginPath(); ctx.arc(X, Y, 8 * S, 0, Math.PI * 2); ctx.stroke(); ctx.beginPath(); ctx.arc(X, Y, 4 * S, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X, Y); ctx.lineTo(X + Math.cos(L.a) * 11 * S, Y + Math.sin(L.a) * 11 * S); ctx.stroke();
+    });
+    R.snakes.forEach(s => {
+      const X = sx(s), Y = baseY - 2 * S;
+      ctx.fillStyle = '#3fae3f';
+      ctx.beginPath(); ctx.ellipse(X, Y - 3 * S, 14 * S, 4 * S, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(X - 1 * S, Y - 8 * S, 10 * S, 3.5 * S, 0, 0, Math.PI * 2); ctx.fill();
+      const lift = Math.sin(clock * 3) * 2 * S;
+      ctx.strokeStyle = '#3fae3f'; ctx.lineWidth = 4 * S; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(X - 6 * S, Y - 9 * S); ctx.quadraticCurveTo(X - 10 * S, Y - 16 * S, X - 6 * S, Y - 20 * S - lift); ctx.stroke();
+      ctx.fillStyle = '#2d8a2d'; ctx.beginPath(); ctx.ellipse(X - 9 * S, Y - 21 * S - lift, 5 * S, 3.5 * S, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(X - 11 * S, Y - 22 * S - lift, 1.3 * S, 0, Math.PI * 2); ctx.fill();
+      if (Math.sin(clock * 8) > 0) { ctx.strokeStyle = '#e8414a'; ctx.lineWidth = 1.2 * S; ctx.beginPath(); ctx.moveTo(X - 14 * S, Y - 21 * S - lift); ctx.lineTo(X - 19 * S, Y - 21 * S - lift); ctx.stroke(); }
+      ctx.fillStyle = '#e8d65a'; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(X + i * 7 * S, Y - 4 * S, 1.3 * S, 0, Math.PI * 2); ctx.fill(); }
+    });
+    if (R.tre && !R.tre.got) drawTreasure(R.tre);
+  }
+  function drawTemple() {
+    const X = sx(END), Y = baseY - 3 * S;
+    if (X > W + 120 * S || X < -120 * S) return;
+    ctx.fillStyle = '#8f8a78';
+    ctx.fillRect(X - 50 * S, Y - 110 * S, 18 * S, 110 * S); ctx.fillRect(X + 32 * S, Y - 110 * S, 18 * S, 110 * S);
+    ctx.fillStyle = '#a8a28e'; ctx.fillRect(X - 62 * S, Y - 126 * S, 124 * S, 18 * S);
+    ctx.beginPath(); ctx.moveTo(X - 56 * S, Y - 126 * S); ctx.lineTo(X, Y - 156 * S); ctx.lineTo(X + 56 * S, Y - 126 * S); ctx.fill();
+    ctx.fillStyle = '#1b140c'; ctx.fillRect(X - 32 * S, Y - 108 * S, 64 * S, 108 * S);
+    ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(X, Y - 138 * S, 7 * S, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(76,175,80,.8)'; ctx.fillRect(X - 50 * S, Y - 70 * S, 6 * S, 40 * S); ctx.fillRect(X + 40 * S, Y - 90 * S, 6 * S, 50 * S);
+  }
+  function drawPlayer() {
+    if (!P) return;
+    if (phase === 'play' && P.inv > 0 && Math.floor(P.inv * 10) % 2) return;
+    ctx.save();
+    if (phase === 'dying' && deathKind !== 'snake' && deathKind !== 'croc') { ctx.beginPath(); ctx.rect(0, 0, W, baseY + 20 * S); ctx.clip(); }
+    ctx.translate(sx(P.x), sy(P.y)); ctx.scale(P.face * S, S);
+    const hang = !!P.vine, air = P.air;
+    const sw = (!air && !hang && P.vx) ? Math.sin(P.run) : 0;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 5; ctx.beginPath();
+    if (hang) { ctx.moveTo(-2, -18); ctx.lineTo(-4, 0); ctx.moveTo(2, -18); ctx.lineTo(5, -1); }
+    else if (air) { ctx.moveTo(-2, -18); ctx.lineTo(-8, -9); ctx.lineTo(-3, -2); ctx.moveTo(2, -18); ctx.lineTo(8, -11); ctx.lineTo(11, -4); }
+    else { ctx.moveTo(0, -18); ctx.lineTo(sw * 8, -9); ctx.lineTo(sw * 11, 0); ctx.moveTo(0, -18); ctx.lineTo(-sw * 8, -9); ctx.lineTo(-sw * 11, 0); }
+    ctx.stroke();
+    ctx.fillStyle = '#3a2614'; ctx.fillRect(-7 + (hang ? -2 : sw * 11), -3, 7, 3); ctx.fillRect((hang ? 2 : -sw * 11), -3, 7, 3);
+    ctx.fillStyle = '#4e8a3a'; ctx.fillRect(-7, -36, 14, 19);
+    ctx.fillStyle = '#3a2614'; ctx.fillRect(-7, -20, 14, 3);
+    ctx.strokeStyle = '#e0a878'; ctx.lineWidth = 4; ctx.beginPath();
+    if (hang) { ctx.moveTo(-4, -33); ctx.lineTo(-1, -54); ctx.moveTo(4, -33); ctx.lineTo(1, -54); }
+    else if (air) { ctx.moveTo(0, -33); ctx.lineTo(10, -42); }
+    else { ctx.moveTo(0, -33); ctx.lineTo(-sw * 7, -22); ctx.moveTo(0, -33); ctx.lineTo(sw * 7, -22); }
+    ctx.stroke();
+    ctx.fillStyle = '#e0a878'; ctx.beginPath(); ctx.arc(1, -42, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(4, -42, 1.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c9a45c'; ctx.beginPath(); ctx.ellipse(1, -46, 10, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(-4, -53, 10, 7); ctx.fillStyle = '#7a3b1e'; ctx.fillRect(-4, -49, 10, 2);
+    ctx.restore();
+  }
+  function draw() {
+    drawBackdrop();
+    const vw = W / S, i0 = Math.floor(cam / ROOM), i1 = Math.floor((cam + vw) / ROOM);
+    for (let i = Math.max(0, i0); i <= i1 && i < rooms.length; i++) drawRoom(rooms[i]);
+    drawTemple();
+    drawPlayer();
+    pops.forEach(p => { ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, p.t); ctx.font = '400 ' + Math.round(16 * Math.max(1, S * .8)) + 'px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(p.text, sx(p.x), sy(p.h)); });
+    ctx.globalAlpha = 1;
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (field.clientWidth !== W || field.clientHeight !== H) resize();
+    if (!W || !H) return;
+    const dt = Math.min(.033, (now - last) / 1000); last = now;
+    update(dt);
+    const vw = W / S;
+    cam = Math.max(0, Math.min(END + 150 - vw, P.x - vw * .38));
+    draw(); hud();
+  }
+  $('best').textContent = best ? 'High score: ' + best.toLocaleString() : '';
+  buildWorld(); newPlayer(40); hud();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>

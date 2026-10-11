@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lake Showdown</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Lake Showdown: fishing race against the computer. Deeper fish weigh more. Reel fast, but the shark wants your catch. First to 99 lbs wins.
+K.theme({ bg: '#0b2236', ink: '#effaff', accent: '#ffd23f', accentInk: '#2a1d00' });
+const W = 240, H = 340, SURF = 104, GOAL = 99;
+K.screen(W, H);
+K.hud(['you', 'cpu']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'REEL' }] });
+const ROWS = [150, 172, 194, 216, 244, 272, 300], WT = [2, 2, 3, 4, 5, 6, 8];
+let state = 'title', fish, me, cpu, shark, splash, msg, msgT, wins = K.best('lake-wins'), timeT;
+function title() { K.card({ title: 'LAKE SHOWDOWN', text: 'Steer your hook to a fish. Once it bites, hold REEL to haul it up fast, but if the shark touches your fish it is gone. Deep fish weigh the most. First to 99 lbs wins.', best: wins ? 'WINS ' + wins : '', button: 'Cast off', onStart: start }); }
+function start() {
+  fish = ROWS.map((y, i) => newFish(i));
+  me = { x: 80, y: 140, rod: { x: 38, y: 68 }, lbs: 0, f: null, cpu: false };
+  cpu = { x: 160, y: 140, rod: { x: 202, y: 68 }, lbs: 0, f: null, cpu: true, aim: null, think: 0 };
+  shark = { x: W / 2, y: 128, vx: 30 }; splash = []; timeT = 0; state = 'play'; hud();
+}
+function newFish(i) { return { row: i, x: K.rnd(20, W - 20), y: ROWS[i], vx: (Math.random() < .5 ? -1 : 1) * K.rnd(14, 26) * (1 + i * 0.06), w: WT[i], by: null }; }
+function hud() { K.set('you', 'YOU ' + me.lbs + ' LBS'); K.set('cpu', 'CPU ' + cpu.lbs + ' LBS'); }
+
+function control(p, dt) {
+  if (p.f) {
+    // reeling: fish fights side to side, player hauls it up
+    const reel = p.cpu ? p.reel : K.down('a');
+    p.y -= (reel ? 34 : 9) * dt * (1 - p.f.w * 0.035);
+    p.x += Math.sin(timeT * 6 + p.f.row) * 28 * dt;
+    p.x = K.clamp(p.x, 12, W - 12);
+    if (reel && Math.random() < 0.25) K.beep(300 + (SURF - p.y) * 2, 0.03, { vol: 0.02 });
+    p.f.x = p.x; p.f.y = p.y + 4;
+    if (p.y < SURF + 2) {
+      p.lbs = Math.min(GOAL, p.lbs + p.f.w); hud();
+      for (let k = 0; k < 10; k++) splash.push({ x: p.x, y: SURF, vx: K.rnd(-40, 40), vy: K.rnd(-80, -30), l: 0.6 });
+      K.tune(p.cpu ? [330, 262] : [523, 659, 784], 0.07, { type: 'triangle' });
+      fish[p.f.row] = newFish(p.f.row); p.f = null; p.y = 130;
+      if (p.lbs >= GOAL) end(!p.cpu);
+    }
+    return;
+  }
+  let mx = 0, my = 0;
+  if (p.cpu) {
+    p.think -= dt;
+    if (!p.aim || p.aim.by || p.think <= 0) { p.think = K.rnd(1, 2.5); const free = fish.filter(f => !f.by); p.aim = free.sort((a, b) => (b.w - a.w) * 6 - Math.abs(b.x - p.x) / 10 + Math.abs(a.x - p.x) / 10)[Math.random() < 0.6 ? 0 : 1] || free[0]; }
+    if (p.aim) { mx = K.clamp((p.aim.x + p.aim.vx * 0.6 - p.x) / 20, -1, 1); my = K.clamp((p.aim.y - p.y) / 20, -1, 1); }
+    p.reel = false;
+  } else {
+    mx = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0); my = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
+    if (K.ptr.down && K.ptr.y > SURF) { mx = K.clamp((K.ptr.x - p.x) / 12, -1, 1); my = K.clamp((K.ptr.y - p.y) / 12, -1, 1); }
+  }
+  const sp = p.cpu ? 52 : 66;
+  p.x = K.clamp(p.x + mx * sp * dt, 12, W - 12); p.y = K.clamp(p.y + my * sp * dt, SURF + 14, H - 24);
+  for (const f of fish) if (!f.by && Math.abs(f.x - p.x) < 8 && Math.abs(f.y - p.y) < 7) { f.by = p; p.f = f; if (!p.cpu) K.beep(880, 0.08, { vol: 0.06 }); break; }
+}
+function update(dt) {
+  if (state !== 'play') return;
+  timeT += dt; if (msgT > 0) msgT -= dt;
+  for (const f of fish) if (!f.by) { f.x += f.vx * dt; if (f.x < 12 || f.x > W - 12) f.vx = -f.vx; }
+  control(me, dt); control(cpu, dt);
+  // cpu reels in bursts so it's beatable
+  if (cpu.f) cpu.reel = Math.sin(timeT * 2.2) > -0.25 && shark && Math.abs(shark.x - cpu.x) > 26;
+  // shark hunts any hooked fish near the surface band
+  const prey = [me, cpu].filter(p => p.f).sort((a, b) => a.y - b.y)[0];
+  const tx = prey ? prey.x : (Math.sin(timeT * 0.4) * 0.5 + 0.5) * (W - 40) + 20;
+  shark.vx += K.clamp(tx - shark.x, -1, 1) * 70 * dt; shark.vx = K.clamp(shark.vx, -46, 46); shark.x = K.clamp(shark.x + shark.vx * dt, 18, W - 18);
+  for (const p of [me, cpu]) if (p.f && Math.abs(p.f.x - shark.x) < 16 && Math.abs(p.f.y - shark.y) < 10) {
+    fish[p.f.row] = newFish(p.f.row); p.f = null; p.y = 140; K.noise(0.2, 0.2); if (!p.cpu) { msg = 'SHARK ATE IT!'; msgT = 1.4; }
+  }
+  for (const s of splash) { s.x += s.vx * dt; s.y += s.vy * dt; s.vy += 200 * dt; s.l -= dt; } splash = splash.filter(s => s.l > 0);
+}
+function end(youWin) {
+  state = 'over';
+  if (youWin) { wins++; try { localStorage.setItem('pa-lake-wins', wins); } catch (e) {} }
+  setTimeout(() => K.card({ title: youWin ? 'BIG WIN!' : 'CPU WINS', text: youWin ? 'You landed 99 lbs first, ' + me.lbs + ' to ' + cpu.lbs + '.' : 'The computer hit 99 lbs. You had ' + me.lbs + '.', best: 'WINS ' + wins, button: 'Fish again', onStart: start }), 900);
+}
+
+function drawFish(c, f, t) {
+  const x = Math.round(f.x), y = Math.round(f.y), dir = f.by ? 1 : Math.sign(f.vx) || 1, s = 0.7 + f.w * 0.08;
+  c.save(); c.translate(x, y); c.scale(dir * s, s);
+  if (f.by) c.rotate(-0.9 + Math.sin(t / 80) * 0.4);
+  c.fillStyle = ['#9ad', '#9ad', '#7c6', '#7c6', '#da6', '#e86', '#f6a'][f.row];
+  c.beginPath(); c.ellipse(0, 0, 9, 4.5, 0, 0, 7); c.fill();
+  c.beginPath(); c.moveTo(-8, 0); c.lineTo(-14, -5); c.lineTo(-14, 5); c.fill();
+  c.fillStyle = '#000'; c.fillRect(4, -2, 2, 2); c.restore();
+}
+function drawAngler(c, x, flip, col) {
+  c.save(); c.translate(x, 88); c.scale(flip, 1);
+  c.fillStyle = col; c.fillRect(-5, -14, 10, 12); c.fillStyle = '#ffcf9e'; c.fillRect(-4, -22, 8, 8); c.fillStyle = '#3a5a2a'; c.fillRect(-6, -24, 12, 3);
+  c.fillStyle = '#334'; c.fillRect(-5, -2, 4, 6); c.fillRect(1, -2, 4, 6);
+  c.strokeStyle = '#5a3a1a'; c.lineWidth = 2; c.beginPath(); c.moveTo(3, -10); c.lineTo(22, -22); c.stroke(); c.restore();
+}
+function draw(c, t) {
+  c.fillStyle = '#9ad8ff'; c.fillRect(0, 0, W, SURF); c.fillStyle = '#ffe9a8'; c.beginPath(); c.arc(W / 2, 30, 14, 0, 7); c.fill();
+  c.fillStyle = '#5a8a4a'; c.beginPath(); c.moveTo(0, SURF); for (let x = 0; x <= W; x += 10) c.lineTo(x, 80 - Math.sin(x / 30) * 8); c.lineTo(W, SURF); c.fill();
+  const g = c.createLinearGradient(0, SURF, 0, H); g.addColorStop(0, '#2a7ab0'); g.addColorStop(1, '#0b2236'); c.fillStyle = g; c.fillRect(0, SURF, W, H - SURF);
+  c.fillStyle = 'rgba(255,255,255,.35)'; for (let x = -((t / 40) % 16); x < W; x += 16) c.fillRect(x, SURF, 8, 2);
+  c.fillStyle = '#2a4a2a'; for (let x = 6; x < W; x += 22) { c.fillRect(x, H - 14 - (x % 3) * 4, 3, 14 + (x % 3) * 4); }
+  // docks
+  c.fillStyle = '#8a5a32'; c.fillRect(0, 88, 46, 8); c.fillRect(W - 46, 88, 46, 8); c.fillStyle = '#5a3a1a'; c.fillRect(6, 96, 4, 20); c.fillRect(34, 96, 4, 20); c.fillRect(W - 10, 96, 4, 20); c.fillRect(W - 38, 96, 4, 20);
+  drawAngler(c, 24, 1, '#e63946'); drawAngler(c, W - 24, -1, '#46a8ff');
+  if (!fish) return;
+  for (const f of fish) drawFish(c, f, t);
+  for (const p of [me, cpu]) {
+    const rx = p.cpu ? W - 46 : 46, ry = 66;
+    c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = 1; c.beginPath(); c.moveTo(rx, ry); c.quadraticCurveTo((rx + p.x) / 2, SURF, p.x, p.y); c.stroke();
+    c.fillStyle = p.cpu ? '#46a8ff' : '#e63946'; c.fillRect(p.x - 2, p.y - 2, 4, 4);
+  }
+  // shark
+  const sx = Math.round(shark.x), sy = shark.y, d = Math.sign(shark.vx) || 1;
+  c.save(); c.translate(sx, sy); c.scale(d, 1);
+  c.fillStyle = '#5d6b78'; c.beginPath(); c.ellipse(0, 0, 18, 6, 0, 0, 7); c.fill();
+  c.beginPath(); c.moveTo(-16, 0); c.lineTo(-26, -7); c.lineTo(-24, 6); c.fill(); c.beginPath(); c.moveTo(-2, -5); c.lineTo(4, -13); c.lineTo(8, -5); c.fill();
+  c.fillStyle = '#dfe6ec'; c.fillRect(2, 2, 14, 2); c.fillStyle = '#000'; c.fillRect(11, -2, 2, 2); c.restore();
+  for (const s of splash) { c.fillStyle = 'rgba(255,255,255,.8)'; c.fillRect(s.x, s.y, 2, 2); }
+  // scale bars
+  [[me, 10, '#e63946'], [cpu, W - 18, '#46a8ff']].forEach(([p, x, col]) => { c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(x, 112, 8, 200); c.fillStyle = col; const h = 200 * p.lbs / GOAL; c.fillRect(x, 312 - h, 8, h); });
+  if (msgT > 0) K.text(c, msg, W / 2, 50, 14, '#fff');
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Mole Patrol</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600&display=swap">
+<style>
+/* Layout: square dirt field centered, HUD above, d-pad + pump button below for touch */
+:root{--sky:#5ec8ff;--dirt1:#c98b4a;--dirt2:#a8642e;--dirt3:#7d4520;--dirt4:#57301a;--ink:#fff8ec;--pump:#ff4f7b;--bg:#1b120c;
+--display:'Bungee',Impact,system-ui,sans-serif;--body:'Rubik',system-ui,sans-serif;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding-inline:16px;box-sizing:border-box}
+#hud{width:min(100%,520px);display:flex;justify-content:space-between;font-family:var(--display);font-size:18px;font-variant-numeric:tabular-nums}
+#hud .r{color:var(--pump)}
+#stage{position:relative;width:min(100%,520px,calc(100vh - 230px));aspect-ratio:1;max-width:100%}
+canvas{width:100%;height:100%;display:block;border-radius:6px;image-rendering:pixelated}
+#pad{display:flex;gap:28px;align-items:center}
+.dpad{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(2,48px);gap:6px}
+.dpad button{font-size:22px;padding:0;border-radius:12px;background:#3a2718;color:var(--ink);box-shadow:0 4px 0 #20140b}
+.dpad .u{grid-column:2}.dpad .l{grid-column:1;grid-row:2}.dpad .d{grid-column:2;grid-row:2}.dpad .rt{grid-column:3;grid-row:2}
+button{font-family:var(--display);border:0;cursor:pointer;touch-action:none}
+#pumpBtn{width:96px;height:96px;border-radius:50%;background:var(--pump);color:#fff;font-size:18px;box-shadow:0 6px 0 #a3223f}
+button:active{transform:translateY(3px)}
+button:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(27,18,12,.82);border-radius:6px;padding-inline:16px}
+#overlay h1{font-family:var(--display);font-size:clamp(34px,10vw,58px);margin:0;color:var(--sky);text-shadow:0 4px 0 #1d6fa0}
+#overlay p{margin:0;max-width:30ch;line-height:1.5}
+#go{font-size:20px;padding:12px 30px;border-radius:999px;background:var(--pump);color:#fff;box-shadow:0 5px 0 #a3223f}
+@media (min-width:900px){#pad{display:none}}
+</style>
+<div id="app">
+  <div id="hud"><span id="sc">0</span><span class="r" id="lv">ROUND 1</span><span id="lv2">♥♥♥</span></div>
+  <div id="stage"><canvas id="c" width="416" height="416"></canvas>
+    <div id="overlay"><h1>MOLE PATROL</h1><p>Dig tunnels and pump up the goggle-eyed Grubbles until they pop. Arrows to dig, PUMP (or Space) to inflate.</p><div id="best"></div><button id="go">Play</button></div>
+  </div>
+  <div id="pad">
+    <div class="dpad"><button class="u" data-d="0,-1" aria-label="Up">▲</button><button class="l" data-d="-1,0" aria-label="Left">◀</button><button class="d" data-d="0,1" aria-label="Down">▼</button><button class="rt" data-d="1,0" aria-label="Right">▶</button></div>
+    <button id="pumpBtn">PUMP</button>
+  </div>
+</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const N=13,T=32,SKY=2; // grid 13x13, rows 0-1 sky
+let dirt,player,enemies,hose,round,score,lives,state='menu',dir=[0,0],pumping=false,AC,best=0;
+try{best=+localStorage.getItem('mole-best')||0}catch(e){}
+$('best').textContent=best?'BEST '+best:'';
+function beep(f,d,v=.06,type='square'){if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}
+function newRound(){
+  dirt=[];for(let y=0;y<N;y++){dirt[y]=[];for(let x=0;x<N;x++)dirt[y][x]=y>=SKY}
+  for(let y=0;y<=6;y++)dirt[y][6]=false; // starting shaft
+  player={x:6,y:6,px:6,py:6,fx:1,fy:0,t:0};
+  enemies=[];const n=Math.min(3+round,8);
+  for(let i=0;i<n;i++){let ex,ey;do{ex=1+Math.floor(Math.random()*(N-2));ey=4+Math.floor(Math.random()*(N-5))}while(Math.abs(ex-6)+Math.abs(ey-6)<5);
+    const horiz=Math.random()<.5;for(let k=-1;k<=1;k++){const tx=horiz?ex+k:ex,ty=horiz?ey:ey+k;if(tx>=0&&tx<N&&ty>=SKY&&ty<N)dirt[ty][tx]=false}
+    enemies.push({x:ex,y:ey,px:ex,py:ey,dx:horiz?1:0,dy:horiz?0:1,inflate:0,ghost:0,ghostT:4+Math.random()*6,t:0,pop:0})}
+  hose=null;
+}
+function start(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}round=1;score=0;lives=3;newRound();state='play';hud();$('overlay').hidden=true}
+function hud(){$('sc').textContent=score;$('lv').textContent='ROUND '+round;$('lv2').textContent='♥'.repeat(lives)}
+$('go').onclick=start;
+// input
+const keymap={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+addEventListener('keydown',e=>{if(keymap[e.key]){dir=keymap[e.key];e.preventDefault()}if(e.key===' '){pumping=true;e.preventDefault();if(state!=='play')start()}});
+addEventListener('keyup',e=>{if(keymap[e.key]&&dir+''==keymap[e.key]+'')dir=[0,0];if(e.key===' ')pumping=false});
+document.querySelectorAll('.dpad button').forEach(b=>{const d=b.dataset.d.split(',').map(Number);
+  b.addEventListener('pointerdown',e=>{dir=d;e.preventDefault()});['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>{if(dir+''==d+'')dir=[0,0]}))});
+const pb=$('pumpBtn');pb.addEventListener('pointerdown',e=>{pumping=true;e.preventDefault()});['pointerup','pointerleave','pointercancel'].forEach(ev=>pb.addEventListener(ev,()=>pumping=false));
+
+const SPD=4.2;let pumpTick=0;
+function update(dt){
+  // player movement on grid
+  const p=player;
+  if(p.t<=0&&!hose){
+    if(dir[0]||dir[1]){p.fx=dir[0];p.fy=dir[1];const nx=p.x+dir[0],ny=p.y+dir[1];
+      if(nx>=0&&nx<N&&ny>=1&&ny<N){p.px=p.x;p.py=p.y;p.x=nx;p.y=ny;p.t=1;if(dirt[ny][nx]){dirt[ny][nx]=false;score+=1;hud()}}}
+  }
+  if(p.t>0)p.t=Math.max(0,p.t-dt*SPD);
+  // hose
+  if(pumping&&!hose&&p.t<=0){hose={len:0,target:null};beep(900,.05)}
+  if(hose){
+    if(!hose.target){hose.len+=dt*14;
+      const cells=Math.floor(hose.len);let hit=null,blocked=false;
+      for(let i=1;i<=cells;i++){const cx=p.x+p.fx*i,cy=p.y+p.fy*i;if(cx<0||cx>=N||cy<0||cy>=N||dirt[cy][cx]){blocked=true;hose.len=i-.5;break}
+        hit=enemies.find(e=>!e.pop&&Math.round(e.x)==cx&&Math.round(e.y)==cy);if(hit){hose.len=i;break}}
+      if(hit){hose.target=hit;hit.inflate=Math.max(hit.inflate,.01)}
+      else if(blocked||hose.len>4){hose=null}
+    }else{const e=hose.target;if(pumping){pumpTick+=dt;if(pumpTick>.18){pumpTick=0;e.inflate+=.34;beep(300+e.inflate*300,.08,.05,'sine');
+          if(e.inflate>=1){e.pop=.4;score+=100*round;hud();beep(120,.25,.12,'sawtooth');hose=null}}}
+      else{pumpTick=0} if(dir[0]||dir[1])if(hose&&(dir[0]!=p.fx||dir[1]!=p.fy)){hose=null}}
+  }
+  // enemies
+  for(const e of enemies){
+    if(e.pop){e.pop-=dt;continue}
+    if(e.inflate>0&&(!hose||hose.target!==e)){e.inflate-=dt*.35;if(e.inflate<0)e.inflate=0}
+    if(e.inflate>0)continue;
+    e.t+=dt*(1.6+round*.25)*(e.ghost?.6:1);
+    if(e.t>=1){e.t=0;e.px=e.x;e.py=e.y;
+      e.ghostT-=1;
+      if(e.ghost){ // drift toward player through dirt
+        const gx=Math.sign(p.x-e.x),gy=Math.sign(p.y-e.y);if(Math.abs(p.x-e.x)>Math.abs(p.y-e.y))e.x+=gx;else e.y+=gy;
+        if(!dirt[e.y]?.[e.x]&&e.y>=SKY){e.ghost=0;e.ghostT=5+Math.random()*6}
+      }else{
+        const opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>{const nx=e.x+dx,ny=e.y+dy;return nx>=0&&nx<N&&ny>=SKY&&ny<N&&!dirt[ny][nx]});
+        let pick=opts.find(o=>o[0]==e.dx&&o[1]==e.dy);
+        const chase=opts.filter(o=>Math.sign(p.x-e.x)==o[0]&&o[0]||Math.sign(p.y-e.y)==o[1]&&o[1]);
+        if(chase.length&&Math.random()<.5)pick=chase[0];
+        if(!pick||Math.random()<.2)pick=opts[Math.floor(Math.random()*opts.length)];
+        if(pick){e.dx=pick[0];e.dy=pick[1];e.x+=pick[0];e.y+=pick[1]}
+        if(e.ghostT<=0){e.ghost=1}
+      }
+    }
+    // collision
+    const ex=e.px+(e.x-e.px)*e.t,ey=e.py+(e.y-e.py)*e.t,pxx=p.x+(p.px-p.x)*p.t,pyy=p.y+(p.py-p.y)*p.t;
+    if(Math.hypot(ex-pxx,ey-pyy)<.7){die();return}
+  }
+  enemies=enemies.filter(e=>!(e.pop&&e.pop<=0)&&!(e.pop<0));
+  if(!enemies.length){round++;score+=500;hud();beep(660,.15);setTimeout(()=>beep(880,.2),150);newRound()}
+}
+function die(){lives--;hud();beep(200,.5,.1,'sawtooth');hose=null;
+  if(lives<=0){state='over';if(score>best){best=score;try{localStorage.setItem('mole-best',best)}catch(e){}}
+    $('overlay').querySelector('p').textContent=`Game over on round ${round} with ${score} points.`;$('best').textContent='BEST '+best;$('go').textContent='Play again';$('overlay').hidden=false;return}
+  player={x:6,y:1,px:6,py:1,fx:1,fy:0,t:0};for(const e of enemies){e.ghost=0;e.inflate=0}
+}
+function draw(t){
+  // sky
+  ctx.fillStyle='#5ec8ff';ctx.fillRect(0,0,416,SKY*T);
+  ctx.fillStyle='#ffe066';ctx.beginPath();ctx.arc(370,28,16,0,7);ctx.fill();
+  ctx.fillStyle='#4caf50';ctx.fillRect(0,SKY*T-6,416,6);
+  const bands=['#c98b4a','#a8642e','#7d4520','#57301a'];
+  for(let y=SKY;y<N;y++)for(let x=0;x<N;x++){
+    const band=bands[Math.min(3,Math.floor((y-SKY)/3))];
+    if(dirt[y][x]){ctx.fillStyle=band;ctx.fillRect(x*T,y*T,T,T);ctx.fillStyle='rgba(0,0,0,.12)';if((x*7+y*3)%4==0)ctx.fillRect(x*T+8,y*T+10,4,3);if((x*5+y*11)%5==0)ctx.fillRect(x*T+20,y*T+22,3,3)}
+    else{ctx.fillStyle='#120b07';ctx.fillRect(x*T,y*T,T,T)}
+  }
+  // tunnels above ground too
+  for(let x=0;x<N;x++)if(!dirt[1][x]&&false){}
+  // hose
+  const p=player,ppx=(p.x+(p.px-p.x)*p.t)*T+T/2,ppy=(p.y+(p.py-p.y)*p.t)*T+T/2;
+  if(hose){ctx.strokeStyle='#e8f6ff';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(ppx,ppy);ctx.lineTo(ppx+p.fx*hose.len*T,ppy+p.fy*hose.len*T);ctx.stroke()}
+  // enemies
+  for(const e of enemies){const ex=(e.px+(e.x-e.px)*e.t)*T+T/2,ey=(e.py+(e.y-e.py)*e.t)*T+T/2;
+    if(e.pop){ctx.fillStyle='#fff';for(let i=0;i<8;i++){const a=i*Math.PI/4,r=(.4-e.pop)*60+6;ctx.fillRect(ex+Math.cos(a)*r-2,ey+Math.sin(a)*r-2,4,4)}continue}
+    const s=1+e.inflate*.9;ctx.save();ctx.translate(ex,ey);ctx.scale(s,s);
+    if(e.ghost){ctx.globalAlpha=.55}
+    ctx.fillStyle='#9b5cff';ctx.beginPath();ctx.arc(0,0,12,0,7);ctx.fill();
+    ctx.fillStyle='#ffd23f';ctx.fillRect(-11,-6,22,8);ctx.fillStyle='#222';ctx.fillRect(-8,-5,6,6);ctx.fillRect(2,-5,6,6);
+    ctx.fillStyle='#fff';ctx.fillRect(-6,-4,2,2);ctx.fillRect(4,-4,2,2);
+    ctx.fillStyle='#6a35c9';ctx.fillRect(-9,9,5,4);ctx.fillRect(4,9,5,4);
+    ctx.restore();ctx.globalAlpha=1}
+  // player: little mole in hardhat
+  ctx.save();ctx.translate(ppx,ppy);if(p.fx<0)ctx.scale(-1,1);
+  ctx.fillStyle='#6d4c41';ctx.beginPath();ctx.ellipse(0,2,11,12,0,0,7);ctx.fill();
+  ctx.fillStyle='#ffb3c1';ctx.beginPath();ctx.arc(10,2,4,0,7);ctx.fill();
+  ctx.fillStyle='#000';ctx.fillRect(3,-3,3,3);
+  ctx.fillStyle='#ffca28';ctx.beginPath();ctx.arc(0,-6,10,Math.PI,0);ctx.fill();ctx.fillRect(-12,-7,24,3);
+  ctx.fillStyle='#fff59d';ctx.fillRect(-2,-13,4,4);
+  ctx.fillStyle='#ffb3c1';ctx.fillRect(-8,12,6,3);ctx.fillRect(3,12,6,3);
+  ctx.restore();
+}
+let last=performance.now();
+function loop(t){const dt=Math.min(.05,(t-last)/1000);last=t;if(state==='play')update(dt);if(dirt)draw(t);requestAnimationFrame(loop)}
+round=1;newRound();requestAnimationFrame(loop);
+</script>
+
+</body></html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Marble Run</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Marble Run: roll a marble down tilted isometric courses against the clock. Mind the edges, the slopes and the black marble.
+K.theme({ bg: '#0c0c1a', ink: '#f0f0ff', accent: '#4ae0ff', accentInk: '#002030' });
+const W = 320, H = 240, T = 16;
+K.screen(W, H, { smooth: true });
+K.hud(['score', 'course', 'time']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'BOOST' }] });
+
+// tile chars: '.' void, '#' floor, 'G' goal, 'S' start, '<>^v' slope pushing that way, 'X' bumper pad, 'C' checkpoint
+const COURSES = [
+  { name: 'PRACTICE RACE', time: 40, map: [
+    '##S###......',
+    '######......',
+    '..####......',
+    '..#vv#......',
+    '..#vv######.',
+    '..#>>>>>>##.',
+    '.......####.',
+    '.......#vv#.',
+    '.......#vv#.',
+    '..######C##.',
+    '..#<<<<<<<#.',
+    '..##........',
+    '..##........',
+    '..#GG.......'] },
+  { name: 'NARROW RIDGE', time: 45, map: [
+    'S##.........',
+    '###.........',
+    '.#v.........',
+    '.#v.........',
+    '.##########.',
+    '.......#v...',
+    '.......#v...',
+    '.....###C##.',
+    '.....#......',
+    '.....#......',
+    '.....##>>##.',
+    '.........#..',
+    '..########..',
+    '..#.........',
+    '..##GG......'] },
+  { name: 'SLIDE CITY', time: 50, map: [
+    '.S##........',
+    '.###>>>>>##.',
+    '.........vv.',
+    '.##<<<<<<<v.',
+    '.#v.........',
+    '.#v...###...',
+    '.##>>>#C#...',
+    '......#v#...',
+    '..#####v####',
+    '..#........#',
+    '..#.####<<<#',
+    '..#.#v......',
+    '..###v......',
+    '.....####GG.'] },
+];
+let state = 'title', score, ci, map, rows, cols, ball, enemy, timeLeft, check, camX, camY, fallT, msg, msgT, best = K.best('marblerun');
+const tile = (gx, gy) => (gy < 0 || gy >= rows || gx < 0 || gx >= cols) ? '.' : map[gy][gx];
+function iso(x, y, z) { return { x: (x - y) * 15 + 160 - camX, y: (x + y) * 7.5 - (z || 0) + 60 - camY }; }
+function title() { K.card({ title: 'MARBLE RUN', text: 'Roll the marble with the arrows (or drag the way you want to roll). Reach the green goal before the clock runs out. Slopes push you, edges drop you, and the black marble shoves you around. Leftover time carries into the next course.', best: best ? 'BEST ' + best : '', button: 'Roll', onStart: start }); }
+function start() { score = 0; ci = 0; timeLeft = 0; load(); state = 'play'; }
+function load() {
+  const C = COURSES[ci]; map = C.map; rows = map.length; cols = map[0].length; timeLeft += C.time;
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (map[y][x] === 'S') check = { x: x * T + 8, y: y * T + 8 };
+  ball = { x: check.x, y: check.y, vx: 0, vy: 0, z: 0, vz: 0 }; fallT = 0;
+  let ex = null; for (let y = rows - 1; y >= 0 && !ex; y--) for (let x = 0; x < cols; x++) if (map[y][x] === '#') { ex = { x: x * T + 8, y: y * T + 8 }; break; }
+  enemy = ci > 0 ? { x: ex.x, y: ex.y, vx: 0, vy: 0 } : null;
+  msg = COURSES[ci].name; msgT = 2; camX = 0; camY = 0;
+}
+function update(dt) {
+  if (state !== 'play') return;
+  timeLeft -= dt; if (msgT > 0) msgT -= dt;
+  if (timeLeft <= 0) { timeLeft = 0; state = 'over'; best = K.saveBest('marblerun', score); K.card({ title: 'TIME UP', text: 'You made it to course ' + (ci + 1) + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); return; }
+  if (fallT > 0) { fallT -= dt; ball.vz -= 400 * dt; ball.z += ball.vz * dt; if (fallT <= 0) { ball.x = check.x; ball.y = check.y; ball.vx = ball.vy = 0; ball.z = 0; ball.vz = 0; } return; }
+  // input in screen terms, mapped to grid axes (screen right = +x -y, screen down = +x +y)
+  let sx = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0), sy = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
+  if (K.ptr.down) { const p = iso(ball.x / T, ball.y / T, 0); const dx = K.ptr.x - p.x, dy = K.ptr.y - p.y, m = Math.hypot(dx, dy); if (m > 8) { sx = dx / m; sy = dy / m; } }
+  const acc = K.down('a') ? 260 : 170;
+  ball.vx += (sx * 0.7 + sy) * acc * dt * 0.7; ball.vy += (-sx * 0.7 + sy) * acc * dt * 0.7;
+  const gx = Math.floor(ball.x / T), gy = Math.floor(ball.y / T), tl = tile(gx, gy);
+  const push = 150; if (tl === '>') ball.vx += push * dt; if (tl === '<') ball.vx -= push * dt; if (tl === 'v') ball.vy += push * dt; if (tl === '^') ball.vy -= push * dt;
+  if (tl === 'X') { ball.vx *= -1.4; ball.vy *= -1.4; K.beep(900, 0.06); }
+  if (tl === 'C' && (check.x !== gx * T + 8 || check.y !== gy * T + 8)) { check = { x: gx * T + 8, y: gy * T + 8 }; msg = 'CHECKPOINT'; msgT = 1; K.tune([660, 990], 0.06); }
+  ball.vx *= 1 - 0.9 * dt; ball.vy *= 1 - 0.9 * dt;
+  const sp = Math.hypot(ball.vx, ball.vy); if (sp > 170) { ball.vx *= 170 / sp; ball.vy *= 170 / sp; }
+  ball.x += ball.vx * dt; ball.y += ball.vy * dt;
+  if (enemy) { const dx = ball.x - enemy.x, dy = ball.y - enemy.y, d = Math.hypot(dx, dy) || 1; enemy.vx += dx / d * 70 * dt; enemy.vy += dy / d * 70 * dt; enemy.vx *= 1 - dt; enemy.vy *= 1 - dt; const nx = enemy.x + enemy.vx * dt, ny = enemy.y + enemy.vy * dt; if (tile(Math.floor(nx / T), Math.floor(ny / T)) !== '.') { enemy.x = nx; enemy.y = ny; } else { enemy.vx *= -0.5; enemy.vy *= -0.5; }
+    if (d < 11) { ball.vx += dx / d * 140; ball.vy += dy / d * 140; enemy.vx -= dx / d * 60; enemy.vy -= dy / d * 60; K.beep(300, 0.05); } }
+  const nt = tile(Math.floor(ball.x / T), Math.floor(ball.y / T));
+  if (nt === '.') { fallT = 1.2; ball.vz = 40; timeLeft = Math.max(0.1, timeLeft - 3); msg = 'FELL OFF! -3s'; msgT = 1.2; K.beep(600, 0.8, { to: 80 }); }
+  if (nt === 'G') { score += Math.round(timeLeft) * 100 + 1000; K.tune([523, 659, 784, 1046, 1318], 0.09); ci++;
+    if (ci >= COURSES.length) { state = 'over'; best = K.saveBest('marblerun', score); K.card({ title: 'FINISH!', text: 'All three courses done! Score ' + score + '.', best: 'BEST ' + best, button: 'Again', onStart: start }); return; }
+    load(); }
+  const p = iso(ball.x / T, ball.y / T, 0); camX += (p.x + camX - 160 - camX) * Math.min(1, dt * 4); camY += (p.y + camY - 120 - camY) * Math.min(1, dt * 4);
+  K.set('score', score); K.set('course', 'COURSE ' + (ci + 1)); K.set('time', Math.ceil(timeLeft) + 's');
+}
+function draw(c, t) {
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0c0c1a'); g.addColorStop(1, '#1a1040'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  if (!map) return;
+  for (let s = 0; s < rows + cols; s++) for (let y = 0; y < rows; y++) { const x = s - y; if (x < 0 || x >= cols) continue; const ch = map[y][x]; if (ch === '.') continue;
+    const a = iso(x, y), b = iso(x + 1, y), cc = iso(x + 1, y + 1), d = iso(x, y + 1);
+    c.fillStyle = '#2a2a5a'; c.beginPath(); c.moveTo(d.x, d.y); c.lineTo(cc.x, cc.y); c.lineTo(cc.x, cc.y + 10); c.lineTo(d.x, d.y + 10); c.fill();
+    c.fillStyle = '#1a1a40'; c.beginPath(); c.moveTo(b.x, b.y); c.lineTo(cc.x, cc.y); c.lineTo(cc.x, cc.y + 10); c.lineTo(b.x, b.y + 10); c.fill();
+    c.fillStyle = ch === 'G' ? (Math.floor(t / 200) % 2 ? '#4aff7a' : '#2ad05a') : ch === 'C' ? '#ffcc33' : ch === 'X' ? '#ff4a8a' : '<>^v'.includes(ch) ? '#6a8ad0' : ((x + y) % 2 ? '#8a9ad8' : '#7a8ac8');
+    c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.lineTo(cc.x, cc.y); c.lineTo(d.x, d.y); c.fill();
+    if ('<>^v'.includes(ch)) { const m = iso(x + 0.5, y + 0.5), dir = { '>': [1, 0], '<': [-1, 0], 'v': [0, 1], '^': [0, -1] }[ch], e = iso(x + 0.5 + dir[0] * 0.3, y + 0.5 + dir[1] * 0.3); c.strokeStyle = 'rgba(255,255,255,.6)'; c.beginPath(); c.moveTo(m.x, m.y); c.lineTo(e.x, e.y); c.stroke(); }
+  }
+  const drawBall = (o, col, z) => { const sh = iso(o.x / T, o.y / T, 0); if (!z) { c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.ellipse(sh.x, sh.y, 6, 3, 0, 0, 7); c.fill(); } const p = iso(o.x / T, o.y / T, 6 + (z || 0)); const gr = c.createRadialGradient(p.x - 2, p.y - 2, 1, p.x, p.y, 7); gr.addColorStop(0, '#fff'); gr.addColorStop(0.4, col); gr.addColorStop(1, '#000'); c.fillStyle = gr; c.beginPath(); c.arc(p.x, p.y, 6, 0, 7); c.fill(); };
+  if (enemy) drawBall(enemy, '#333', 0);
+  if (state !== 'title') drawBall(ball, '#4ae0ff', ball.z);
+  if (msgT > 0) K.text(c, msg, 160, 30, 14, '#fff');
+}
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>

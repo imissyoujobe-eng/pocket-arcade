@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Kings Row</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Kings Row: checkers against the computer. Captures are forced, multi-jumps chain, reach the far row to be crowned.
+K.theme({ bg: '#1b1410', ink: '#fff5e6', accent: '#e63946', accentInk: '#fff' });
+const W = 304, H = 344, S = 36, BX = 8, BY = 36;
+K.screen(W, H, { smooth: true });
+K.hud(['you', 'level', 'cpu']);
+
+
+let board, turn, sel, hints, anim, status, over, level = 1, wins = +(K.best('kingsrow-wins') || 0), lastMove, thinking;
+const DEPTH = () => Math.min(7, 2 + level);
+function title() { K.card({ title: 'KINGS ROW', text: 'Classic checkers. You are red and move first. Jumps are forced, and you keep jumping if you can. Reach the far side to be crowned. Win to face a smarter computer.', best: wins ? 'WINS ' + wins : '', button: 'Play level ' + level, onStart: start }); }
+function start() {
+  board = new Array(64).fill(0);
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) { if (r < 3) board[r * 8 + c] = -1; else if (r > 4) board[r * 8 + c] = 1; }
+  turn = 1; sel = -1; hints = []; anim = null; over = false; lastMove = null; status = 'Your move'; hud();
+}
+function hud() { K.set('you', 'RED ' + count(1)); K.set('level', 'LEVEL ' + level); K.set('cpu', 'BLACK ' + count(-1)); }
+function count(side) { return board ? board.filter(p => Math.sign(p) === side).length : 12; }
+
+// ---- rules ----
+function dirs(p) { return Math.abs(p) === 2 ? [-1, 1] : [p > 0 ? -1 : 1]; }
+function jumps(b, from, p, path, caps, out) {
+  let found = false; const r = from >> 3, c = from & 7;
+  for (const dr of dirs(p)) for (const dc of [-1, 1]) {
+    const mr = r + dr, mc = c + dc, tr = r + 2 * dr, tc = c + 2 * dc;
+    if (tr < 0 || tr > 7 || tc < 0 || tc > 7) continue;
+    const mid = mr * 8 + mc, to = tr * 8 + tc;
+    if (Math.sign(b[mid]) === -Math.sign(p) && b[to] === 0 && !caps.includes(mid)) {
+      found = true;
+      const crowned = Math.abs(p) === 1 && (p > 0 ? tr === 0 : tr === 7);
+      const nb = b.slice(); nb[from] = 0; nb[to] = p;
+      if (crowned) out.push({ path: path.concat(to), caps: caps.concat(mid) });
+      else jumps(nb, to, p, path.concat(to), caps.concat(mid), out);
+    }
+  }
+  if (!found && caps.length) out.push({ path, caps });
+}
+function moves(b, side) {
+  const caps = [], simple = [];
+  for (let i = 0; i < 64; i++) {
+    const p = b[i]; if (Math.sign(p) !== side) continue;
+    jumps(b, i, p, [i], [], caps);
+    const r = i >> 3, c = i & 7;
+    for (const dr of dirs(p)) for (const dc of [-1, 1]) { const tr = r + dr, tc = c + dc; if (tr >= 0 && tr < 8 && tc >= 0 && tc < 8 && b[tr * 8 + tc] === 0) simple.push({ path: [i, tr * 8 + tc], caps: [] }); }
+  }
+  return caps.length ? caps : simple;
+}
+function apply(b, m) {
+  const nb = b.slice(), from = m.path[0], to = m.path[m.path.length - 1]; let p = nb[from];
+  nb[from] = 0; for (const c of m.caps) nb[c] = 0;
+  if (p === 1 && to < 8) p = 2; if (p === -1 && to >= 56) p = -2;
+  nb[to] = p; return nb;
+}
+function evalB(b) {
+  let s = 0;
+  for (let i = 0; i < 64; i++) { const p = b[i]; if (!p) continue; const r = i >> 3, c = i & 7;
+    let v = Math.abs(p) === 2 ? 175 : 100;
+    if (Math.abs(p) === 1) v += (p > 0 ? 7 - r : r) * 4;
+    if (c >= 2 && c <= 5 && r >= 2 && r <= 5) v += 6;
+    if (Math.abs(p) === 1 && (p > 0 ? r === 7 : r === 0)) v += 8; // back row guard
+    s += Math.sign(p) * v; }
+  return s; // positive favours red
+}
+function search(b, side, depth, alpha, beta) {
+  const ms = moves(b, side);
+  if (!ms.length) return { v: side === 1 ? -9999 - depth : 9999 + depth };
+  if (depth === 0) return { v: evalB(b) };
+  let best = null;
+  if (side === -1) { let v = Infinity; for (const m of ms) { const r = search(apply(b, m), 1, depth - 1, alpha, beta).v; if (r < v) { v = r; best = m; } beta = Math.min(beta, v); if (alpha >= beta) break; } return { v, m: best }; }
+  let v = -Infinity; for (const m of ms) { const r = search(apply(b, m), -1, depth - 1, alpha, beta).v; if (r > v) { v = r; best = m; } alpha = Math.max(alpha, v); if (alpha >= beta) break; } return { v, m: best };
+}
+
+// ---- play ----
+function play(m) {
+  anim = { m, step: 0, t: 0, piece: board[m.path[0]] };
+  K.beep(m.caps.length ? 300 : 520, 0.06, { type: 'triangle', vol: 0.06 });
+}
+function finishMove() {
+  const m = anim.m; board = apply(board, m); lastMove = m; anim = null; sel = -1; hints = [];
+  if (m.caps.length) K.noise(0.08, 0.15);
+  turn = -turn; hud();
+  const ms = moves(board, turn);
+  if (!ms.length) return end(turn === -1);
+  if (turn === -1) { status = 'Computer is thinking…'; thinking = 0.45; }
+  else status = ms[0].caps.length ? 'You must jump!' : 'Your move';
+}
+function end(youWin) {
+  over = true; status = youWin ? 'You win!' : 'Computer wins';
+  if (youWin) { wins++; try { localStorage.setItem('pa-kingsrow-wins', wins); } catch (e) {} level++; K.tune([523, 659, 784, 1047], 0.12); }
+  else K.tune([392, 330, 262], 0.18, { type: 'triangle' });
+  setTimeout(() => K.card({ title: youWin ? 'CROWNED!' : 'GAME OVER', text: youWin ? 'You beat level ' + (level - 1) + '. The computer will think further ahead now.' : 'Black took the board. Try again?', best: 'WINS ' + wins, button: 'Play level ' + level, onStart: start }), 1300);
+}
+function update(dt) {
+  if (!board || over) return;
+  if (anim) { anim.t += dt / 0.18; if (anim.t >= 1) { anim.t = 0; anim.step++; if (anim.step >= anim.m.path.length - 1) finishMove(); } return; }
+  if (turn === -1) { if ((thinking -= dt) <= 0) { const r = search(board, -1, DEPTH(), -Infinity, Infinity); const ms = moves(board, -1); play(r.m || ms[Math.floor(Math.random() * ms.length)]); } return; }
+  if (K.ptr.tapped) {
+    const c = Math.floor((K.ptr.x - BX) / S), r = Math.floor((K.ptr.y - BY) / S);
+    if (c < 0 || c > 7 || r < 0 || r > 7) return;
+    const i = r * 8 + c, legal = moves(board, 1);
+    if (board[i] > 0) { sel = i; hints = legal.filter(m => m.path[0] === i); if (!hints.length) { status = legal[0].caps.length ? 'You must jump!' : 'That piece is stuck'; K.beep(150, 0.1, { vol: 0.05 }); } else K.beep(700, 0.04, { vol: 0.04 }); return; }
+    const m = hints.find(m => m.path[m.path.length - 1] === i);
+    if (m) play(m);
+  }
+}
+function draw(c, t) {
+  c.fillStyle = '#1b1410'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#5a3a22'; c.fillRect(BX - 6, BY - 6, S * 8 + 12, S * 8 + 12);
+  for (let r = 0; r < 8; r++) for (let col = 0; col < 8; col++) { c.fillStyle = (r + col) % 2 ? '#3d6b4a' : '#f0e2c4'; c.fillRect(BX + col * S, BY + r * S, S, S); }
+  if (!board) return;
+  if (lastMove) { c.fillStyle = 'rgba(255,210,63,.25)'; for (const i of lastMove.path) c.fillRect(BX + (i & 7) * S, BY + (i >> 3) * S, S, S); }
+  if (sel >= 0) { c.strokeStyle = '#ffd23f'; c.lineWidth = 3; c.strokeRect(BX + (sel & 7) * S + 1.5, BY + (sel >> 3) * S + 1.5, S - 3, S - 3); }
+  for (const h of hints) { const i = h.path[h.path.length - 1]; c.fillStyle = 'rgba(255,210,63,' + (0.5 + Math.sin(t / 150) * 0.2) + ')'; c.beginPath(); c.arc(BX + (i & 7) * S + S / 2, BY + (i >> 3) * S + S / 2, 6, 0, 7); c.fill(); }
+  for (let i = 0; i < 64; i++) {
+    if (!board[i]) continue;
+    if (anim && i === anim.m.path[0]) continue;
+    if (anim && anim.m.caps.slice(0, anim.step).includes(i)) continue;
+    piece(c, BX + (i & 7) * S + S / 2, BY + (i >> 3) * S + S / 2, board[i]);
+  }
+  if (anim) {
+    const a = anim.m.path[anim.step], b = anim.m.path[anim.step + 1], k = anim.t;
+    const x = BX + ((a & 7) + ((b & 7) - (a & 7)) * k) * S + S / 2, y = BY + ((a >> 3) + ((b >> 3) - (a >> 3)) * k) * S + S / 2 - Math.sin(k * Math.PI) * (anim.m.caps.length ? 10 : 3);
+    piece(c, x, y, anim.piece);
+  }
+  K.text(c, status || '', W / 2, 18, 12, turn === 1 ? '#ffd23f' : '#fff');
+}
+function piece(c, x, y, p) {
+  const red = p > 0;
+  c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.arc(x + 1.5, y + 2.5, 14, 0, 7); c.fill();
+  c.fillStyle = red ? '#9e1b28' : '#111'; c.beginPath(); c.arc(x, y + 2, 14, 0, 7); c.fill();
+  c.fillStyle = red ? '#e63946' : '#33333a'; c.beginPath(); c.arc(x, y, 14, 0, 7); c.fill();
+  c.strokeStyle = red ? '#ff7a85' : '#55555f'; c.lineWidth = 1.5; c.beginPath(); c.arc(x, y, 10, 0, 7); c.stroke();
+  if (Math.abs(p) === 2) { c.fillStyle = '#ffd23f'; c.beginPath(); c.moveTo(x - 7, y + 4); c.lineTo(x - 7, y - 4); c.lineTo(x - 3, y); c.lineTo(x, y - 6); c.lineTo(x + 3, y); c.lineTo(x + 7, y - 4); c.lineTo(x + 7, y + 4); c.fill(); }
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#120d26">
+<title>Pocket Arcade</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600;800&display=swap">
+<style>
+:root{
+  --bg:#120d26; --panel:#1d1640; --line:#2f2660; --ink:#f3f0ff; --muted:#b4acd8;
+  --shooter:#ff4f6d; --racing:#ffb02e; --sports:#2fd6a3; --arcade:#46a8ff; --puzzle:#c07bff;
+  --display:'Bungee',Impact,system-ui,sans-serif; --body:'Rubik',system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-tap-highlight-color:transparent}
+body{min-height:100vh;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+header{padding:28px 16px 8px;max-width:1100px;margin:0 auto}
+h1{font-family:var(--display);font-weight:400;margin:0;font-size:clamp(34px,9vw,60px);line-height:1;letter-spacing:.01em}
+h1 .n{color:var(--racing)}
+.sub{margin:8px 0 0;color:var(--muted);font-size:15px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:16px;max-width:1100px;margin:0 auto;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;font-family:var(--display);font-size:13px;padding:10px 16px;min-height:44px;border-radius:999px;border:2px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip:focus-visible,.tile:focus-visible,.close:focus-visible{outline:3px solid var(--racing);outline-offset:3px}
+main{max-width:1100px;margin:0 auto;padding:0 16px 40px;display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px}
+.tile{position:relative;display:flex;flex-direction:column;justify-content:flex-end;gap:6px;text-align:left;min-height:150px;padding:14px;border-radius:18px;border:0;background:var(--panel);color:var(--ink);cursor:pointer;overflow:hidden;font:inherit}
+.tile::before{content:"";position:absolute;inset:0 0 auto 0;height:58%;background:var(--c);opacity:.9;clip-path:polygon(0 0,100% 0,100% 72%,0 100%)}
+.tile .num{position:absolute;top:10px;right:12px;font-family:var(--display);font-size:13px;color:#120d26;opacity:.75}
+.tile .g{position:absolute;top:12px;left:14px;font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#120d26}
+.tile .name{position:relative;font-family:var(--display);font-size:17px;line-height:1.1}
+.tile .tag{position:relative;font-size:12.5px;line-height:1.3;color:var(--muted)}
+.tile:active{transform:scale(.97)}
+.tile.soon{cursor:default;background:transparent;border:2px dashed var(--line)}
+.tile.soon::before{display:none}
+.tile.soon .num{color:var(--muted)}
+.tile.soon .name{color:var(--muted);font-size:15px}
+.count{max-width:1100px;margin:0 auto;padding:0 16px 10px;color:var(--muted);font-size:13px}
+#player{position:fixed;inset:0;background:#000;z-index:10;display:none}
+#player.on{display:block}
+#player iframe{width:100%;height:100%;border:0;display:block}
+.close{position:absolute;top:calc(env(safe-area-inset-top,0px) + 6px);left:50%;transform:translateX(-50%);min-height:36px;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.35);background:rgba(18,13,38,.55);color:#fff;font-family:var(--display);font-size:12px;cursor:pointer;opacity:.75;backdrop-filter:blur(4px)}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:0 16px 28px}
+footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pocket <span class="n">Arcade</span></h1>
+  <p class="sub">Shooters, racers, sports and classics. Tap a game to play.</p>
+</header>
+<nav class="chips" id="chips" aria-label="Filter games"></nav>
+<p class="count" id="count"></p>
+<main id="grid"></main>
+<footer>by James McGuire · <a href="privacy.html">Privacy policy</a></footer>
+
+<div id="player" role="dialog" aria-label="Game">
+  <iframe id="frame" title="Game" allow="autoplay; fullscreen"></iframe>
+  <button class="close" id="close" aria-label="Back to the arcade">◀ ARCADE</button>
+</div>
+
+<script src="games.js"></script>
+<script>
+(function(){
+  var COLORS={Shooter:'var(--shooter)',Racing:'var(--racing)',Sports:'var(--sports)',Arcade:'var(--arcade)',Puzzle:'var(--puzzle)'};
+  var games=window.ARCADE_GAMES, total=window.ARCADE_TOTAL, filter='All';
+  var grid=document.getElementById('grid'), chips=document.getElementById('chips');
+  var genres=['All'].concat(Object.keys(COLORS).filter(function(g){return games.some(function(x){return x.genre===g})}));
+  if (games.length < total) genres.push('Coming soon');
+  genres.forEach(function(g){
+    var b=document.createElement('button');b.className='chip';b.textContent=g;b.setAttribute('aria-pressed',g==='All');
+    b.onclick=function(){filter=g;Array.prototype.forEach.call(chips.children,function(c){c.setAttribute('aria-pressed',c===b)});render()};
+    chips.appendChild(b);
+  });
+  function pad(n){return (n<10?'0':'')+n}
+  function render(){
+    grid.innerHTML='';
+    var shown=0;
+    for(var i=0;i<total;i++){
+      var g=games[i], el;
+      if(g){
+        if(filter!=='All'&&filter!==g.genre)continue;
+        el=document.createElement('button');el.className='tile';el.style.setProperty('--c',COLORS[g.genre]);
+        el.innerHTML='<span class="g"></span><span class="num"></span><span class="name"></span><span class="tag"></span>';
+        el.querySelector('.g').textContent=g.genre;el.querySelector('.num').textContent=pad(i+1);
+        el.querySelector('.name').textContent=g.name;el.querySelector('.tag').textContent=g.tag;
+        el.onclick=(function(id,name){return function(){open(id,name)}})(g.id,g.name);
+      }else{
+        if(filter!=='All'&&filter!=='Coming soon')continue;
+        el=document.createElement('div');el.className='tile soon';
+        el.innerHTML='<span class="num"></span><span class="name">Coming soon</span><span class="tag">New game on the way</span>';
+        el.querySelector('.num').textContent=pad(i+1);
+      }
+      grid.appendChild(el);shown++;
+    }
+    document.getElementById('count').textContent=games.length>=total?total+' games':games.length+' games ready · '+(total-games.length)+' more coming';
+  }
+  var player=document.getElementById('player'), frame=document.getElementById('frame');
+  function open(id,name){
+    frame.src='games/'+id+'.html';frame.title=name;player.classList.add('on');
+    history.pushState({game:id},'','#'+id);
+    setTimeout(function(){try{frame.contentWindow.focus()}catch(e){}},300);
+  }
+  function shut(){player.classList.remove('on');frame.src='about:blank'}
+  document.getElementById('close').onclick=function(){history.state&&history.state.game?history.back():shut()};
+  window.addEventListener('popstate',shut);
+  if(location.hash)history.replaceState(null,'',location.pathname);
+  render();
+  if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
+})();
+</script>
+</body>
+</html>

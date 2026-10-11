@@ -1,0 +1,503 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Spy Guy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@700;900&display=swap">
+<style>
+/* Layout: top-down highway that scrolls toward you on a canvas; HUD strip on top (score, free-car timer or lives, oil); thumb controls at the bottom — steer on the left, oil and fire on the right */
+:root {
+  --panel: #10141f;
+  --panel-fg: #eef1f8;
+  --gold: #ffd23f;
+  --blue: #1e6fff;
+  --blue-deep: #0c3c9c;
+  --red: #e8414a;
+  --red-deep: #9b1d25;
+  --oil: #2b2b33;
+  --display: "Bungee", "Impact", system-ui, sans-serif;
+  --body: "Nunito", system-ui, sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--panel); color: var(--panel-fg); font-family: var(--body); touch-action: manipulation; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.game { height: 100%; min-height: 540px; display: flex; flex-direction: column; }
+.hud { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 8px 16px; }
+.lbl { font-size: .62rem; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.val { font-family: var(--display); font-size: 1.2rem; color: var(--gold); font-variant-numeric: tabular-nums; }
+.mid { text-align: center; }
+.right { text-align: right; }
+.cars { display: flex; gap: 4px; justify-content: center; min-height: 22px; align-items: center; }
+.cars svg { width: 12px; height: 20px; }
+.free { font-family: var(--display); font-size: 1.05rem; color: #7dffb0; font-variant-numeric: tabular-nums; }
+#field { position: relative; flex: 1; min-height: 340px; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.controls { display: flex; justify-content: space-between; gap: 10px; padding: 10px 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.pair { display: flex; gap: 10px; }
+.ctl { font-family: var(--display); font-size: .95rem; color: #fff; border: 0; border-radius: 16px; width: 76px; height: 68px; display: grid; place-items: center; cursor: pointer; touch-action: none; background: #2a3246; box-shadow: 0 5px 0 #05070d; line-height: 1.1; }
+.ctl.fire { background: var(--red); box-shadow: 0 5px 0 var(--red-deep); }
+.ctl.oilb { background: #4b4b58; box-shadow: 0 5px 0 #17171d; }
+.ctl.on { transform: translateY(4px); box-shadow: 0 1px 0 #05070d; filter: brightness(1.15); }
+.ctl svg { width: 30px; height: 30px; }
+.ctl small { display: block; font-size: .7rem; color: var(--gold); }
+.ctl:focus-visible, .btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(16,20,31,.72); text-align: center; }
+.card { max-width: 340px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.card h1, .card h2 { font-family: var(--display); margin: 0; line-height: 1; color: var(--gold); text-shadow: 0 4px 0 var(--blue-deep); }
+.card h1 { font-size: clamp(2.6rem, 13vw, 3.6rem); }
+.card h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
+.card p { margin: 0; line-height: 1.45; }
+.card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.btn { font-family: var(--display); font-size: 1.2rem; color: var(--panel); background: var(--gold); border: 0; border-radius: 12px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 #b8860b; }
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b8860b; }
+.banner { position: absolute; left: 0; right: 0; top: 22%; text-align: center; font-family: var(--display); font-size: clamp(1.4rem, 7.5vw, 2.3rem); color: #fff; text-shadow: 0 3px 0 var(--blue-deep), 0 0 16px rgba(0,0,0,.5); pointer-events: none; padding-inline: 16px; }
+</style>
+
+<div class="game">
+  <div class="hud">
+    <div><div class="lbl">Score</div><div class="val" id="score">0</div></div>
+    <div class="mid"><div class="lbl" id="carLbl">Free cars</div><div class="cars" id="cars"></div></div>
+    <div class="right"><div class="lbl">Oil</div><div class="val" id="oil">3</div></div>
+  </div>
+  <div id="field">
+    <canvas id="cv"></canvas>
+    <div class="banner" id="banner" hidden></div>
+    <div class="overlay" id="start">
+      <div class="card">
+        <h1>Spy Guy</h1>
+        <ul>
+          <li><b>◀ ▶</b> steer your spy car</li>
+          <li><b>FIRE</b> hold to shoot enemy cars ahead</li>
+          <li><b>OIL</b> drops a slick that spins out cars behind you</li>
+          <li>Bump black cars off the road for big points</li>
+          <li>Drive up behind the supply truck for more oil</li>
+          <li>Don't hurt the civilians!</li>
+        </ul>
+        <p>Your first minute is on the house: crash all you want.</p>
+        <button class="btn" id="play">Tap to Drive</button>
+        <p id="best"></p>
+      </div>
+    </div>
+    <div class="overlay" id="over" hidden>
+      <div class="card">
+        <h2 id="overTitle">Mission Over</h2>
+        <p id="overText"></p>
+        <button class="btn" id="again">Drive Again</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="pair">
+      <button class="ctl" id="left" aria-label="Steer left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 L7 12 L15 20" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="ctl" id="right" aria-label="Steer right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4 L17 12 L9 20" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="pair">
+      <button class="ctl oilb" id="oilBtn">OIL<small id="oilSmall">3</small></button>
+      <button class="ctl fire" id="fire">FIRE</button>
+    </div>
+  </div>
+</div>
+
+<script>
+window.addEventListener('error', function (e) { var b = document.getElementById('banner'); if (b) { b.hidden = false; b.style.fontSize = '14px'; b.textContent = 'Error: ' + e.message; } });
+(function () {
+  const $ = id => document.getElementById(id);
+  const cv = $('cv'), ctx = cv.getContext('2d'), field = $('field');
+  let W = 0, H = 0, U = 1, VW = 360, VH = 600, OX = 0, pY = 460, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = field.clientWidth; H = field.clientHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    U = Math.min(W / 360, H / 540); VW = W / U; VH = H / U; OX = (VW - 360) / 2; pY = VH * .78;
+  }
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  function hash(i) { const s = Math.sin(i * 127.1 + 17.3) * 43758.5453; return s - Math.floor(s); }
+
+  // ---------- sound ----------
+  let ac = null, eng = null, engGain = null;
+  function audio() {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      if (!eng) {
+        eng = ac.createOscillator(); eng.type = 'sawtooth'; eng.frequency.value = 60;
+        const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 600;
+        engGain = ac.createGain(); engGain.gain.value = 0; eng.connect(f).connect(engGain).connect(ac.destination); eng.start();
+      }
+    } catch (e) {}
+  }
+  function noise(dur, vol, freq) {
+    if (!ac) return; const len = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    const s = ac.createBufferSource(); s.buffer = buf; const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+    const g = ac.createGain(); g.gain.value = vol; s.connect(f).connect(g).connect(ac.destination); s.start();
+  }
+  function tone(f1, f2, len, type, vol, at) {
+    if (!ac) return; const t = ac.currentTime + (at || 0), o = ac.createOscillator(), g = ac.createGain();
+    o.type = type || 'square'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + len);
+    g.gain.setValueAtTime(vol || .08, t); g.gain.exponentialRampToValueAtTime(.0001, t + len);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + len + .02);
+  }
+  const sfx = {
+    shot: () => noise(.04, .12, 3000),
+    bump: () => noise(.12, .35, 500),
+    boom: () => noise(.6, .8, 700),
+    oil: () => tone(300, 90, .3, 'sine', .15),
+    pick: () => [660, 880, 1100].forEach((n, i) => tone(n, n, .1, 'triangle', .1, i * .08)),
+    bad: () => tone(400, 150, .4, 'square', .08),
+    life: () => [880, 1320, 1760].forEach((n, i) => tone(n, n, .12, 'triangle', .1, i * .09))
+  };
+
+  // ---------- input ----------
+  const keys = { left: false, right: false, fire: false, up: false, down: false };
+  let oilQ = false;
+  function bindHold(id, k) {
+    const el = $(id);
+    const on = e => { e.preventDefault(); audio(); if (k === 'oil') oilQ = true; else keys[k] = true; el.classList.add('on'); try { el.setPointerCapture(e.pointerId); } catch (_) {} };
+    const off = () => { if (k !== 'oil') keys[k] = false; el.classList.remove('on'); };
+    el.addEventListener('pointerdown', on); el.addEventListener('pointerup', off);
+    el.addEventListener('pointercancel', off); el.addEventListener('lostpointercapture', off);
+    el.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  bindHold('left', 'left'); bindHold('right', 'right'); bindHold('fire', 'fire'); bindHold('oilBtn', 'oil');
+  const KM = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'fire', KeyJ: 'fire', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down' };
+  addEventListener('keydown', e => {
+    audio();
+    if (e.code === 'KeyX' || e.code === 'KeyK') { e.preventDefault(); oilQ = true; return; }
+    const k = KM[e.code]; if (k) { e.preventDefault(); keys[k] = true; const el = $(k === 'fire' ? 'fire' : k); if (el) el.classList.add('on'); }
+  });
+  addEventListener('keyup', e => { const k = KM[e.code]; if (k) { keys[k] = false; const el = $(k === 'fire' ? 'fire' : k); if (el) el.classList.remove('on'); } });
+
+  // ---------- road ----------
+  const SEG = 520;
+  let pts = [];
+  function pt(i) {
+    while (pts.length <= i) {
+      const n = pts.length;
+      if (n < 4) { pts.push({ cx: 180, hw: 108 }); continue; }
+      const p = pts[n - 1], widths = [112, 100, 88, 76, 64];
+      const hw = widths[Math.floor(Math.random() * Math.min(5, 2 + n / 8))];
+      const cx = clamp(p.cx + (Math.random() - .5) * 120, 24 + hw, 336 - hw);
+      pts.push({ cx, hw });
+    }
+    return pts[i];
+  }
+  function road(wy) {
+    const i = Math.max(0, Math.floor(wy / SEG)), t = clamp((wy - i * SEG) / SEG, 0, 1), s = t * t * (3 - 2 * t);
+    const a = pt(i), b = pt(i + 1);
+    return { cx: a.cx + (b.cx - a.cx) * s, hw: a.hw + (b.hw - a.hw) * s };
+  }
+  const THEMES = [
+    { name: 'Countryside', grass: '#4f9e3f', grass2: '#468f37', tree: '#2e7d32', tree2: '#43a047' },
+    { name: 'Autumn Pass', grass: '#b58a3a', grass2: '#a57c31', tree: '#d9622b', tree2: '#f0a13a' },
+    { name: 'Snow Ridge', grass: '#e6eef3', grass2: '#d6e1e8', tree: '#2f5e4a', tree2: '#3f7a60' },
+    { name: 'Desert Run', grass: '#dcb872', grass2: '#cfa962', tree: '#5a8f3a', tree2: '#6fa84a' }
+  ];
+  const ZONE = 6000;
+  const TH = wy => THEMES[Math.floor(Math.max(0, wy) / ZONE) % THEMES.length];
+
+  // ---------- state ----------
+  let P, cars = [], shots = [], eShots = [], slicks = [], parts = [], pops = [];
+  let dist = 0, scoreF = 0, score = 0, oil = 3, lives = 3, freeT = 60, phase = 'title', spawnT = 1.5, fireCd = 0, respawnT = 0, best = 0, nextLife = 10000, zone = 0, overT = 0;
+  try { best = +localStorage.getItem('spyguy-best') || 0; } catch (e) {}
+  const cruise = () => 330 + Math.min(170, dist / 300);
+  function newPlayer() { P = { x: road(dist).cx, vx: 0, v: 200, inv: 2.5, alive: true }; }
+  function newGame() {
+    pts = []; cars = []; shots = []; eShots = []; slicks = []; parts = []; pops = [];
+    dist = 0; scoreF = 0; score = 0; oil = 3; lives = 3; freeT = 60; nextLife = 10000; zone = 0; spawnT = 1.5;
+    newPlayer(); phase = 'play'; banner('Go, Spy Guy!', 1200); lastHud = ''; hud();
+  }
+  function begin(e) {
+    if (e) e.preventDefault();
+    if ($('start').hidden && $('over').hidden) return;
+    audio(); $('start').hidden = true; $('over').hidden = true; newGame();
+  }
+  $('play').addEventListener('click', begin); $('start').addEventListener('pointerup', begin); $('again').addEventListener('click', begin);
+  function banner(t, ms) { const b = $('banner'); b.textContent = t; b.hidden = false; clearTimeout(banner.t); banner.t = setTimeout(() => b.hidden = true, ms || 1200); }
+  function pop(x, sy, text, col) { pops.push({ x, wy: dist + pY - sy, text, col: col || '#ffd23f', t: 1.1 }); }
+  function addScore(n) { scoreF += n; }
+  const CAR = '<svg viewBox="0 0 12 20" aria-hidden="true"><rect x="1" y="1" width="10" height="18" rx="3" fill="#1e6fff"/><rect x="5" y="1" width="2" height="18" fill="#ffd23f"/><rect x="2.5" y="4" width="7" height="3" rx="1" fill="#0a1a3a"/></svg>';
+  let lastHud = '';
+  function hud() {
+    const free = freeT > 0;
+    const k = score + '|' + oil + '|' + lives + '|' + (free ? Math.ceil(freeT) : 'x');
+    if (k === lastHud) return; lastHud = k;
+    $('score').textContent = score.toLocaleString();
+    $('oil').textContent = oil; $('oilSmall').textContent = oil;
+    if (free) { $('carLbl').textContent = 'Free cars'; $('cars').innerHTML = '<span class="free">0:' + String(Math.ceil(freeT)).padStart(2, '0') + '</span>'; }
+    else { $('carLbl').textContent = 'Cars'; $('cars').innerHTML = CAR.repeat(Math.max(0, lives)); }
+  }
+
+  // ---------- cars ----------
+  const CIV = ['#f2f2f2', '#ffd23f', '#7fd3ff', '#9ae66e', '#ff9ec9', '#c9a8ff', '#ffb36b'];
+  function spawn() {
+    const r = Math.random();
+    let type = r < .5 ? 'civ' : r < .76 ? 'rammer' : r < .9 ? (dist > 5000 ? 'gunner' : 'civ') : 'truck';
+    if (type === 'truck' && (oil >= 5 || cars.some(c => c.type === 'truck'))) type = 'civ';
+    const behind = type === 'rammer' && Math.random() < .5;
+    const wy = behind ? dist - (VH - pY + 70) : dist + pY + 70;
+    let off = (Math.random() - .5) * 1.2;
+    if (type === 'truck') off = 0;
+    for (const c of cars) if (Math.abs(c.wy - wy) < 90 && Math.abs(c.off - off) < .4) off = clamp(-c.off, -.6, .6);
+    const pv = P ? P.v : cruise();
+    const c = { type, wy, off, hp: 1, w: 22, h: 38, cd: 1.5, spin: 0, spinDir: 1, bumped: false, oiled: false, color: CIV[Math.floor(Math.random() * CIV.length)], leaving: false };
+    if (type === 'civ') c.v = cruise() * (.5 + Math.random() * .2);
+    if (type === 'rammer') { c.v = behind ? pv + 90 : pv - 90; c.hp = 2; c.w = 24; c.h = 40; }
+    if (type === 'gunner') { c.v = pv - 60; c.hp = 3; c.w = 24; c.h = 42; }
+    if (type === 'truck') { c.v = cruise() * .6; c.w = 28; c.h = 64; }
+    cars.push(c);
+  }
+  function wreck(c, pts, text) {
+    c.dead = true; const sy = pY - (c.wy - dist), x = carX(c);
+    burst(x, sy, ['#ffd23f', '#ff7a1a', '#fff', '#555'], 26); sfx.boom();
+    if (pts > 0) { addScore(pts); pop(x, sy, text || String(pts)); }
+    else if (pts < 0) { scoreF = Math.max(0, scoreF + pts); pop(x, sy, 'Civilian! ' + pts, '#ff6b6b'); sfx.bad(); }
+  }
+  function carX(c) { const r = road(c.wy); return r.cx + c.off * r.hw; }
+  function burst(x, sy, cols, n) { for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, s = 40 + Math.random() * 160; parts.push({ x, wy: dist + pY - sy, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: .5 + Math.random() * .5, c: cols[i % cols.length], r: 2 + Math.random() * 3 }); } }
+  function crashPlayer() {
+    if (!P.alive) return;
+    P.alive = false; burst(P.x, pY, ['#1e6fff', '#ffd23f', '#fff', '#ff7a1a'], 40); sfx.boom();
+    if (freeT <= 0) lives--;
+    respawnT = 1.6; banner(freeT > 0 ? 'Free car!' : lives > 0 ? 'Car lost!' : 'Out of cars!', 1100); lastHud = ''; hud();
+    if (lives <= 0) { phase = 'ending'; overT = 1.4; }
+  }
+  function gameOver() {
+    phase = 'over'; score = Math.floor(scoreF);
+    const nb = score > best; if (nb) { best = score; try { localStorage.setItem('spyguy-best', best); } catch (e) {} }
+    $('overTitle').textContent = nb ? 'New High Score!' : 'Mission Over';
+    $('overText').textContent = 'You drove ' + (dist / 1000).toFixed(1) + ' miles and scored ' + score.toLocaleString() + '. Best: ' + best.toLocaleString() + '.';
+    $('over').hidden = false;
+  }
+
+  function update(dt) {
+    parts.forEach(p => { p.t -= dt; p.x += p.vx * dt; p.wy -= p.vy * dt; p.vx *= .96; p.vy *= .96; }); parts = parts.filter(p => p.t > 0);
+    pops.forEach(p => { p.t -= dt; p.wy += 30 * dt; }); pops = pops.filter(p => p.t > 0);
+    if (phase === 'ending') { overT -= dt; if (overT <= 0) gameOver(); }
+    if (phase !== 'play' && phase !== 'ending') return;
+    const playing = phase === 'play';
+    const cr = cruise();
+
+    if (P.alive && playing) {
+      if (freeT > 0) { freeT -= dt; if (freeT <= 0) { freeT = 0; banner('Free time over. Drive carefully!', 1600); } }
+      const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+      P.vx += (dir * 200 - P.vx) * Math.min(1, dt * 9); P.x += P.vx * dt;
+      const target = cr + (keys.up ? 90 : 0) - (keys.down ? 150 : 0);
+      P.v += Math.sign(target - P.v) * Math.min(Math.abs(target - P.v), 240 * dt);
+      dist += P.v * dt; scoreF += P.v * dt / 25;
+      P.inv -= dt;
+      const r = road(dist);
+      if (Math.abs(P.x - r.cx) > r.hw - 6) crashPlayer();
+      fireCd -= dt;
+      if (P.alive && keys.fire && fireCd <= 0) { fireCd = .12; shots.push({ x: P.x - 5, sy: pY - 22 }, { x: P.x + 5, sy: pY - 22 }); sfx.shot(); }
+      if (oilQ) { if (oil > 0) { oil--; slicks.push({ x: P.x, wy: dist - 26, t: 7 }); sfx.oil(); } oilQ = false; }
+    } else if (playing) {
+      dist += 120 * dt; respawnT -= dt; if (respawnT <= 0) newPlayer();
+      oilQ = false;
+    } else dist += 80 * dt;
+    if (score !== Math.floor(scoreF)) { score = Math.floor(scoreF); if (score >= nextLife && freeT <= 0) { nextLife += 10000; lives++; sfx.life(); banner('Extra car!', 900); } }
+
+    // zone banner
+    const z = Math.floor(dist / ZONE); if (z !== zone) { zone = z; banner(TH(dist).name, 1400); }
+
+    // spawn
+    spawnT -= dt;
+    if (playing && spawnT <= 0 && cars.length < 7) { spawnT = Math.max(.55, 1.5 - dist / 60000) + Math.random() * .8; spawn(); }
+
+    // cars
+    const pr = road(dist), pOff = P ? (P.x - pr.cx) / pr.hw : 0;
+    cars.forEach(c => {
+      const sy = pY - (c.wy - dist);
+      if (c.spin > 0) { c.spin -= dt; c.off += c.spinDir * dt * 1.4; c.v *= Math.pow(.5, dt); }
+      else if (c.type === 'civ') { /* cruise in lane */ }
+      else if (c.type === 'rammer' && P.alive) {
+        const ry = sy - pY;
+        c.v += clamp((P.v + (ry > 0 ? 70 : ry < -40 ? -70 : 0)) - c.v, -300 * dt, 300 * dt);
+        if (Math.abs(ry) < 160) c.off += clamp(pOff - c.off, -1, 1) * dt * (Math.abs(ry) < 50 ? 2.2 : .9);
+      } else if (c.type === 'gunner' && P.alive) {
+        const want = pY - 210; c.v = P.v + clamp((sy - want) * 1.5, -120, 160);
+        c.off += clamp(pOff - c.off, -1, 1) * dt * .6;
+        c.cd -= dt;
+        if (c.cd <= 0 && sy > 10 && sy < pY - 60) { c.cd = 1.4 + Math.random(); eShots.push({ x: carX(c), wy: c.wy - 24, v: c.v - 280 }); sfx.shot(); }
+      } else if (c.type === 'truck' && !c.leaving) c.v = cr * .6;
+      if (c.type !== 'truck' && c.type !== 'civ' && !c.spin) c.off = clamp(c.off, -.9, .9);
+      if (c.type === 'civ' && !c.spin && !c.bumped) c.off = clamp(c.off, -.85, .85);
+      c.wy += c.v * dt;
+      if (Math.abs(c.off) > 1.08) {
+        if (c.type === 'civ') wreck(c, c.bumped ? -500 : 0);
+        else if (c.type === 'truck') wreck(c, 0);
+        else wreck(c, c.oiled ? 750 : 500, c.oiled ? 'Spin out! 750' : 'Off the road! 500');
+      }
+      if (sy < -400 || sy > VH + 400) c.gone = true;
+    });
+
+    // player vs cars
+    if (P.alive && playing) {
+      for (const c of cars) {
+        if (c.dead) continue;
+        const cx = carX(c), sy = pY - (c.wy - dist), dx = cx - P.x, dy = sy - pY;
+        const ox = (c.w + 22) / 2 - Math.abs(dx), oy = (c.h + 40) / 2 - Math.abs(dy);
+        if (ox <= 0 || oy <= 0) continue;
+        const rc = road(c.wy);
+        if (c.type === 'truck' && dy < 0 && oy < ox && !c.leaving) {
+          c.leaving = true; c.v = P.v + 220; oil = Math.min(9, oil + 5); pop(cx, sy, 'OIL +5', '#7dffb0'); sfx.pick(); addScore(250);
+          continue;
+        }
+        if (oy < ox * .8) {
+          if (dy < 0) { P.v = Math.min(P.v, c.v - 20); c.wy += oy; }
+          else { c.wy -= oy; c.v = Math.min(c.v, P.v - 30); }
+          c.bumped = true; sfx.bump();
+        } else {
+          const s = Math.sign(dx) || 1, heavy = c.type === 'rammer' ? .6 : c.type === 'truck' ? .9 : c.type === 'gunner' ? .5 : .3;
+          P.x -= s * ox * heavy; P.vx = -s * 150 * heavy;
+          c.off += (s * ox * (1 - heavy) + s * 14 * (1 - heavy)) / rc.hw;
+          c.bumped = true; sfx.bump();
+        }
+      }
+      const r = road(dist);
+      if (Math.abs(P.x - r.cx) > r.hw - 6) crashPlayer();
+    }
+
+    // shots
+    shots.forEach(s => { s.sy -= 700 * dt; });
+    shots = shots.filter(s => {
+      if (s.sy < -20) return false;
+      for (const c of cars) {
+        if (c.dead) continue;
+        const cx = carX(c), sy = pY - (c.wy - dist);
+        if (Math.abs(s.x - cx) < c.w / 2 && Math.abs(s.sy - sy) < c.h / 2) {
+          if (c.type === 'truck') return false;
+          c.hp--; burst(s.x, s.sy, ['#fff', '#ffd23f'], 3);
+          if (c.hp <= 0) wreck(c, c.type === 'civ' ? -500 : c.type === 'gunner' ? 700 : 400);
+          return false;
+        }
+      }
+      return true;
+    });
+    // enemy shots
+    eShots.forEach(b => { b.wy += b.v * dt; });
+    eShots = eShots.filter(b => {
+      const sy = pY - (b.wy - dist);
+      if (sy > VH + 20 || sy < -40) return false;
+      if (P.alive && playing && P.inv <= 0 && Math.abs(b.x - P.x) < 11 && Math.abs(sy - pY) < 20) { crashPlayer(); return false; }
+      return true;
+    });
+    // oil slicks
+    slicks.forEach(o => { o.t -= dt; });
+    slicks = slicks.filter(o => o.t > 0 && pY - (o.wy - dist) < VH + 60);
+    slicks.forEach(o => cars.forEach(c => {
+      if (c.dead || c.spin > 0 || c.type === 'truck') return;
+      if (Math.abs(carX(c) - o.x) < 20 && Math.abs(c.wy - o.wy) < 26) { c.spin = 2; c.spinDir = Math.random() < .5 ? -1 : 1; c.oiled = true; if (c.type === 'civ') c.bumped = false; }
+    }));
+    cars = cars.filter(c => !c.dead && !c.gone);
+    hud();
+  }
+
+  // ---------- drawing ----------
+  function rrect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  function drawCar(c, x, sy, now) {
+    const w = c.w, h = c.h;
+    ctx.save(); ctx.translate(x, sy);
+    if (c.spin > 0) ctx.rotate(c.spin * 7 * c.spinDir);
+    ctx.fillStyle = 'rgba(0,0,0,.28)'; rrect(-w / 2 + 3, -h / 2 + 4, w, h, 6); ctx.fill();
+    ctx.fillStyle = '#15151a';
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, syy]) => ctx.fillRect(sx * w / 2 - (sx > 0 ? 2 : 3), syy * h * .3 - 5, 5, 10));
+    if (c.type === 'truck') {
+      ctx.fillStyle = '#2d6b4a'; rrect(-w / 2, -h / 2, w, 18, 5); ctx.fill();
+      ctx.fillStyle = '#1b2a3a'; ctx.fillRect(-w / 2 + 4, -h / 2 + 4, w - 8, 6);
+      ctx.fillStyle = '#e6e6ea'; rrect(-w / 2, -h / 2 + 20, w, h - 20, 3); ctx.fill();
+      ctx.fillStyle = '#e8414a'; ctx.font = '9px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('OIL', 0, 8);
+      ctx.fillStyle = '#ffd23f'; ctx.fillRect(-w / 2 + 3, h / 2 - 5, w - 6, 3);
+      ctx.restore(); return;
+    }
+    const body = c.type === 'player' ? '#1e6fff' : c.type === 'rammer' ? '#1f1f24' : c.type === 'gunner' ? '#8a1f2b' : c.color;
+    ctx.fillStyle = body; rrect(-w / 2, -h / 2, w, h, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; rrect(-w / 2 + 2, -h / 2 + 2, w * .35, h - 4, 5); ctx.fill();
+    ctx.fillStyle = '#0d1a30'; rrect(-w / 2 + 3, -h / 2 + 8, w - 6, 8, 3); ctx.fill();
+    ctx.fillStyle = '#26324a'; rrect(-w / 2 + 4, h / 2 - 12, w - 8, 5, 2); ctx.fill();
+    if (c.type === 'player') {
+      ctx.fillStyle = '#ffd23f'; ctx.fillRect(-4, -h / 2, 2.5, h); ctx.fillRect(1.5, -h / 2, 2.5, h);
+      ctx.fillStyle = '#fff7c0'; ctx.fillRect(-w / 2 + 3, -h / 2, 4, 2); ctx.fillRect(w / 2 - 7, -h / 2, 4, 2);
+      if (keys.fire && P.alive) { ctx.fillStyle = '#fff3a0'; ctx.beginPath(); ctx.arc(-5, -h / 2 - 3, 2.5 + Math.random() * 2, 0, 7); ctx.arc(5, -h / 2 - 3, 2.5 + Math.random() * 2, 0, 7); ctx.fill(); }
+    } else if (c.type === 'rammer') {
+      ctx.fillStyle = '#c9ccd6';
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(-w / 2, i * 10 - 4); ctx.lineTo(-w / 2 - 6, i * 10); ctx.lineTo(-w / 2, i * 10 + 4); ctx.fill(); ctx.beginPath(); ctx.moveTo(w / 2, i * 10 - 4); ctx.lineTo(w / 2 + 6, i * 10); ctx.lineTo(w / 2, i * 10 + 4); ctx.fill(); }
+      ctx.fillStyle = '#ff3b3b'; ctx.fillRect(-w / 2 + 3, h / 2 - 3, 4, 2); ctx.fillRect(w / 2 - 7, h / 2 - 3, 4, 2);
+    } else if (c.type === 'gunner') {
+      ctx.fillStyle = '#3a0e14'; ctx.beginPath(); ctx.arc(0, 4, 7, 0, 7); ctx.fill();
+      ctx.fillStyle = '#222'; ctx.fillRect(-2, 4, 4, 16);
+    } else {
+      ctx.fillStyle = '#ff3b3b'; ctx.fillRect(-w / 2 + 3, h / 2 - 3, 4, 2); ctx.fillRect(w / 2 - 7, h / 2 - 3, 4, 2);
+    }
+    ctx.restore();
+  }
+  function tree(x, sy, s, th) {
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.arc(x + 4, sy + 5, 13 * s, 0, 7); ctx.fill();
+    if (th.name === 'Desert Run') {
+      ctx.fillStyle = th.tree; ctx.fillRect(x - 3 * s, sy - 12 * s, 6 * s, 24 * s); ctx.fillRect(x - 9 * s, sy - 4 * s, 6 * s, 4 * s); ctx.fillRect(x - 9 * s, sy - 10 * s, 4 * s, 8 * s); ctx.fillRect(x + 3 * s, sy, 6 * s, 4 * s); ctx.fillRect(x + 5 * s, sy - 6 * s, 4 * s, 8 * s);
+      return;
+    }
+    ctx.fillStyle = th.tree; ctx.beginPath(); ctx.arc(x, sy, 13 * s, 0, 7); ctx.fill();
+    ctx.fillStyle = th.tree2; ctx.beginPath(); ctx.arc(x - 3 * s, sy - 3 * s, 8 * s, 0, 7); ctx.fill();
+  }
+  function draw(now) {
+    ctx.setTransform(DPR * U, 0, 0, DPR * U, 0, 0);
+    const th = TH(dist);
+    ctx.fillStyle = th.grass; ctx.fillRect(0, 0, VW, VH);
+    ctx.save(); ctx.translate(OX, 0);
+    // grass stripes
+    ctx.fillStyle = th.grass2;
+    for (let i = Math.floor((dist + pY - VH) / 80); i * 80 < dist + pY + 80; i++) if (i % 2) { const sy = pY - (i * 80 - dist); ctx.fillRect(-OX, sy - 80, VW, 40); }
+    // road polygon
+    const step = 6, L = [], R = [];
+    for (let sy = -step; sy <= VH + step; sy += step) { const r = road(dist + pY - sy); L.push([r.cx - r.hw, sy]); R.push([r.cx + r.hw, sy]); }
+    ctx.fillStyle = '#4c4f58'; ctx.beginPath(); L.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); for (let i = R.length - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]); ctx.closePath(); ctx.fill();
+    for (let sy = -step; sy <= VH + step; sy += step) {
+      const wy = dist + pY - sy, r = road(wy), stripe = Math.floor(wy / 24) % 2;
+      ctx.fillStyle = stripe ? '#e8414a' : '#f4f4f4';
+      ctx.fillRect(r.cx - r.hw - 1, sy, 6, step + .5); ctx.fillRect(r.cx + r.hw - 5, sy, 6, step + .5);
+      if (Math.floor(wy / 36) % 2 === 0) {
+        ctx.fillStyle = '#e8e2c8';
+        if (r.hw > 84) { ctx.fillRect(r.cx - r.hw / 3 - 1.5, sy, 3, step + .5); ctx.fillRect(r.cx + r.hw / 3 - 1.5, sy, 3, step + .5); }
+        else ctx.fillRect(r.cx - 1.5, sy, 3, step + .5);
+      }
+    }
+    // roadside trees
+    for (let i = Math.floor((dist + pY - VH - 40) / 70); i * 70 < dist + pY + 60; i++) {
+      const wy = i * 70, sy = pY - (wy - dist), r = road(wy), t = TH(wy);
+      if (hash(i) < .7) { const x = r.cx - r.hw - 22 - hash(i + .3) * 70; if (x > -OX - 20) tree(x, sy, .8 + hash(i + .7) * .5, t); }
+      if (hash(i + 9) < .7) { const x = r.cx + r.hw + 22 + hash(i + 4.1) * 70; if (x < 360 + OX + 20) tree(x, sy, .8 + hash(i + 2.2) * .5, t); }
+    }
+    // oil slicks
+    slicks.forEach(o => { const sy = pY - (o.wy - dist); ctx.globalAlpha = Math.min(1, o.t); ctx.fillStyle = '#15151c'; ctx.beginPath(); ctx.ellipse(o.x, sy, 18, 12, 0, 0, 7); ctx.fill(); ctx.fillStyle = 'rgba(160,120,255,.35)'; ctx.beginPath(); ctx.ellipse(o.x - 5, sy - 3, 7, 3, .4, 0, 7); ctx.fill(); ctx.globalAlpha = 1; });
+    cars.forEach(c => drawCar(c, carX(c), pY - (c.wy - dist), now));
+    if (P && P.alive && !(P.inv > 0 && Math.floor(P.inv * 10) % 2)) drawCar({ type: 'player', w: 22, h: 40, spin: 0 }, P.x, pY, now);
+    ctx.fillStyle = '#fff6b0'; shots.forEach(s => ctx.fillRect(s.x - 1.5, s.sy - 5, 3, 10));
+    ctx.fillStyle = '#ff5a3a'; eShots.forEach(b => { ctx.beginPath(); ctx.arc(b.x, pY - (b.wy - dist), 3.5, 0, 7); ctx.fill(); });
+    parts.forEach(p => { ctx.globalAlpha = Math.min(1, p.t * 2); ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, pY - (p.wy - dist), p.r, 0, 7); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    pops.forEach(p => { ctx.globalAlpha = Math.min(1, p.t * 1.5); ctx.fillStyle = p.col; ctx.font = '13px Bungee, Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(p.text, p.x, pY - (p.wy - dist)); });
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (field.clientWidth !== W || field.clientHeight !== H) resize();
+    if (!W || !H) return;
+    const dt = Math.min(.033, (now - last) / 1000); last = now;
+    if (phase === 'title') dist += 90 * dt; else update(dt);
+    draw(now);
+    if (engGain && ac) {
+      const on = (phase === 'play' || phase === 'ending') && P && P.alive;
+      engGain.gain.setTargetAtTime(on ? .045 : 0, ac.currentTime, .1);
+      eng.frequency.setTargetAtTime(50 + (P ? P.v : 0) * .18, ac.currentTime, .1);
+    }
+  }
+  $('best').textContent = best ? 'High score: ' + best.toLocaleString() : '';
+  hud();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>

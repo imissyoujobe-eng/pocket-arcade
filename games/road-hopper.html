@@ -1,0 +1,113 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Road Hopper</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600&display=swap">
+<style>
+/* Layout: tall lane board centered; swipe or tap a side of the board to hop; HUD above */
+:root{--grass:#3fa34d;--road:#2e2f38;--river:#2277c9;--log:#8d5a2b;--ink:#fffbe8;--frog:#7ee04a;--bg:#14161c;
+--display:'Bungee',Impact,system-ui,sans-serif;--body:'Rubik',system-ui,sans-serif;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#app{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding-inline:16px;box-sizing:border-box}
+#hud{width:min(100%,480px);display:flex;justify-content:space-between;align-items:center;font-family:var(--display);font-size:17px;font-variant-numeric:tabular-nums}
+#timer{flex:1;height:8px;margin-inline:12px;background:#333;border-radius:4px;overflow:hidden}
+#timer i{display:block;height:100%;background:var(--frog);width:100%}
+#stage{position:relative;height:min(calc(100% - 50px),calc((100vw - 32px)*1.35));aspect-ratio:13/17.5;max-width:100%}
+canvas{width:100%;height:100%;display:block;border-radius:6px}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(20,22,28,.82);border-radius:6px;padding-inline:16px}
+#overlay h1{font-family:var(--display);font-size:clamp(36px,11vw,60px);margin:0;color:var(--frog);text-shadow:0 4px 0 #2f7a14}
+#overlay p{margin:0;max-width:30ch;line-height:1.5}
+#go{font-family:var(--display);font-size:20px;padding:12px 30px;border:0;border-radius:999px;background:var(--frog);color:#14300a;box-shadow:0 5px 0 #2f7a14;cursor:pointer}
+#go:active{transform:translateY(3px)}#go:focus-visible{outline:3px solid #fff;outline-offset:3px}
+</style>
+<div id="app">
+  <div id="hud"><span id="sc">0</span><div id="timer"><i id="tb"></i></div><span id="lv">🐸🐸🐸</span></div>
+  <div id="stage"><canvas id="c" width="416" height="560"></canvas>
+    <div id="overlay"><h1>ROAD HOPPER</h1><p>Get Pip the toad across the highway and over the river logs to all five lily pads. Swipe, tap a side of the screen, or use the arrow keys.</p><div id="best"></div><button id="go">Play</button></div>
+  </div>
+</div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
+const C=13,R=17.5,T=32,ROWS=17;
+// row layout from top (0) to bottom (16): 0 homes, 1-5 river, 6 median, 7-11 road, 12 start? -> use 13 rows+extra grass
+// rows: 0 homes,1-5 river,6 safe,7-11 road,12 start (we use 13 rows *32=416 + padding)
+let lanes,frog,homes,score,lives,level,state='menu',timeLeft,AC,best=0,maxRow,deathT=0;
+try{best=+localStorage.getItem('hop-best')||0}catch(e){}$('best').textContent=best?'BEST '+best:'';
+const RH=560/14; // 14 rows tall incl. top bar
+function beep(f,d,v=.06,type='square'){if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}
+const W=416;
+function build(){
+  const s=1+(level-1)*.18;
+  const cfg=[ // row, type, speed, length, gap, color
+    [1,'log',50*s,3,3],[2,'turtle',-40*s,2,3],[3,'log',70*s,4,4],[4,'log',-35*s,2,3],[5,'turtle',55*s,3,3],
+    [7,'truck',-45*s,2,4],[8,'car',80*s,1,4],[9,'car',-60*s,1,3],[10,'car',40*s,1,3],[11,'car',-70*s,1,4]];
+  const carCols=['#ff4f5e','#ffd23f','#4fc3f7','#c77dff','#ff9f1c'];
+  lanes=cfg.map(([row,type,speed,len,gap],i)=>{const items=[];const step=(len+gap)*T;for(let x=Math.random()*step;x<W+step;x+=step)items.push({x,w:len*T});
+    return{row,type,speed,items,step,col:carCols[i%5]}});
+}
+function reset(){frog={x:6,y:12,px:6*T,anim:0};maxRow=12;timeLeft=30}
+function start(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}score=0;lives=3;level=1;homes=[0,0,0,0,0];build();reset();state='play';hud();$('overlay').hidden=true}
+$('go').onclick=start;
+function hud(){$('sc').textContent=score;$('lv').textContent='🐸'.repeat(lives)}
+function hop(dx,dy){if(state!=='play'||deathT>0)return;const nx=Math.round(frog.px/T)+dx,ny=frog.y+dy;if(nx<0||nx>=C||ny<0||ny>12)return;
+  frog.px=nx*T;frog.y=ny;frog.anim=1;frog.dir=[dx,dy];beep(dy<0?520:440,.05);
+  if(ny<maxRow){maxRow=ny;score+=10;hud()}
+  if(ny===0){const slot=[1,4,6,8,11].map(c=>c*T);const i=slot.findIndex(sx=>Math.abs(frog.px-sx)<T*.8);
+    if(i>=0&&!homes[i]){homes[i]=1;score+=50+Math.floor(timeLeft)*5;hud();beep(784,.12);setTimeout(()=>beep(1046,.18),120);
+      if(homes.every(h=>h)){level++;score+=1000;homes=[0,0,0,0,0];build()}reset()}else die()}}
+addEventListener('keydown',e=>{const m={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]}[e.key];
+  if(m){hop(...m);e.preventDefault()}if((e.key===' '||e.key==='Enter')&&state!=='play')start()});
+let sx,sy;
+cv.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY});
+cv.addEventListener('pointerup',e=>{const dx=e.clientX-sx,dy=e.clientY-sy;
+  if(Math.hypot(dx,dy)>24){Math.abs(dx)>Math.abs(dy)?hop(Math.sign(dx),0):hop(0,Math.sign(dy));return}
+  const r=cv.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
+  if(y>.8)hop(0,1);else if(x<.3)hop(-1,0);else if(x>.7)hop(1,0);else hop(0,-1)});
+function die(){if(deathT>0)return;deathT=.8;lives--;hud();beep(150,.4,.1,'sawtooth')}
+const Y=r=>RH+r*RH; // row to pixel top
+function update(dt){
+  if(deathT>0){deathT-=dt;if(deathT<=0){if(lives<=0){gameOver();return}reset()}return}
+  timeLeft-=dt;$('tb').style.width=Math.max(0,timeLeft/30*100)+'%';if(timeLeft<=0)die();
+  frog.anim=Math.max(0,frog.anim-dt*8);
+  for(const l of lanes)for(const it of l.items){it.x+=l.speed*dt;const span=Math.ceil((W+l.step)/l.step)*l.step;if(l.speed>0&&it.x>W)it.x-=span;if(l.speed<0&&it.x+it.w<0)it.x+=span}
+  const lane=lanes.find(l=>l.row===frog.y);const fx=frog.px+T/2;
+  if(lane){const on=lane.items.find(it=>fx>it.x+4&&fx<it.x+it.w-4);
+    if(lane.type==='log'||lane.type==='turtle'){if(!on)die();else{frog.px+=lane.speed*dt;if(frog.px<-T/2||frog.px>W-T/2)die()}}
+    else if(on)die()}
+}
+function gameOver(){state='over';if(score>best){best=score;try{localStorage.setItem('hop-best',best)}catch(e){}}
+  $('overlay').querySelector('p').textContent=`Pip made it to level ${level} with ${score} points.`;$('best').textContent='BEST '+best;$('go').textContent='Play again';$('overlay').hidden=false}
+function draw(t){
+  ctx.fillStyle='#14161c';ctx.fillRect(0,0,W,560);
+  // home bank
+  ctx.fillStyle='#1f6e2b';ctx.fillRect(0,Y(0),W,RH);
+  [1,4,6,8,11].forEach((c,i)=>{ctx.fillStyle='#2277c9';ctx.fillRect(c*T-6,Y(0)+4,T+12,RH-4);ctx.fillStyle='#4caf50';ctx.beginPath();ctx.arc(c*T+T/2,Y(0)+RH/2+2,13,.4,Math.PI*2-.4);ctx.lineTo(c*T+T/2,Y(0)+RH/2+2);ctx.fill();
+    if(homes&&homes[i])drawFrog(c*T+T/2,Y(0)+RH/2+2,0,[0,-1])});
+  ctx.fillStyle='#2277c9';ctx.fillRect(0,Y(1),W,RH*5);
+  ctx.strokeStyle='rgba(255,255,255,.12)';for(let r=1;r<6;r++){ctx.beginPath();for(let x=0;x<W;x+=20)ctx.lineTo(x,Y(r)+RH/2+Math.sin(x/20+t/400+r)*3);ctx.stroke()}
+  ctx.fillStyle='#7b4fd1';ctx.fillRect(0,Y(6),W,RH);ctx.fillStyle='#6a40bd';for(let x=0;x<W;x+=24)ctx.fillRect(x,Y(6)+6,12,4);
+  ctx.fillStyle='#2e2f38';ctx.fillRect(0,Y(7),W,RH*5);
+  ctx.fillStyle='#f5f5f5';for(let r=8;r<12;r++)for(let x=0;x<W;x+=40)ctx.fillRect(x+8,Y(r)-1,20,2);
+  ctx.fillStyle='#7b4fd1';ctx.fillRect(0,Y(12),W,RH);ctx.fillStyle='#6a40bd';for(let x=12;x<W;x+=24)ctx.fillRect(x,Y(12)+8,12,4);
+  if(lanes)for(const l of lanes)for(const it of l.items){const y=Y(l.row);
+    if(l.type==='log'){ctx.fillStyle='#8d5a2b';ctx.beginPath();ctx.roundRect(it.x,y+6,it.w,RH-12,10);ctx.fill();ctx.fillStyle='#6b4220';for(let k=10;k<it.w-6;k+=22)ctx.fillRect(it.x+k,y+12,12,3);ctx.fillStyle='#c4884d';ctx.beginPath();ctx.ellipse(it.x+it.w-6,y+RH/2,4,RH/2-7,0,0,7);ctx.fill()}
+    else if(l.type==='turtle'){const n=Math.round(it.w/T);const sub=Math.sin(t/700+it.x)>.85;for(let k=0;k<n;k++){const cx=it.x+k*T+T/2,cy=y+RH/2;ctx.globalAlpha=sub?.35:1;ctx.fillStyle='#2e7d32';ctx.beginPath();ctx.arc(cx,cy,13,0,7);ctx.fill();ctx.fillStyle='#ff7043';ctx.beginPath();ctx.arc(cx+(l.speed>0?14:-14),cy,5,0,7);ctx.fill();ctx.fillStyle='#43a047';ctx.beginPath();ctx.arc(cx,cy,8,0,7);ctx.fill();ctx.globalAlpha=1}}
+    else{const y2=y+7,h=RH-14;ctx.fillStyle=l.type==='truck'?'#e0e0e0':l.col;ctx.beginPath();ctx.roundRect(it.x,y2,it.w,h,6);ctx.fill();
+      if(l.type==='truck'){ctx.fillStyle=l.col;ctx.fillRect(l.speed<0?it.x:it.x+it.w-18,y2,18,h)}
+      ctx.fillStyle='rgba(180,230,255,.85)';const fr=l.speed>0?it.x+it.w-12:it.x+5;ctx.fillRect(fr,y2+4,7,h-8);
+      ctx.fillStyle='#111';ctx.fillRect(it.x+5,y2-3,8,4);ctx.fillRect(it.x+it.w-13,y2-3,8,4);ctx.fillRect(it.x+5,y2+h-1,8,4);ctx.fillRect(it.x+it.w-13,y2+h-1,8,4)}}
+  // death-turtles: diving turtles unsafe
+  if(frog&&state!=='menu'){if(deathT>0){ctx.fillStyle='#fff';ctx.font='26px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillText('✖',frog.px+T/2,Y(frog.y)+RH/2+9)}
+    else drawFrog(frog.px+T/2,Y(frog.y)+RH/2,frog.anim,frog.dir||[0,-1])}
+  ctx.fillStyle='#ffd23f';ctx.font='14px Bungee, Impact, sans-serif';ctx.textAlign='left';ctx.fillText('LEVEL '+(level||1),8,24);
+}
+function drawFrog(x,y,a,d){ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(d[1],d[0])+Math.PI/2);const s=1+a*.2;ctx.scale(s,s);
+  ctx.fillStyle='#4caf50';ctx.fillRect(-13,-4,5,10);ctx.fillRect(8,-4,5,10);ctx.fillRect(-12,6,6,6);ctx.fillRect(6,6,6,6);
+  ctx.fillStyle='#7ee04a';ctx.beginPath();ctx.ellipse(0,0,10,12,0,0,7);ctx.fill();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-5,-9,4,0,7);ctx.arc(5,-9,4,0,7);ctx.fill();ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-5,-10,2,0,7);ctx.arc(5,-10,2,0,7);ctx.fill();ctx.restore()}
+// diving turtles are unsafe
+const _u=update;update=function(dt){_u(dt);if(state==='play'&&deathT<=0&&frog){const l=lanes.find(l=>l.row===frog.y&&l.type==='turtle');if(l){const it=l.items.find(it=>frog.px+T/2>it.x&&frog.px+T/2<it.x+it.w);if(it&&Math.sin(performance.now()/700+it.x)>.85)die()}}};
+let last=performance.now();level=1;build();
+function loop(t){const dt=Math.min(.05,(t-last)/1000);last=t;if(state==='play')update(dt);draw(t);requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script>
+
+</body></html>

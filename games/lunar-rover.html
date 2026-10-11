@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lunar Rover</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Lunar Rover: drive a six-wheel moon buggy, hop craters and boulders, and blast saucers overhead.
+K.theme({ bg: '#0b0a1e', ink: '#eef0ff', accent: '#b98bff', accentInk: '#14062a' });
+const W = 320, H = 200, GY = 168;
+K.screen(W, H);
+K.hud(['score', 'post', 'lives']);
+K.pad({ dpad: 'lr', buttons: [{ id: 'b', label: 'FIRE' }, { id: 'a', label: 'JUMP' }] });
+
+let state = 'title', score, lives, dist, speed, car, shots, foes, bombs, obs, parts, post, nextSpawn, nextFoe, best = K.best('lunarrover'), invul;
+const stars = Array.from({ length: 60 }, () => ({ x: K.rnd(0, W), y: K.rnd(0, 110), b: K.rnd(0.3, 1) }));
+const POSTLEN = 1400;
+function title() { K.card({ title: 'LUNAR ROVER', text: '◀ ▶ slow down or speed up. JUMP over craters and boulders. FIRE shoots ahead and straight up at the saucers. Reach checkpoint Z!', best: best ? 'BEST ' + best : '', button: 'Drive', onStart: start }); }
+function start() { score = 0; lives = 3; dist = 0; speed = 70; post = 0; car = { x: 70, y: GY, vy: 0, air: false }; shots = []; foes = []; bombs = []; obs = []; parts = []; nextSpawn = 220; nextFoe = 4; invul = 1.5; state = 'play'; }
+function boom(x, y, c, n) { for (let i = 0; i < (n || 12); i++) parts.push({ x, y, vx: K.rnd(-60, 60), vy: K.rnd(-90, 10), t: K.rnd(0.4, 0.9), c }); }
+function die() {
+  boom(car.x, car.y - 6, '#ffb24a', 24); K.noise(0.5, 0.4); lives--; invul = 2;
+  obs = obs.filter(o => o.x > car.x + 80 || o.x < car.x - 30); bombs = [];
+  if (lives <= 0) { state = 'over'; best = K.saveBest('lunarrover', score); K.card({ title: 'ROVER LOST', text: 'You reached checkpoint ' + String.fromCharCode(65 + post) + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); }
+}
+function update(dt) {
+  if (state !== 'play') return;
+  if (K.down('right')) speed = Math.min(120, speed + 80 * dt); else if (K.down('left')) speed = Math.max(40, speed - 80 * dt); else speed += (70 - speed) * dt;
+  car.x = 50 + (speed - 40) * 0.5;
+  if (K.hit('a') && !car.air) { car.vy = -175; car.air = true; K.beep(300, 0.15, { to: 600 }); }
+  if (car.air) { car.vy += 380 * dt; car.y += car.vy * dt; if (car.y >= GY) { car.y = GY; car.air = false; car.vy = 0; } }
+  if (K.hit('b') && shots.length < 6) { shots.push({ x: car.x + 14, y: car.y - 8, vx: 260, vy: 0 }); shots.push({ x: car.x - 4, y: car.y - 14, vx: 0, vy: -240 }); K.beep(900, 0.06, { to: 400 }); }
+  const mv = speed * dt; dist += mv; score += Math.round(mv * 0.2);
+  const np = Math.min(25, Math.floor(dist / POSTLEN));
+  if (np > post) { post = np; score += 500; K.tune([523, 659, 784], 0.08); if (post >= 25) { state = 'over'; score += 5000; best = K.saveBest('lunarrover', score); K.card({ title: 'MISSION DONE', text: 'You crossed checkpoint Z! Final score ' + score + '.', best: 'BEST ' + best, button: 'Again', onStart: start }); return; } }
+  nextSpawn -= mv;
+  if (nextSpawn <= 0) { const t = Math.random(); obs.push(t < 0.5 ? { k: 'crater', x: W + 20, w: K.ri(16, 26 + post) } : { k: 'rock', x: W + 20, w: 12, hp: 1 + (post > 8 ? 1 : 0) }); nextSpawn = K.rnd(90, 190) - post * 2; }
+  obs.forEach(o => o.x -= mv); obs = obs.filter(o => o.x > -40);
+  nextFoe -= dt;
+  if (nextFoe <= 0 && foes.length < 2 + Math.floor(post / 6)) { foes.push({ x: W + 10, y: K.rnd(30, 80), ph: K.rnd(0, 6), cd: K.rnd(1, 2), hp: 1 }); nextFoe = K.rnd(2.5, 5) - post * 0.06; }
+  foes.forEach(f => { f.ph += dt * 2; f.x += (car.x + 60 - f.x) * dt * 0.6 + Math.cos(f.ph) * 40 * dt; f.y += Math.sin(f.ph * 1.3) * 30 * dt; f.cd -= dt; if (f.cd <= 0) { bombs.push({ x: f.x, y: f.y + 6, vx: (car.x - f.x) * 0.25, vy: 30 }); f.cd = K.rnd(1.2, 2.4) - post * 0.03; K.beep(200, 0.1, { to: 120 }); } });
+  bombs.forEach(b => { b.vy += 120 * dt; b.x += b.vx * dt - mv * 0.2; b.y += b.vy * dt; if (b.y >= GY + 2) { b.dead = true; boom(b.x, GY, '#888', 5); obs.push({ k: 'crater', x: b.x - 7, w: 14 }); } });
+  shots.forEach(s => { s.x += s.vx * dt; s.y += s.vy * dt; });
+  shots.forEach(s => {
+    foes.forEach(f => { if (!f.dead && Math.abs(s.x - f.x) < 10 && Math.abs(s.y - f.y) < 7) { f.dead = s.dead = true; score += 150; boom(f.x, f.y, '#b98bff'); K.beep(500, 0.2, { to: 80 }); } });
+    bombs.forEach(b => { if (!b.dead && Math.abs(s.x - b.x) < 6 && Math.abs(s.y - b.y) < 6) { b.dead = s.dead = true; score += 50; boom(b.x, b.y, '#fff', 5); } });
+    obs.forEach(o => { if (o.k === 'rock' && !o.dead && s.vy === 0 && s.x > o.x && s.x < o.x + o.w && s.y > GY - 12) { s.dead = true; if (--o.hp <= 0) { o.dead = true; score += 100; boom(o.x + 6, GY - 6, '#a98', 8); K.noise(0.15, 0.2); } } });
+  });
+  obs = obs.filter(o => !o.dead); foes = foes.filter(f => !f.dead && f.x > -20); bombs = bombs.filter(b => !b.dead); shots = shots.filter(s => !s.dead && s.x < W + 10 && s.y > -10);
+  parts.forEach(p => { p.t -= dt; p.vy += 150 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
+  if (invul > 0) invul -= dt;
+  else {
+    for (const o of obs) {
+      if (o.k === 'crater' && !car.air && car.x + 4 > o.x + 3 && car.x - 4 < o.x + o.w - 3) { die(); break; }
+      if (o.k === 'rock' && car.y > GY - 12 && car.x + 10 > o.x && car.x - 10 < o.x + o.w) { die(); break; }
+    }
+    for (const b of bombs) if (invul <= 0 && Math.abs(b.x - car.x) < 11 && Math.abs(b.y - (car.y - 6)) < 8) { b.dead = true; die(); break; }
+  }
+  K.set('score', score); K.set('post', 'POINT ' + String.fromCharCode(65 + post)); K.set('lives', '♥'.repeat(Math.max(0, lives)));
+}
+function draw(c, t) {
+  c.fillStyle = '#0b0a1e'; c.fillRect(0, 0, W, H);
+  stars.forEach(s => { c.fillStyle = 'rgba(255,255,255,' + s.b + ')'; c.fillRect((s.x - dist * 0.02 % W + W) % W, s.y, 1, 1); });
+  c.fillStyle = '#5a4a8a'; c.beginPath(); c.arc(260, 40, 16, 0, 7); c.fill();
+  const off1 = dist * 0.15 % 160, off2 = dist * 0.4 % 100;
+  c.fillStyle = '#2a2550'; for (let x = -off1 - 160; x < W + 160; x += 160) { c.beginPath(); c.moveTo(x, 140); c.lineTo(x + 50, 80); c.lineTo(x + 90, 110); c.lineTo(x + 120, 70); c.lineTo(x + 160, 140); c.fill(); }
+  c.fillStyle = '#3d3570'; for (let x = -off2 - 100; x < W + 100; x += 100) { c.beginPath(); c.moveTo(x, 160); c.lineTo(x + 30, 130); c.lineTo(x + 60, 145); c.lineTo(x + 100, 160); c.fill(); }
+  c.fillStyle = '#8a7a5a'; c.fillRect(0, GY, W, H - GY); c.fillStyle = '#6a5a40'; for (let x = -(dist % 20); x < W; x += 20) c.fillRect(x, GY + 8, 8, 2);
+  obs.forEach(o => { if (o.k === 'crater') { c.fillStyle = '#0b0a1e'; c.beginPath(); c.moveTo(o.x, GY); c.lineTo(o.x + 4, GY + 12); c.lineTo(o.x + o.w - 4, GY + 12); c.lineTo(o.x + o.w, GY); c.fill(); } else { c.fillStyle = o.hp > 1 ? '#a08060' : '#b8a080'; c.beginPath(); c.arc(o.x + 6, GY - 5, 7, Math.PI, 0); c.fill(); c.fillRect(o.x - 1, GY - 5, 14, 5); } });
+  if (state === 'play' && !(invul > 0 && Math.floor(t / 100) % 2)) {
+    const x = car.x, y = car.y;
+    c.fillStyle = '#d0d4ff'; c.fillRect(x - 12, y - 12, 24, 6); c.fillStyle = '#b98bff'; c.fillRect(x - 6, y - 18, 10, 6); c.fillStyle = '#7fe0ff'; c.fillRect(x - 3, y - 17, 6, 4);
+    c.fillStyle = '#222'; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(x - 9 + i * 9, y - 3, 3.5, 0, 7); c.fill(); }
+    c.fillStyle = '#888'; c.fillRect(x + 10, y - 11, 5, 2);
+  }
+  foes.forEach(f => { c.fillStyle = '#ff6ad5'; c.beginPath(); c.ellipse(f.x, f.y, 10, 4, 0, 0, 7); c.fill(); c.fillStyle = '#ffe0f6'; c.beginPath(); c.arc(f.x, f.y - 3, 4, Math.PI, 0); c.fill(); });
+  c.fillStyle = '#ff5050'; bombs.forEach(b => c.fillRect(b.x - 2, b.y - 2, 4, 4));
+  c.fillStyle = '#fff36a'; shots.forEach(s => c.fillRect(s.x - 1, s.y - 1, s.vx ? 5 : 2, s.vx ? 2 : 5));
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+  if (state === 'play') { const f = (dist % POSTLEN) / POSTLEN; c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(10, H - 8, W - 20, 3); c.fillStyle = '#b98bff'; c.fillRect(10, H - 8, (W - 20) * f, 3); }
+}
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>

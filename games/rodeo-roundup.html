@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rodeo Roundup</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Rodeo Roundup: the herd is stampeding. Ride between the lanes and lasso every steer before it gets past you.
+K.theme({ bg: '#2a1a0e', ink: '#fff4e0', accent: '#ffb02e', accentInk: '#2a1600' });
+const W = 320, H = 240, LANES = [96, 130, 164, 198], MAXSTRAY = 5;
+K.screen(W, H);
+K.hud(['score', 'strays']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'ROPE' }] });
+const BREEDS = [{ n: 'brown', c: '#8a5a32', v: 1, pts: 10 }, { n: 'black', c: '#2a2420', v: 1.35, pts: 25 }, { n: 'spotted', c: '#f0e8dc', v: 1.15, pts: 50, weave: 1 }];
+let state = 'title', rider, herd, skulls, rope, dust, score, strays, spawnT, time, best = K.best('rodeo');
+function title() { K.card({ title: 'RODEO ROUNDUP', text: 'Steers are stampeding past! Ride up and down the lanes and throw your ROPE at the steer ahead of you. Steer around cow skulls or your horse stumbles. Let ' + MAXSTRAY + ' steers get away and the round is over.', best: best ? 'BEST ' + best : '', button: 'Yee-haw', onStart: start }); }
+function start() { rider = { lane: 1, y: LANES[1], x: 70, jump: 0 }; herd = []; skulls = []; rope = null; dust = []; score = 0; strays = 0; spawnT = 1; time = 0; state = 'play'; hud(); }
+function hud() { K.set('score', score); K.set('strays', 'STRAYS ' + '✕'.repeat(strays) + '·'.repeat(MAXSTRAY - strays)); }
+const pace = () => 1 + Math.min(1.5, time / 70);
+
+function update(dt) {
+  if (state !== 'play') return;
+  time += dt;
+  if (K.hit('up')) rider.lane = Math.max(0, rider.lane - 1);
+  if (K.hit('down')) rider.lane = Math.min(3, rider.lane + 1);
+  if (K.ptr.tapped) { if (K.ptr.x > W * 0.7 && !rope) throwRope(); else { let best = 0; LANES.forEach((ly, i) => { if (Math.abs(ly - K.ptr.y) < Math.abs(LANES[best] - K.ptr.y)) best = i; }); rider.lane = best; } }
+  rider.y += (LANES[rider.lane] - rider.y) * Math.min(1, dt * 12);
+  const ax = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0);
+  rider.x = K.clamp(rider.x + ax * 80 * dt, 30, 150);
+  if (rider.jump > 0) rider.jump -= dt;
+  if (K.hit('a') && !rope) throwRope();
+  // spawn steers and skulls
+  spawnT -= dt;
+  if (spawnT <= 0) {
+    const r = Math.random(), br = time > 40 && r < 0.2 ? BREEDS[2] : time > 15 && r < 0.5 ? BREEDS[1] : BREEDS[0];
+    herd.push({ lane: K.ri(0, 3), x: W + 20, br, wt: K.rnd(1, 2.5) });
+    if (Math.random() < 0.25) skulls.push({ lane: K.ri(0, 3), x: W + 60 });
+    spawnT = K.rnd(0.7, 1.5) / pace();
+  }
+  const spd = 70 * pace();
+  for (const s of herd) {
+    s.x -= spd * s.br.v * dt;
+    if (s.br.weave) { s.wt -= dt; if (s.wt <= 0) { s.wt = K.rnd(1, 2); s.lane = K.clamp(s.lane + (Math.random() < .5 ? -1 : 1), 0, 3); } }
+    s.y = s.y == null ? LANES[s.lane] : s.y + (LANES[s.lane] - s.y) * Math.min(1, dt * 5);
+    if (s.x < -20 && !s.caught) { s.gone = true; strays++; hud(); K.beep(180, 0.3, { type: 'sawtooth', to: 90, vol: 0.06 }); if (strays >= MAXSTRAY) return over(); }
+  }
+  for (const k of skulls) {
+    k.x -= spd * 0.8 * dt;
+    if (rider.jump <= 0 && k.lane === rider.lane && Math.abs(k.x - rider.x) < 14) { k.hit = true; rider.x = Math.max(30, rider.x - 40); rider.jump = 0; K.noise(0.2, 0.2); }
+  }
+  skulls = skulls.filter(k => k.x > -20 && !k.hit);
+  // auto-hop over a skull when the horse is right on it and you tap up/down? Keep it simple: skulls cost you ground.
+  if (rope) {
+    rope.t += dt;
+    const reach = rope.t < 0.25 ? rope.t / 0.25 : 1 - (rope.t - 0.25) / 0.25;
+    rope.x = rider.x + 18 + reach * 110;
+    if (!rope.done) for (const s of herd) if (!s.caught && s.lane === rope.lane && Math.abs(s.x - rope.x) < 12) {
+      s.caught = true; rope.done = true; score += s.br.pts; hud(); K.tune([660, 880], 0.07, { type: 'triangle' });
+      for (let i = 0; i < 8; i++) dust.push({ x: s.x, y: LANES[s.lane], vx: K.rnd(-30, 30), vy: K.rnd(-40, -10), l: 0.5 });
+    }
+    if (rope.t > 0.5) rope = null;
+  }
+  herd = herd.filter(s => !s.gone && !(s.caught && (s.cx = (s.cx || 0) + dt) > 0.6));
+  if (Math.random() < 0.4) dust.push({ x: rider.x - 14, y: rider.y + 8, vx: -30, vy: -10, l: 0.4 });
+  for (const d of dust) { d.x += d.vx * dt; d.y += d.vy * dt; d.l -= dt; } dust = dust.filter(d => d.l > 0);
+}
+function throwRope() { rope = { t: 0, lane: rider.lane, x: rider.x, done: false }; K.beep(500, 0.15, { type: 'triangle', to: 900, vol: 0.05 }); }
+function over() { state = 'over'; best = K.saveBest('rodeo', score); K.card({ title: 'THEY GOT AWAY', text: 'You roped ' + score + ' points of cattle before ' + MAXSTRAY + ' steers broke loose.', best: 'BEST ' + best, button: 'Ride again', onStart: start }); }
+
+function drawSteer(c, s, t) {
+  const x = Math.round(s.x), y = Math.round(s.y), leg = Math.floor(t / 90 + x) % 2;
+  c.fillStyle = s.caught ? '#c9a46a' : s.br.c; c.fillRect(x - 10, y - 8, 20, 9); c.fillRect(x - 15, y - 10, 7, 7);
+  if (s.br.weave) { c.fillStyle = '#2a2420'; c.fillRect(x - 4, y - 7, 5, 4); c.fillRect(x + 4, y - 4, 4, 3); }
+  c.fillStyle = '#f0e8dc'; c.fillRect(x - 17, y - 12, 3, 2); c.fillRect(x - 10, y - 12, 3, 2);
+  c.fillStyle = '#1a1410'; c.fillRect(x - 8, y + 1, 2, 5 + leg); c.fillRect(x + 6, y + 1, 2, 6 - leg); c.fillRect(x - 3, y + 1, 2, 6 - leg); c.fillRect(x + 2, y + 1, 2, 5 + leg);
+  c.fillRect(x + 10, y - 7, 4, 2);
+  if (s.caught) { c.strokeStyle = '#ffd23f'; c.lineWidth = 1; c.beginPath(); c.arc(x - 12, y - 7, 6, 0, 7); c.stroke(); }
+}
+function draw(c, t) {
+  c.fillStyle = '#ffb27a'; c.fillRect(0, 0, W, 76); c.fillStyle = '#ffd98a'; c.beginPath(); c.arc(60, 56, 18, 0, 7); c.fill();
+  c.fillStyle = '#b5482b'; c.beginPath(); c.moveTo(0, 76); for (let x = 0; x <= W; x += 20) c.lineTo(x, 60 - Math.abs(Math.sin((x + (time || 0) * 8) / 60)) * 20); c.lineTo(W, 76); c.fill();
+  c.fillStyle = '#d9a35b'; c.fillRect(0, 76, W, H - 76);
+  for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#cf9a52' : '#d9a35b'; c.fillRect(0, LANES[i] - 16, W, 34); }
+  c.fillStyle = '#b8823e'; for (let x = -(((time || 0) * 80) % 40); x < W; x += 40) for (const ly of LANES) c.fillRect(x, ly + 10, 6, 2);
+  // cactus
+  c.fillStyle = '#3f8530'; for (let k = 0; k < 3; k++) { const x = ((k * 140 - (time || 0) * 30) % 420 + 420) % 420 - 40; c.fillRect(x, 64, 6, 16); c.fillRect(x - 6, 68, 6, 3); c.fillRect(x - 6, 62, 3, 8); c.fillRect(x + 6, 66, 6, 3); c.fillRect(x + 9, 60, 3, 8); }
+  if (!herd) return;
+  for (const k of skulls) { const x = Math.round(k.x), y = LANES[k.lane]; c.fillStyle = '#f2ede2'; c.fillRect(x - 5, y - 2, 10, 7); c.fillRect(x - 9, y - 4, 4, 2); c.fillRect(x + 5, y - 4, 4, 2); c.fillStyle = '#333'; c.fillRect(x - 3, y, 2, 2); c.fillRect(x + 1, y, 2, 2); }
+  const items = herd.map(s => ({ y: s.y || LANES[s.lane], d: () => drawSteer(c, s, t) })).concat([{ y: rider.y, d: () => drawRider(c, t) }]).sort((a, b) => a.y - b.y);
+  items.forEach(i => i.d());
+  if (rope) { c.strokeStyle = '#ffd23f'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(rider.x + 6, rider.y - 22); c.quadraticCurveTo((rider.x + rope.x) / 2, LANES[rope.lane] - 40, rope.x, LANES[rope.lane] - 8); c.stroke(); c.beginPath(); c.arc(rope.x, LANES[rope.lane] - 8, 6, 0, 7); c.stroke(); }
+  for (const d of dust) { c.fillStyle = 'rgba(240,210,160,' + d.l * 1.5 + ')'; c.fillRect(d.x, d.y, 3, 3); }
+}
+function drawRider(c, t) {
+  const x = Math.round(rider.x), y = Math.round(rider.y), leg = Math.floor(t / 70) % 2;
+  c.fillStyle = '#f2ede2'; c.fillRect(x - 12, y - 10, 24, 10); c.fillRect(x + 10, y - 16, 8, 9); c.fillRect(x + 16, y - 13, 4, 5);
+  c.fillStyle = '#7a4a2a'; c.fillRect(x - 14, y - 10, 3, 9); c.fillRect(x + 10, y - 17, 3, 6);
+  c.fillStyle = '#5a3a22'; c.fillRect(x - 10, y, 3, 8 - leg * 2); c.fillRect(x + 7, y, 3, 6 + leg * 2); c.fillRect(x - 4, y, 3, 6 + leg * 2); c.fillRect(x + 2, y, 3, 8 - leg * 2);
+  c.fillStyle = '#e63946'; c.fillRect(x - 3, y - 20, 8, 10); c.fillStyle = '#ffcf9e'; c.fillRect(x - 2, y - 26, 6, 6);
+  c.fillStyle = '#6b3a1e'; c.fillRect(x - 5, y - 28, 12, 2); c.fillRect(x - 2, y - 31, 6, 3);
+  c.fillStyle = '#2a4a8a'; c.fillRect(x - 1, y - 11, 3, 6);
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

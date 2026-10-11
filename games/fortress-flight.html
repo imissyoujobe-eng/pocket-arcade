@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fortress Flight</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Fortress Flight: an isometric run through a floating fortress. Watch your altitude and shadow, thread the walls, and blow up fuel tanks to stay in the air.
+K.theme({ bg: '#05070f', ink: '#e8f0ff', accent: '#4ad8ff', accentInk: '#001a24' });
+const W = 320, H = 240;
+K.screen(W, H);
+K.hud(['score', 'fuel', 'lives']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'FIRE' }] });
+
+// world: z runs into the screen (up-right on screen), x across, alt up.
+let state = 'title', score, lives, fuel, z, me, shots, things, parts, nextZ, inSpace, spaceT, best = K.best('fortressflight'), invul, fireCd;
+function iso(x, zz, alt) { const rz = zz - z; return { x: 60 + rz * 0.9 + x * 0.9, y: 170 - rz * 0.45 + x * 0.45 - alt }; }
+function title() { K.card({ title: 'FORTRESS FLIGHT', text: '◀ ▶ slide across, ▲ ▼ climb or dive. Your shadow shows where you are. Fly through the gaps in the walls, shoot gun turrets and fuel tanks (tanks refill fuel), then survive open space.', best: best ? 'BEST ' + best : '', button: 'Fly', onStart: start }); }
+function start() { score = 0; lives = 3; fuel = 100; z = 0; me = { x: 0, alt: 30 }; shots = []; things = []; parts = []; nextZ = 160; inSpace = false; spaceT = 0; invul = 1.5; fireCd = 0; state = 'play'; }
+function boom(p, c, n) { for (let i = 0; i < (n || 12); i++) parts.push({ x: p.x, y: p.y, vx: K.rnd(-60, 60), vy: K.rnd(-60, 30), t: K.rnd(0.3, 0.8), c }); }
+function hurt(why) { if (invul > 0) return; boom(iso(me.x, z + 40, me.alt), '#ffb040', 24); K.noise(0.5, 0.4); lives--; invul = 2; fuel = Math.max(fuel, 60); if (lives <= 0) { state = 'over'; best = K.saveBest('fortressflight', score); K.card({ title: why || 'SHOT DOWN', text: 'Score ' + score + '. Watch the altimeter on the left!', best: 'BEST ' + best, button: 'Again', onStart: start }); } }
+function spawn() {
+  const r = Math.random();
+  if (r < 0.28) things.push({ k: 'wall', z: nextZ, gapX: K.rnd(-30, 30), gapAlt: K.ri(0, 1) ? 50 : 15 });
+  else if (r < 0.55) things.push({ k: 'turret', z: nextZ, x: K.rnd(-45, 45), alt: 0, cd: K.rnd(0.5, 1.5) });
+  else if (r < 0.8) things.push({ k: 'tank', z: nextZ, x: K.rnd(-45, 45), alt: 0 });
+  else things.push({ k: 'field', z: nextZ, alt: K.ri(0, 1) ? 40 : 20 });
+  nextZ += K.rnd(70, 110);
+}
+function update(dt) {
+  if (state !== 'play') return;
+  if (K.down('left')) me.x -= 70 * dt; if (K.down('right')) me.x += 70 * dt;
+  if (K.down('up')) me.alt += 50 * dt; if (K.down('down')) me.alt -= 50 * dt;
+  if (K.ptr.down) { me.x += K.clamp((K.ptr.x - 160) / 2, -70, 70) * dt; me.alt += K.clamp((150 - K.ptr.y) / 2, -50, 50) * dt; }
+  me.x = K.clamp(me.x, -50, 50); me.alt = K.clamp(me.alt, 4, 70);
+  const sp = 70; z += sp * dt; score += Math.round(sp * dt * 0.5);
+  if (!inSpace) fuel -= 4.5 * dt;
+  if (fuel <= 0) { fuel = 0; hurt('OUT OF FUEL'); if (state !== 'play') return; }
+  fireCd -= dt;
+  if ((K.down('a') || K.ptr.tapped) && fireCd <= 0) { shots.push({ x: me.x, z: z + 46, alt: me.alt, life: 1.1 }); fireCd = 0.22; K.beep(800, 0.05, { to: 300 }); }
+  if (!inSpace) { while (nextZ < z + 300) spawn(); if (z > 1600 + spaceT * 0) { inSpace = true; spaceT = 12; things = things.filter(t => t.z < z + 120); } }
+  else { spaceT -= dt; if (Math.random() < dt * 1.5) things.push({ k: 'ship', z: z + 260, x: K.rnd(-50, 50), alt: K.rnd(10, 65), vx: K.rnd(-20, 20) }); if (spaceT <= 0) { inSpace = false; score += 1000; K.tune([523, 659, 784, 1046], 0.1); z = 0; nextZ = 160; things = []; } }
+  const myZ = z + 40;
+  things.forEach(t => {
+    if (t.k === 'turret' && t.z - myZ < 200 && t.z > myZ) { t.cd -= dt; if (t.cd <= 0) { t.cd = 1.6; things.push({ k: 'shell', z: t.z, x: t.x, alt: 4, vz: -90, valt: (me.alt - 4) / ((t.z - myZ) / 90 + 0.01), vx: (me.x - t.x) / ((t.z - myZ) / 90 + 0.01) }); } }
+    if (t.k === 'shell') { t.z += t.vz * dt; t.alt += t.valt * dt; t.x += t.vx * dt; if (Math.abs(t.z - myZ) < 6 && Math.abs(t.x - me.x) < 8 && Math.abs(t.alt - me.alt) < 8) { t.dead = true; hurt(); } }
+    if (t.k === 'ship') { t.x += t.vx * dt; t.z -= 40 * dt; if (Math.abs(t.z - myZ) < 8 && Math.abs(t.x - me.x) < 10 && Math.abs(t.alt - me.alt) < 9) { t.dead = true; hurt(); } }
+    if (!t.passed && t.z < myZ) { t.passed = true;
+      if (t.k === 'wall') { const ok = Math.abs(me.x - t.gapX) < 16 && Math.abs(me.alt - t.gapAlt) < 14; if (!ok) hurt('HIT A WALL'); else { score += 50; K.beep(660, 0.08); } }
+      if (t.k === 'field') { if (me.alt > t.alt - 6 && me.alt < t.alt + 6) hurt('ZAPPED'); }
+    }
+  });
+  shots.forEach(s => { s.z += 220 * dt; s.life -= dt;
+    things.forEach(t => { if (t.dead || s.dead) return; const ta = t.alt || 0; if ((t.k === 'turret' || t.k === 'tank' || t.k === 'ship') && Math.abs(s.z - t.z) < 10 && Math.abs(s.x - t.x) < 11 && Math.abs(s.alt - ta) < 12) { s.dead = t.dead = true; boom(iso(t.x, t.z, ta), t.k === 'tank' ? '#ffd04a' : '#ff6a6a'); K.beep(220, 0.2, { to: 50 }); if (t.k === 'tank') { fuel = Math.min(100, fuel + 30); score += 300; } else score += 200; } });
+  });
+  shots = shots.filter(s => !s.dead && s.life > 0); things = things.filter(t => !t.dead && t.z > z - 40);
+  parts.forEach(p => { p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
+  if (invul > 0) invul -= dt;
+  K.set('score', score); K.set('fuel', inSpace ? 'SPACE ' + Math.ceil(spaceT) : 'FUEL ' + Math.ceil(fuel)); K.set('lives', '▲'.repeat(Math.max(0, lives)));
+}
+function poly(c, pts, col) { c.fillStyle = col; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)); c.fill(); }
+function draw(c, t) {
+  c.fillStyle = '#05070f'; c.fillRect(0, 0, W, H);
+  for (let i = 0; i < 50; i++) { c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect((i * 97 - z * 0.3) % W + (i * 97 - z * 0.3 < 0 ? W : 0), (i * 53) % H, 1, 1); }
+  if (!inSpace) { const a = iso(-60, z - 40, 0), b = iso(60, z - 40, 0), cc = iso(60, z + 400, 0), d = iso(-60, z + 400, 0); poly(c, [a, b, cc, d], '#3a4058'); c.strokeStyle = '#4a5270'; for (let zz = Math.floor(z / 40) * 40; zz < z + 400; zz += 40) { const p = iso(-60, zz, 0), q = iso(60, zz, 0); c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); } }
+  const list = things.slice().sort((a, b) => b.z - a.z);
+  const myZ = z + 40;
+  let meDrawn = false;
+  const drawMe = () => { if (state !== 'play' || (invul > 0 && Math.floor(t / 90) % 2)) return; const sh = iso(me.x, myZ, 0); c.fillStyle = 'rgba(0,0,0,.5)'; c.beginPath(); c.ellipse(sh.x, sh.y, 9, 4, 0, 0, 7); c.fill(); const p = iso(me.x, myZ, me.alt); c.fillStyle = '#4ad8ff'; c.beginPath(); c.moveTo(p.x + 12, p.y - 6); c.lineTo(p.x - 10, p.y - 2); c.lineTo(p.x - 4, p.y + 6); c.fill(); c.fillStyle = '#e8f8ff'; c.fillRect(p.x - 2, p.y - 3, 6, 3); };
+  list.forEach(th => {
+    if (!meDrawn && th.z < myZ) { drawMe(); meDrawn = true; }
+    if (th.k === 'wall') {
+      for (let x = -60; x < 60; x += 10) for (let al = 0; al < 70; al += 10) {
+        if (Math.abs(x + 5 - th.gapX) < 16 && Math.abs(al + 5 - th.gapAlt) < 14) continue;
+        const p = iso(x, th.z, al + 10); c.fillStyle = (x / 10 + al / 10) % 2 ? '#7a84a8' : '#6a7498'; c.fillRect(p.x, p.y, 9, 10);
+      }
+    } else if (th.k === 'field') { const p = iso(-60, th.z, th.alt), q = iso(60, th.z, th.alt); c.strokeStyle = Math.floor(t / 80) % 2 ? '#ff4ad8' : '#ffe04a'; c.lineWidth = 2; c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); c.lineWidth = 1; const a = iso(-60, th.z, 0), b = iso(60, th.z, 0); c.fillStyle = '#888'; c.fillRect(a.x - 2, p.y, 4, a.y - p.y); c.fillRect(b.x - 2, q.y, 4, b.y - q.y); }
+    else { const p = iso(th.x, th.z, th.alt || 0);
+      if (th.k === 'turret') { c.fillStyle = '#9a3a3a'; c.fillRect(p.x - 7, p.y - 10, 14, 10); c.fillStyle = '#222'; c.fillRect(p.x - 2, p.y - 14, 4, 5); }
+      if (th.k === 'tank') { c.fillStyle = '#d0a040'; c.beginPath(); c.ellipse(p.x, p.y - 7, 8, 9, 0, 0, 7); c.fill(); c.fillStyle = '#222'; c.font = '7px sans-serif'; c.textAlign = 'center'; c.fillText('F', p.x, p.y - 4); }
+      if (th.k === 'shell') { c.fillStyle = '#ffec6a'; c.fillRect(p.x - 2, p.y - 2, 4, 4); }
+      if (th.k === 'ship') { const s = iso(th.x, th.z, 0); c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(s.x - 5, s.y - 1, 10, 3); c.fillStyle = '#ff7a4a'; c.beginPath(); c.moveTo(p.x - 10, p.y); c.lineTo(p.x + 6, p.y - 6); c.lineTo(p.x + 6, p.y + 4); c.fill(); }
+    }
+  });
+  if (!meDrawn) drawMe();
+  c.fillStyle = '#fff36a'; shots.forEach(s => { const p = iso(s.x, s.z, s.alt); c.fillRect(p.x - 2, p.y - 1, 4, 2); });
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+  // altimeter
+  c.fillStyle = 'rgba(255,255,255,.15)'; c.fillRect(6, 40, 8, 140); c.fillStyle = '#4ad8ff'; c.fillRect(4, 180 - me.alt * 2, 12, 3);
+  c.fillStyle = 'rgba(255,255,255,.5)'; c.font = '7px sans-serif'; c.textAlign = 'left'; c.fillText('ALT', 3, 36);
+}
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mall Chase</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Mall Chase: a robber is loose in the department store. Chase him across three floors and the roof before the clock runs out.
+K.theme({ bg: '#14121e', ink: '#f4f2ff', accent: '#46a8ff', accentInk: '#001a33' });
+const W = 320, H = 240, SW = 960, FY = [214, 160, 106, 52], ELX = 480;
+const ESC = [{ f: 0, xb: 860, xt: 930 }, { f: 1, xb: 100, xt: 30 }, { f: 2, xb: 860, xt: 930 }];
+K.screen(W, H);
+K.hud(['score', 'level', 'lives']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'JUMP' }] });
+
+let state = 'title', cop, rob, stuff, clock, level, score, lives, cam, msg, msgT, best = K.best('mallchase');
+function title() { K.card({ title: 'MALL CHASE', text: 'Catch the robber before time runs out! Run with left and right. Press UP at the bottom of an escalator (or in the elevator) to go up a floor, DOWN to go back. JUMP over carts and bouncing balls.', best: best ? 'BEST ' + best : '', button: 'On the case', onStart: start }); }
+function start() { level = 1; score = 0; lives = 3; newLevel(); state = 'play'; hud(); }
+function newLevel() {
+  cop = { f: 0, x: 920, y: 0, vy: 0, ride: null, stun: 0, face: -1 };
+  rob = { f: 1, x: 500, ride: null, dir: 1, think: 1 };
+  stuff = [];
+  for (let f = 0; f < 3; f++) for (let i = 0; i < 1 + Math.min(3, level); i++) stuff.push({ f, x: K.rnd(160, 800), vx: K.rnd(30, 55) * (Math.random() < .5 ? -1 : 1) * (1 + level * 0.1), t: Math.random() < 0.5 ? 'cart' : 'ball', bounce: Math.random() * 6 });
+  clock = 50; msg = 'LEVEL ' + level; msgT = 1.6;
+}
+function hud() { K.set('score', score); K.set('level', 'LEVEL ' + level); K.set('lives', '★'.repeat(Math.max(0, lives))); }
+
+function startRide(p, kind, from, to, x0, x1) { p.ride = { kind, from, to, x0, x1, t: 0, dur: kind === 'el' ? 0.9 : 0.8 }; }
+function stepRide(p, dt) { const r = p.ride; r.t += dt / r.dur; p.x = r.x0 + (r.x1 - r.x0) * Math.min(1, r.t); if (r.t >= 1) { p.f = r.to; p.ride = null; } }
+function rideY(p) { if (!p.ride) return FY[p.f]; const k = Math.min(1, p.ride.t); return FY[p.ride.from] + (FY[p.ride.to] - FY[p.ride.from]) * k; }
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) { msgT -= dt; if (msgT > 1) return; }
+  clock -= dt; if (clock <= 0) return lose('HE GOT AWAY!');
+  // cop
+  if (cop.ride) stepRide(cop, dt);
+  else if (cop.stun > 0) cop.stun -= dt;
+  else {
+    let ax = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0);
+    let up = K.hit('up'), dn = K.hit('down'), jump = K.hit('a');
+    if (K.ptr.down && !K.ptr.tapped) { const sx = K.ptr.x + cam; ax = Math.abs(sx - cop.x) > 6 ? Math.sign(sx - cop.x) : 0; }
+    if (K.ptr.tapped) { const ty = K.ptr.y; if (ty < rideY(cop) - 40) up = true; else if (ty > rideY(cop) + 20) dn = true; }
+    if (ax) cop.face = ax;
+    cop.x = K.clamp(cop.x + ax * 110 * dt, 10, SW - 10);
+    if (jump && cop.y === 0) { cop.vy = 190; K.beep(500, 0.08, { to: 800, vol: 0.04 }); }
+    if (up) { const e = ESC.find(e => e.f === cop.f && Math.abs(cop.x - e.xb) < 16); if (e) startRide(cop, 'esc', cop.f, cop.f + 1, e.xb, e.xt); else if (Math.abs(cop.x - ELX) < 14 && cop.f < 3) startRide(cop, 'el', cop.f, cop.f + 1, cop.x, ELX); }
+    if (dn) { const e = ESC.find(e => e.f + 1 === cop.f && Math.abs(cop.x - e.xt) < 16); if (e) startRide(cop, 'esc', cop.f, cop.f - 1, e.xt, e.xb); else if (Math.abs(cop.x - ELX) < 14 && cop.f > 0) startRide(cop, 'el', cop.f, cop.f - 1, cop.x, ELX); }
+  }
+  cop.vy -= 520 * dt; cop.y = Math.max(0, cop.y + cop.vy * dt); if (cop.y === 0) cop.vy = 0;
+  // obstacles
+  for (const s of stuff) {
+    s.x += s.vx * dt; if (s.x < 140 || s.x > 820) s.vx = -s.vx; s.bounce += dt * 6;
+    if (!cop.ride && cop.stun <= 0 && s.f === cop.f && Math.abs(s.x - cop.x) < 10) {
+      const h = s.t === 'ball' ? Math.abs(Math.sin(s.bounce)) * 14 + 8 : 10;
+      if (cop.y < h) { cop.stun = 1; cop.x += Math.sign(cop.x - s.x || 1) * 14; K.beep(150, 0.2, { type: 'square', vol: 0.06 }); }
+    }
+  }
+  // robber: keeps running, heads up or down when the cop is close
+  if (rob.ride) stepRide(rob, dt);
+  else {
+    const same = rob.f === cop.f && !cop.ride, sp = 72 + level * 6;
+    rob.think -= dt;
+    if (same && Math.abs(cop.x - rob.x) < 260) rob.dir = cop.x > rob.x ? -1 : 1;
+    else if (rob.think <= 0) { rob.think = K.rnd(1, 3); if (Math.random() < 0.3) rob.dir = -rob.dir; }
+    rob.x += rob.dir * sp * dt;
+    if (rob.x < 20 || rob.x > SW - 20) rob.dir = -rob.dir;
+    rob.x = K.clamp(rob.x, 20, SW - 20);
+    const eu = ESC.find(e => e.f === rob.f && Math.abs(rob.x - e.xb) < 6), ed = ESC.find(e => e.f + 1 === rob.f && Math.abs(rob.x - e.xt) < 6);
+    if (eu && rob.f < 3 && Math.random() < (same ? 0.9 : 0.4)) startRide(rob, 'esc', rob.f, rob.f + 1, eu.xb, eu.xt);
+    else if (ed && Math.random() < (same ? 0.6 : 0.3)) startRide(rob, 'esc', rob.f, rob.f - 1, ed.xt, ed.xb);
+  }
+  if (!cop.ride && !rob.ride && cop.f === rob.f && Math.abs(cop.x - rob.x) < 12) {
+    const bonus = Math.ceil(clock) * 20 + 500 * level; score += bonus; hud(); K.tune([523, 659, 784, 1047], 0.1);
+    level++; newLevel(); hud(); msg = 'GOTCHA! +' + bonus; msgT = 2.2; return;
+  }
+  cam = K.clamp(cop.x - W / 2, 0, SW - W);
+}
+function lose(t) {
+  lives--; hud(); K.tune([392, 330, 262], 0.15, { type: 'sawtooth' });
+  if (lives <= 0) { state = 'over'; best = K.saveBest('mallchase', score); K.card({ title: 'CASE CLOSED', text: 'The robber escaped on level ' + level + '. You scored ' + score + '.', best: 'BEST ' + best, button: 'New case', onStart: start }); return; }
+  newLevel(); msg = t; msgT = 2;
+}
+
+function draw(c, t) {
+  c.fillStyle = '#2a2640'; c.fillRect(0, 0, W, H);
+  const cm = cam || 0;
+  c.fillStyle = '#6ec3ff'; c.fillRect(0, 0, W, FY[3] + 2);
+  for (let f = 0; f < 3; f++) {
+    const top = FY[f + 1] + 2, bot = FY[f];
+    c.fillStyle = ['#f2e3c6', '#e3e8f2', '#f2dce8'][f]; c.fillRect(0, top, W, bot - top);
+    // shelves and windows
+    for (let x = -(cm % 120); x < W; x += 120) { c.fillStyle = ['#c8a87a', '#9aa8c0', '#c890a8'][f]; c.fillRect(x + 20, bot - 34, 60, 22); c.fillStyle = 'rgba(255,255,255,.4)'; c.fillRect(x + 24, bot - 30, 14, 6); c.fillRect(x + 44, bot - 30, 14, 6); c.fillRect(x + 64, bot - 30, 12, 6); }
+    c.fillStyle = '#4a4560'; c.fillRect(0, bot, W, 4);
+  }
+  c.fillStyle = '#4a4560'; c.fillRect(0, FY[3], W, 4);
+  c.fillStyle = '#ffd23f'; K.text(c, 'BIG MART', SW / 2 - cm, FY[3] - 18, 14, '#e63946');
+  // escalators
+  for (const e of ESC) { const x0 = e.xb - cm, x1 = e.xt - cm; c.strokeStyle = '#7a7a8a'; c.lineWidth = 5; c.beginPath(); c.moveTo(x0, FY[e.f]); c.lineTo(x1, FY[e.f + 1] + 2); c.stroke(); c.strokeStyle = '#c0c6d6'; c.lineWidth = 1; for (let k = 0; k < 8; k++) { const q = (k / 8 + t / 2000) % 1; c.beginPath(); c.moveTo(x0 + (x1 - x0) * q - 3, FY[e.f] + (FY[e.f + 1] - FY[e.f]) * q); c.lineTo(x0 + (x1 - x0) * q + 3, FY[e.f] + (FY[e.f + 1] - FY[e.f]) * q); c.stroke(); } }
+  // elevator shaft
+  c.fillStyle = 'rgba(80,70,110,.5)'; c.fillRect(ELX - 10 - cm, FY[3], 20, FY[0] - FY[3]);
+  for (let f = 0; f < 4; f++) { c.fillStyle = '#ffd23f'; c.fillRect(ELX - 2 - cm, FY[f] - 46, 4, 4); }
+  if (!cop) return;
+  for (const s of stuff) { const x = s.x - cm, y = FY[s.f]; if (x < -20 || x > W + 20) continue; if (s.t === 'cart') { c.strokeStyle = '#9aa0aa'; c.lineWidth = 1.5; c.strokeRect(x - 7, y - 12, 14, 8); c.fillStyle = '#333'; c.fillRect(x - 6, y - 3, 3, 3); c.fillRect(x + 3, y - 3, 3, 3); } else { const by = y - 5 - Math.abs(Math.sin(s.bounce)) * 14; c.fillStyle = '#e63946'; c.beginPath(); c.arc(x, by, 5, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(x - 5, by - 1, 10, 2); } }
+  person(c, rob.x - cm, rideY(rob), '#2a2a2a', '#f2f2f2', t, true);
+  if (!(cop.stun > 0 && Math.floor(t / 80) % 2)) person(c, cop.x - cm, rideY(cop) - cop.y, '#1f4aa8', '#ffd23f', t, false);
+  // minimap
+  c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(W - 98, 6, 92, 34);
+  for (let f = 0; f < 4; f++) { c.fillStyle = '#555'; c.fillRect(W - 96, 36 - f * 9, 88, 1); }
+  c.fillStyle = '#ff5a36'; c.fillRect(W - 96 + rob.x / SW * 88 - 2, 32 - rob.f * 9, 4, 4);
+  c.fillStyle = '#46a8ff'; c.fillRect(W - 96 + cop.x / SW * 88 - 2, 32 - cop.f * 9, 4, 4);
+  K.text(c, Math.max(0, Math.ceil(clock)), 24, 18, 14, clock < 10 ? '#ff5a36' : '#fff');
+  if (msgT > 0) K.text(c, msg, W / 2, 30, 14, '#ffd23f');
+}
+function person(c, x, y, body, hat, t, robber) {
+  x = Math.round(x); y = Math.round(y); const k = Math.floor(t / 100) % 2;
+  c.fillStyle = robber ? '#e8e8e8' : body; c.fillRect(x - 4, y - 18, 8, 10);
+  if (robber) { c.fillStyle = '#2a2a2a'; for (let i = 0; i < 3; i++) c.fillRect(x - 4, y - 17 + i * 3, 8, 1); }
+  c.fillStyle = '#ffcf9e'; c.fillRect(x - 3, y - 25, 6, 6);
+  c.fillStyle = robber ? '#111' : hat; c.fillRect(x - 4, y - 27, 8, 3); if (!robber) c.fillRect(x - 5, y - 25, 10, 1);
+  if (robber) { c.fillStyle = '#111'; c.fillRect(x - 3, y - 23, 6, 2); c.fillStyle = '#c8a050'; c.fillRect(x + 4, y - 16, 6, 6); }
+  c.fillStyle = '#222'; c.fillRect(x - 4, y - 8, 3, 8 - k * 2); c.fillRect(x + 1, y - 8, 3, 6 + k * 2);
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>
