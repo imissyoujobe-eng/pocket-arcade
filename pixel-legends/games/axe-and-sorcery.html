@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Axe &amp; Sorcery</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
+<script src="../lib/brawl.js"></script>
+<script>
+// Axe & Sorcery: a fantasy brawler. Pick a hero, smack the little potion thieves for magic, and spend every potion at once on a big spell.
+const ZMIN = B.ZMIN;
+function land(sky, hill, floor, deco) {
+  const pal = Object.assign({}, A.PAL.earth, { base: floor, hi: A.shade(floor, 0.18), lo: A.shade(floor, -0.25), mortar: A.shade(floor, -0.5), grass: deco === tree ? '#4a9a3a' : null, grassHi: '#7ac85a', grassLo: '#2a6a22' });
+  const night = sky[0] === '#1a0a0a' || sky[0] === '#3a2a5a';
+  return function (c, cx, t) {
+    A.sky(c, 320, ZMIN, { top: sky[0], mid: sky[1], bottom: A.shade(sky[1], 0.25), stars: night, sun: night ? '#fff0e0' : '#fff6c0', moon: night, sunX: 250, sunY: 30, sunR: 12 }, t * 1000);
+    A.ridge(c, cx, { factor: 0.15, base: ZMIN - 30, amp: 50, col: A.shade(hill, 0.15), edge: 'rgba(0,0,0,.2)', seed: 2, fog: 'rgba(255,255,255,.15)' });
+    A.ridge(c, cx, { factor: 0.35, base: ZMIN - 10, amp: 40, col: hill, edge: 'rgba(0,0,0,.35)', seed: 6 });
+    for (let i = -1; i < 7; i++) { const x = i * 60 - (cx * 0.7 % 60); deco(c, x, t); }
+    A.floor(c, cx, ZMIN - 8, 240, 320, pal);
+  };
+}const tree = (c, x) => { A.part(c, x + 20, 96, 6, 54, '#5a3a1a'); c.fillStyle = A.INK; c.beginPath(); c.arc(x + 23, 92, 18, 0, 7); c.fill(); A.ball(c, x + 23, 92, 17, '#3a7a3a'); A.ball(c, x + 14, 100, 10, '#2e6a2e'); A.ball(c, x + 32, 100, 10, '#2e6a2e'); };
+const pillar = (c, x) => { A.part(c, x + 18, 70, 12, 80, '#8a8a9a'); c.fillStyle = 'rgba(0,0,0,.2)'; for (let k = 0; k < 3; k++) c.fillRect(x + 20 + k * 4, 72, 1, 76); A.part(c, x + 14, 64, 20, 7, '#9a9aaa'); A.part(c, x + 15, 146, 18, 5, '#7a7a8a'); c.fillStyle = '#4a7a3a'; c.fillRect(x + 18, 90, 3, 14); c.fillRect(x + 26, 110, 3, 10); };
+const bones = (c, x, t) => { A.part(c, x + 10, 110, 30, 40, '#4a2a2a'); c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(x + 12, 118, 26, 1); c.fillRect(x + 12, 130, 26, 1); A.torch(c, x + 25, 104, t * 1000); };
+const look = (o) => Object.assign({ skin: '#e0b088', belt: '#5a3a1a', boots: '#4a2a1a' }, o);
+B.start({
+  title: 'AXE & SORCERY', key: 'axesorcery', button: 'Choose Hero', specialLabel: 'MAGIC', showPotions: true, ambient: 'leaf',
+  theme: { bg: '#100a14', ink: '#fff6e0', accent: '#ffb02e', accentInk: '#2a1600' },
+  text: 'Pick a hero, then cut through the Bone Lord\'s army. HIT three times to combo, JUMP + HIT to leap and strike. Kick the little blue thieves to make them drop potions ⚗. MAGIC uses ALL your potions at once: more potions, bigger spell. Keyboard: Z hit, X jump, C magic.',
+  hero: { hp: 60, spd: 66, dmg: 1.2, reach: 22 },
+  heroes: [
+    { name: 'GRAK', weapon: 'axe', hp: 70, spd: 60, dmg: 1.5, reach: 24, magic: 'quake', look: look({ hair: '#c06a2a', top: '#8a4a2a', legs: '#5a3a2a', beard: '#c06a2a', arms: '#d09a70' }), blurb: ['STRONG', 'EARTH MAGIC'] },
+    { name: 'SELA', weapon: 'sword', hp: 55, spd: 78, dmg: 1.1, reach: 26, magic: 'fire', look: look({ hair: '#f0d070', top: '#c03a3a', legs: '#c03a3a', arms: '#e0b088' }), blurb: ['FAST', 'FIRE MAGIC'] },
+    { name: 'BORN', weapon: 'hammer', hp: 80, spd: 56, dmg: 1.3, reach: 20, magic: 'storm', look: look({ hair: '#888', top: '#4a5a7a', legs: '#3a3a4a', beard: '#bbb', hat: '#888', horns: '#ddd' }), blurb: ['TOUGH', 'STORM MAGIC'] },
+  ],
+  special(g, B) {
+    const p = g.p, n = p.potions;
+    if (n <= 0) { g.msg = 'NO POTIONS'; g.msgT = 0.8; K.beep(150, 0.15); return; }
+    p.potions = 0; p.atk = 'spin'; p.atkT = 0.6; g.magicT = 1.2; g.magicKind = (g.heroPick || {}).magic || 'fire'; g.shake = 0.8;
+    K.noise(1, 0.5); K.tune([220, 330, 440, 660, 880].slice(0, 2 + Math.min(3, n)), 0.1, { type: 'sawtooth' });
+    g.foes.forEach(f => { if (f.x > g.camX - 10 && f.x < g.camX + 330) B.hitFoe(f, n * 2.2, true, f.x > p.x ? 1 : -1); });
+    g.msg = ['', 'SPARK', 'BLAST', 'TEMPEST', 'CATACLYSM', 'CATACLYSM', 'CATACLYSM', 'CATACLYSM', 'CATACLYSM', 'CATACLYSM'][Math.min(9, n)] + '!'; g.msgT = 1.2;
+  },
+  update(g, dt) {
+    if (g.magicT > 0) g.magicT -= dt;
+    // thieves run away and despawn instead of fighting
+    g.foes.forEach(f => { if (f.type === 'thief') { f.state = f.state === 'down' ? 'down' : 'hurt'; if (f.state === 'hurt') { f.t = 1; f.vx = 0; f.x += (f.fleeDir || (f.fleeDir = f.x < g.p.x ? -1 : 1)) * 36 * dt; f.face = f.fleeDir; if (f.x < g.camX - 30 || f.x > g.camX + 350) f.dead = true; } } });
+  },
+  onKill(g, f) { if (f.type === 'thief') { for (let i = 0; i < 2; i++) g.items.push({ x: f.x + i * 10, z: f.z, kind: 'potion' }); } },
+  drawOver(c, g, t) {
+    if (g.magicT > 0) { const a = Math.min(1, g.magicT);
+      if (g.magicKind === 'fire') { c.fillStyle = 'rgba(255,90,20,' + a * 0.4 + ')'; c.fillRect(0, 0, 320, 240); for (let i = 0; i < 20; i++) { c.fillStyle = 'rgba(255,' + (150 + i * 4) + ',40,' + a + ')'; c.beginPath(); c.arc((i * 37 + t * 200) % 320, 230 - ((i * 53 + t * 300) % 120), 8, 0, 7); c.fill(); } }
+      else if (g.magicKind === 'storm') { c.fillStyle = 'rgba(120,160,255,' + a * 0.35 + ')'; c.fillRect(0, 0, 320, 240); c.strokeStyle = '#fff'; c.lineWidth = 2; for (let i = 0; i < 4; i++) { let x = (i * 90 + Math.floor(t * 20) * 31) % 320; c.beginPath(); c.moveTo(x, 0); for (let y = 0; y < 220; y += 20) { x += K.rnd(-12, 12); c.lineTo(x, y); } c.stroke(); } c.lineWidth = 1; }
+      else { c.fillStyle = 'rgba(140,100,40,' + a * 0.4 + ')'; c.fillRect(0, 0, 320, 240); c.fillStyle = '#7a5a3a'; for (let i = 0; i < 12; i++) { const x = (i * 29) % 320, h = 20 + (i * 13) % 30; c.beginPath(); c.moveTo(x, 230); c.lineTo(x + 8, 230 - h * a); c.lineTo(x + 16, 230); c.fill(); } }
+    }
+  },
+  foes: {
+    skel: { name: 'SKELETON', hp: 4, spd: 40, dmg: 6, weapon: 'sword', look: look({ skin: '#e8e8d8', hair: '#e8e8d8', top: '#d8d8c8', legs: '#c8c8b8', belt: '#888', arms: '#e8e8d8', boots: '#aaa' }), score: 120 },
+    brute: { name: 'BRUTE', hp: 9, spd: 30, dmg: 10, reach: 24, knock: true, cool: 1.6, wind: 0.5, weapon: 'hammer', look: look({ skin: '#7a9a5a', hair: '#333', top: '#5a4a3a', legs: '#3a3a2a', size: 1.3 }), score: 350, drop: 'food' },
+    amazon: { name: 'RAIDER', hp: 5, spd: 55, dmg: 6, reach: 26, weapon: 'sword', kick: true, look: look({ hair: '#2a1a0a', top: '#8a2a2a', legs: '#5a2a2a' }), score: 200 },
+    archer: { name: 'ARCHER', hp: 3, spd: 40, dmg: 6, ranged: 'magic', cool: 2, look: look({ hair: '#222', top: '#3a5a3a', legs: '#2a3a2a', hat: '#2a4a2a' }), score: 180 },
+    thief: { name: 'THIEF', hp: 1, spd: 0, look: look({ skin: '#ffd0a0', hair: '#4a6aff', top: '#4a6aff', legs: '#2a3a8a', size: 0.75, hat: '#4a6aff' }), score: 50 },
+    lord: { name: 'BONE LORD', hp: 40, spd: 40, dmg: 10, reach: 28, knock: true, cool: 1.2, weapon: 'axe', ranged: 'magic', look: look({ skin: '#ddd', hair: '#222', top: '#3a1a3a', legs: '#2a0a2a', cape: '#8a0a2a', horns: '#ddd', size: 1.4 }), score: 6000 },
+    knight: { name: 'DARK KNIGHT', hp: 22, spd: 38, dmg: 9, reach: 26, knock: true, cool: 1.3, weapon: 'sword', look: look({ skin: '#666', hair: '#444', top: '#444', legs: '#333', arms: '#555', hat: '#444', size: 1.3 }), score: 3000, drop: 'gem' },
+  },
+  stages: [
+    { name: 'TURTLE VILLAGE', len: 1300, bg: land(['#4a7aca', '#c0e0f0'], '#5a8a5a', '#7a6a4a', tree),
+      props: [{ x: 500, z: 200, kind: 'crate', drop: 'food' }],
+      waves: [{ at: 200, foes: ['thief'] }, { at: 300, foes: ['skel', 'skel'] }, { at: 650, foes: ['amazon', 'skel', 'thief'] }, { at: 950, foes: ['brute', 'archer'] }, { at: 1200, foes: ['skel', 'thief'], boss: 'knight' }] },
+    { name: 'RUINED TEMPLE', len: 1500, bg: land(['#3a2a5a', '#a07aa0'], '#4a3a5a', '#6a6a70', pillar),
+      props: [{ x: 400, z: 180, drop: 'food' }, { x: 1100, z: 210, kind: 'crate', drop: 'gem' }],
+      waves: [{ at: 280, foes: ['amazon', 'amazon', 'thief'] }, { at: 600, foes: ['brute', 'skel', 'archer'] }, { at: 950, foes: ['thief', 'skel', 'skel', 'archer'] }, { at: 1400, foes: ['brute', 'amazon'], boss: 'knight' }] },
+    { name: 'BONE CASTLE', len: 1600, bg: land(['#1a0a0a', '#5a1a1a'], '#2a1a1a', '#3a3030', bones),
+      props: [{ x: 450, z: 200, drop: 'food' }, { x: 1000, z: 180, drop: 'food' }],
+      waves: [{ at: 300, foes: ['knight', 'thief'] }, { at: 650, foes: ['brute', 'brute', 'archer'] }, { at: 1000, foes: ['amazon', 'skel', 'skel', 'thief'] }, { at: 1500, foes: ['skel', 'archer', 'thief'], boss: 'lord' }] },
+  ],
+  winText: 'The Bone Lord falls and the realm is free!',
+});
+</script>
+</body>
+</html>

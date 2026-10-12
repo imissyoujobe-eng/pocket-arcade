@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Saddle Up</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/plat.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+// Saddle Up: hatch a dinosaur buddy, ride it through five lands, and CHOMP anything in your way. Find the five star coins in each land.
+K.theme({ bg: '#0c1a10', ink: '#fffaf0', accent: '#7cff6b', accentInk: '#0a2a00' });
+const VW = 256, VH = 192, T = 16;
+K.screen(VW, VH);
+K.hud(['score', 'stars', 'lives', 'time']);
+K.pad({ dpad: 'lr', buttons: [{ id: 'b', label: 'CHOMP' }, { id: 'a', label: 'JUMP' }] });
+
+const E = '................', G = '################';
+const CH = {
+  start: [E, E, E, E, E, E, E, E, E, E, E, E, '.S..............', G, G],
+  egg: [E, E, E, E, E, E, E, E, E, '.....?Y?........', E, E, '..........c.....', G, G],
+  hill: [E, E, E, E, E, E, E, '.......*........', E, '......======....', E, '...c.......t....', E, G, G],
+  rocks: [E, E, E, E, E, E, E, E, E, E, '.........RR.....', '....RR...RR.....', '....RR...RR..c..', '#######..#######', '#######..#######'],
+  sky: [E, E, E, E, '...ooo....*.....', '..=====..====...', E, E, E, '.....f.....f....', E, E, '..c.............', G, G],
+  thorns: [E, E, E, E, E, E, E, E, E, '..?......?......', E, E, '.....t.....t....', G, G],
+  gate: [E, E, E, E, E, E, E, '.......K........', '.......K........', '.......K........', '.......K........', '.......K........', '.......K........', G, G],
+  river: [E, E, E, E, E, E, E, '......*.........', E, E, E, '...===....===...', E, '##~~~~~~~~~~~~##', '##~~~~~~~~~~~~##'],
+  ledges: [E, E, E, '..........*.....', '.........===....', E, E, '.....===........', E, E, '.===............', E, '.....c....t.....', G, G],
+  coins: [E, E, E, E, E, '...o.o.o.o.o....', E, E, E, '....B?BB?B......', E, E, '...c.......c....', G, G],
+  end: ['........................', '........................', '........................', '........................', '..................GG....', '..................GG....', '..................GG....', '..................GG....', '..................GG....', '..................GG....', '..................GG....', '..................GG....', '..................GG....', '########################', '########################']
+};
+const LANDS = [
+  { n: 'Fern Hills', sky: '#9ae0ff', g: '#b06a2a', top: '#5cc23a', hill: '#6fd08a', chunks: ['start', 'egg', 'hill', 'coins', 'rocks', 'gate', 'sky', 'thorns', 'end'] },
+  { n: 'Dune Trail', sky: '#ffd8a0', g: '#d8a050', top: '#f0c870', hill: '#e8b070', chunks: ['start', 'egg', 'thorns', 'rocks', 'ledges', 'gate', 'river', 'hill', 'rocks', 'end'] },
+  { n: 'Misty Marsh', sky: '#a8c8c0', g: '#5a6a3a', top: '#8ab04a', hill: '#7a9a8a', chunks: ['start', 'egg', 'river', 'sky', 'river', 'gate', 'thorns', 'ledges', 'river', 'end'] },
+  { n: 'Cocoa Peaks', sky: '#c8a0ff', g: '#7a4a3a', top: '#d07aa0', hill: '#9a7ac8', chunks: ['start', 'egg', 'ledges', 'rocks', 'sky', 'gate', 'ledges', 'thorns', 'rocks', 'coins', 'end'] },
+  { n: 'Ember Keep', sky: '#2a1010', g: '#5a4a4a', top: '#8a6a6a', hill: '#3a2020', chunks: ['start', 'egg', 'thorns', 'rocks', 'river', 'gate', 'rocks', 'ledges', 'thorns', 'rocks', 'end'], lava: true }
+];
+
+let state = 'title', li, w, p, cam, ents, items, fx, score, lives, timeLeft, big, dino, deadT, winT, msg, msgT, stars, starsTotal, mid, best = K.best('saddleup');
+function title() { K.card({ title: 'SADDLE UP', text: 'Bonk the spotted egg block to hatch a dino buddy, then jump on its back! While riding, CHOMP gobbles enemies in front of you, even spiky ones, and you can stomp anything. Hold JUMP in the air to flutter. If you get hit, your dino runs off, so catch it again!', best: best ? 'BEST ' + best : '', button: 'Ride on', onStart: () => { li = 0; score = 0; lives = 4; big = false; stars = 0; starsTotal = 0; mid = false; load(); state = 'play'; } }); }
+function load() {
+  const L = LANDS[li];
+  const chunks = L.chunks.map(k => k === 'river' && L.lava ? CH.river.map(r => r.replace(/~/g, 'L')) : CH[k]);
+  w = P.world(P.join(chunks));
+  P.SOLID = '#RB?YU'; P.ONEWAY = '=';
+  ents = []; items = []; fx = []; cam = { x: 0, y: 0 }; deadT = 0; winT = 0; timeLeft = 300; msg = L.n.toUpperCase(); msgT = 1.6; dino = null;
+  for (let y = 0; y < w.rows; y++) for (let x = 0; x < w.cols; x++) {
+    const ch = w.g[y][x], X = x * T, Y = y * T;
+    if (ch === 'S') { w.start = { x: X, y: Y }; w.g[y][x] = '.'; }
+    if (ch === 'c') { ents.push(P.walker(X + 2, Y + 2, { kind: 'clomper', vx: -28 - li * 3 })); w.g[y][x] = '.'; }
+    if (ch === 't') { ents.push(P.walker(X + 2, Y + 2, { kind: 'thorn', smart: true, vx: -20, stompable: false })); w.g[y][x] = '.'; }
+    if (ch === 'f') { ents.push({ kind: 'flapper', x: X, y: Y, y0: Y, w: 12, h: 10, vx: -35, ph: Math.random() * 6, alive: true }); w.g[y][x] = '.'; }
+  }
+  if (mid) { const gx = w.g[7].findIndex(c => c === 'K'); if (gx > 0) w.start = { x: gx * T + 20, y: 11 * T }; }
+  p = P.player(w.start.x, w.start.y, { h: big ? 24 : 14 });
+  hud();
+}
+function hud() { K.set('score', score); K.set('stars', '★ ' + stars); K.set('lives', '♥' + lives); K.set('time', Math.max(0, Math.ceil(timeLeft))); }
+function setBig(b) { if (b && !big) { p.y -= 10; p.h = 24; } if (!b && big) { p.h = 14; p.y += 10; } big = b; }
+function riding() { return dino && dino.ridden; }
+function hurt() {
+  if (p.inv > 0 || deadT) return;
+  if (riding()) { dino.ridden = false; dino.flee = 2.5; dino.vx = -p.face * 90; p.vy = -200; p.inv = 1.5; p.h = big ? 24 : 14; K.beep(500, 0.3, { to: 200, vol: 0.06 }); return; }
+  if (big) { setBig(false); p.inv = 2; K.beep(300, 0.4, { to: 120, vol: 0.06 }); return; }
+  die();
+}
+function die() { deadT = 2.2; p.vy = -260; dino = null; K.tune([494, 440, 392, 349], 0.12, { type: 'triangle' }); }
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  for (const f of fx) { f.l -= dt; if (f.vy != null) { f.y += f.vy * dt; f.vy += 500 * dt; } } fx = fx.filter(f => f.l > 0);
+  P.stepBumps(w, dt);
+  if (deadT > 0) { deadT -= dt; p.vy += 700 * dt; p.y += p.vy * dt; if (deadT <= 0) { lives--; setBig(false); hud(); if (lives < 0) return over(); load(); } return; }
+  if (winT > 0) { winT -= dt; p.vx = 60; p.vy = Math.min(200, p.vy + 800 * dt); P.move(w, p, dt); if (timeLeft > 0) { const d = Math.min(timeLeft, dt * 120); timeLeft -= d; score += Math.round(d) * 10; hud(); } if (winT <= 0) { li++; mid = false; if (li >= LANDS.length) return victory(); load(); } return; }
+  timeLeft -= dt * 2.5; if (timeLeft <= 0) { timeLeft = 0; die(); }
+  if (Math.floor(timeLeft) !== Math.floor(timeLeft + dt * 2.5)) hud();
+  const ride = riding();
+  if (ride) { p.cfg.run = 105; p.cfg.sprint = 150; p.cfg.jump = 300; } else { p.cfg.run = 96; p.cfg.sprint = 140; p.cfg.jump = 285; }
+  P.control(w, p, dt);
+  // flutter: hold jump while falling for a little hang time
+  if (!p.ground && p.vy > 0 && K.down('a') && (p.flutter = (p.flutter || 0) + dt) < 0.6) p.vy = Math.min(p.vy, ride ? -20 : 30);
+  if (p.ground) p.flutter = 0;
+  if (p.hitHead) bonk(p.hitHead.tx, p.hitHead.ty);
+  // chomp
+  if (ride && K.hit('b')) { dino.chomp = 0.25; K.beep(300, 0.06, { to: 700, vol: 0.05 }); }
+  if (dino && dino.chomp > 0) { dino.chomp -= dt; const cx = p.x + p.w / 2 + p.face * 18, cy = p.y + p.h - 10; for (const e of ents) if (e.alive && Math.abs(e.x + e.w / 2 - cx) < 14 && Math.abs(e.y + e.h / 2 - cy) < 14) { kill(e, 200); dino.chomp = 0; K.tune([523, 784], 0.05); } }
+  const tc = P.touches(w, p, 'o*GK~L');
+  if (tc) {
+    if (tc.ch === 'o') { P.set(w, tc.tx, tc.ty, '.'); score += 100; hud(); K.beep(988, 0.05, { vol: 0.05 }); K.beep(1319, 0.1, { vol: 0.05, at: 0.05 }); }
+    if (tc.ch === '*') { P.set(w, tc.tx, tc.ty, '.'); stars++; score += 1000; hud(); K.tune([784, 988, 1175, 1568], 0.06); if (stars % 5 === 0) { lives++; msg = '5 STARS! EXTRA LIFE'; msgT = 1.5; } }
+    if (tc.ch === 'K' && !mid) { mid = true; P.set(w, tc.tx, tc.ty, '.'); score += 500; msg = 'CHECKPOINT'; msgT = 1.2; setBig(true); K.tune([659, 880], 0.08); }
+    if (tc.ch === '~' || tc.ch === 'L') return die();
+    if (tc.ch === 'G') { score += 2000 + (riding() ? 1000 : 0); hud(); winT = 3; K.tune([392, 523, 659, 784, 1047, 1319], 0.1); return; }
+  }
+  if (p.fell) { p.fell = false; return die(); }
+  // dino buddy: hatched from the egg, waits, flees when you get hit
+  if (dino) {
+    if (dino.ridden) { dino.x = p.x - 4; dino.y = p.y + p.h - 18; dino.face = p.face; }
+    else {
+      if (dino.hatch > 0) dino.hatch -= dt;
+      if (dino.flee > 0) { dino.flee -= dt; dino.vy = Math.min(300, (dino.vy || 0) + 800 * dt); const v0 = dino.vx; P.move(w, dino, dt); if (dino.hitWall) dino.vx = -v0; if (dino.flee <= 0) dino.vx = 0; }
+      else { dino.vy = Math.min(300, (dino.vy || 0) + 800 * dt); dino.vx = 0; P.move(w, dino, dt); }
+      if (dino.y > w.py) dino = null;
+      else if (dino.hatch <= 0 && p.inv <= 0 && p.vy > 0 && P.overlap(p, dino) && p.y + p.h < dino.y + 10) { dino.ridden = true; p.vy = -120; K.tune([392, 523], 0.07); }
+    }
+  }
+  for (const it of items) { it.vy = Math.min(250, (it.vy || 0) + 800 * dt); const v0 = it.vx; P.move(w, it, dt); if (it.hitWall) it.vx = -v0; if (P.overlap(p, it)) { it.dead = true; score += 1000; setBig(true); hud(); K.tune([523, 659, 784, 1047], 0.05); } if (it.y > w.py) it.dead = true; }
+  items = items.filter(i => !i.dead);
+  for (const e of ents) {
+    if (!e.alive || e.x > cam.x + VW + 40) continue;
+    if (e.kind === 'flapper') { e.ph += dt * 2.5; e.x += e.vx * dt; e.y = e.y0 + Math.sin(e.ph) * 28; } else P.stepWalker(w, e, dt);
+    const r = P.contact(p, Object.assign({}, e, { stompable: e.stompable !== false || ride }));
+    if (r === 'stomp') { p.vy = K.down('a') ? -300 : -190; p.jumping = K.down('a'); kill(e, 100); }
+    else if (r === 'hurt') hurt();
+  }
+  ents = ents.filter(e => e.alive);
+  cam = P.cam(w, p, cam, VW, VH);
+}
+function kill(e, pts) { e.alive = false; score += pts; hud(); fx.push({ t: 'pts', x: e.x, y: e.y - 6, txt: String(pts), vy: -30, l: 0.7 }); fx.push({ t: 'poof', x: e.x + 6, y: e.y + 6, l: 0.3 }); K.beep(300, 0.08, { vol: 0.05 }); }
+function bonk(tx, ty) {
+  const ch = w.g[ty][tx];
+  if (ch === '?') { P.set(w, tx, ty, 'U'); P.bump(w, tx, ty); if (!big && Math.random() < 0.5) items.push({ x: tx * T + 2, y: ty * T - 14, w: 12, h: 12, vx: 50, vy: -100 }); else { score += 100; fx.push({ t: 'coin', x: tx * T + 4, y: ty * T - 8, vy: -160, l: 0.5 }); K.beep(988, 0.05, { vol: 0.05 }); } hud(); }
+  else if (ch === 'Y') { P.set(w, tx, ty, 'U'); P.bump(w, tx, ty); if (!dino) { dino = { x: tx * T, y: ty * T - 20, w: 18, h: 18, vx: 0, vy: -150, hatch: 0.6, ridden: false, face: 1, chomp: 0 }; K.tune([523, 659, 784, 1047, 1319], 0.06); msg = 'JUMP ON!'; msgT = 1.2; } }
+  else if (ch === 'B') { if (big || riding()) { P.set(w, tx, ty, '.'); K.noise(0.15, 0.2); } else P.bump(w, tx, ty); }
+  else K.beep(150, 0.05, { vol: 0.04 });
+}
+function over() { state = 'over'; best = K.saveBest('saddleup', score); K.card({ title: 'GAME OVER', text: 'You rode as far as ' + LANDS[li].n + ' with ' + stars + ' star coins and ' + score + ' points.', best: 'BEST ' + best, button: 'Saddle up again', onStart: () => { li = 0; score = 0; lives = 4; big = false; stars = 0; mid = false; load(); state = 'play'; } }); }
+function victory() { state = 'over'; const f = score + lives * 5000; best = K.saveBest('saddleup', f); K.card({ title: 'YEE-HAW!', text: 'All five lands done with ' + stars + ' star coins! Final score ' + f + '.', best: 'BEST ' + best, button: 'Ride again', onStart: () => { li = 0; score = 0; lives = 4; big = false; stars = 0; mid = false; load(); state = 'play'; } }); }
+
+function drawTile(c, ch, x, y, tx, ty, t) {
+  const L = LANDS[li]; y += P.bumpOffset(w, tx, ty);
+  if (ch === '#') { artTile(c, '#', x, y, tx, ty, li, '#', (ART[li] || ART[0]).pal); }
+  else if (ch === 'R') { artTile(c, 'R', x, y, tx, ty, li, 'R', A.PAL.stone); }
+  else if (ch === 'B') { artTile(c, 'B', x, y, tx, ty, li, 'B', Object.assign({}, A.PAL.castle, { base: '#b5502a', hi: '#d8784a', lo: '#7a3018', mortar: '#2a1008' })); }
+  else if (ch === '?') { c.fillStyle = Math.floor(t / 200) % 2 ? '#ffd23f' : '#ffb02e'; c.fillRect(x, y, T, T); K.text(c, '?', x + 8, y + 8, 10, '#8a4a10'); }
+  else if (ch === 'Y') { c.fillStyle = '#f4f4e8'; c.fillRect(x, y, T, T); c.fillStyle = '#5cc23a'; c.fillRect(x + 3, y + 3, 4, 4); c.fillRect(x + 9, y + 8, 4, 4); c.fillRect(x + 2, y + 10, 3, 3); }
+  else if (ch === 'U') { c.fillStyle = '#8a6a4a'; c.fillRect(x, y, T, T); }
+  else if (ch === '=') { c.fillStyle = '#8a5a3a'; c.fillRect(x, y, T, 5); c.fillStyle = '#5cc23a'; c.fillRect(x, y, T, 2); }
+  else if (ch === 'o') { const s = Math.abs(Math.sin(t / 200 + tx)); c.fillStyle = '#ffd23f'; c.fillRect(x + 8 - 4 * s, y + 3, 8 * s + 1, 10); }
+  else if (ch === '*') { c.save(); c.translate(x + 8, y + 8); c.rotate(Math.sin(t / 300) * 0.3); c.fillStyle = '#ffd23f'; c.beginPath(); for (let k = 0; k < 10; k++) { const r = k % 2 ? 3.5 : 8, a = k / 10 * Math.PI * 2 - Math.PI / 2; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.fill(); c.restore(); }
+  else if (ch === 'K') { c.fillStyle = '#9a6a3a'; c.fillRect(x + 6, y, 4, T); c.fillStyle = Math.floor(t / 300) % 2 ? '#ffd23f' : '#fff'; if (w.g[ty - 1][tx] !== 'K') c.fillRect(x + 1, y, 14, 4); }
+  else if (ch === '~') { c.fillStyle = '#2a8ad8'; c.fillRect(x, y + 3, T, T - 3); c.fillStyle = '#9ad8ff'; c.fillRect(x + (t / 50 + tx * 4) % 12, y + 3, 4, 2); }
+  else if (ch === 'L') { c.fillStyle = Math.floor(t / 150 + tx) % 2 ? '#ff5a1a' : '#ff8a1a'; c.fillRect(x, y + 3, T, T - 3); }
+  else if (ch === 'G') { c.fillStyle = '#9a6a3a'; c.fillRect(x + (w.g[ty][tx - 1] === 'G' ? 10 : 0), y, 6, T); if (w.g[ty][tx + 1] === 'G' && (Math.floor(t / 400) + ty) % 4 === 0) { c.fillStyle = '#ffd23f'; c.fillRect(x + 4, y + 6, 24, 4); } }
+}
+function drawDino(c, d, x, y, t) {
+  const f = d.face || 1, run = Math.floor(t / 120) % 2;
+  c.save(); c.translate(x + 9, 0); c.scale(f, 1); c.translate(-9, 0);
+  c.fillStyle = '#3fd06a'; c.fillRect(0, y + 4, 14, 9); c.fillRect(-4, y + 6, 5, 4); c.fillRect(10, y - 4, 9, 8); c.fillStyle = '#c8f0b0'; c.fillRect(3, y + 8, 9, 4);
+  c.fillStyle = '#e63946'; c.fillRect(2, y + 2, 9, 3);
+  c.fillStyle = '#fff'; c.fillRect(14, y - 3, 3, 3); c.fillStyle = '#000'; c.fillRect(15, y - 2, 2, 2);
+  if (d.chomp > 0) { c.fillStyle = '#ff8fb0'; c.fillRect(18, y, 10, 3); }
+  c.fillStyle = '#d07a2a'; c.fillRect(2 + run * 2, y + 13, 4, 5); c.fillRect(9 - run * 2, y + 13, 4, 5);
+  c.restore();
+  if (d.hatch > 0) { c.fillStyle = '#f4f4e8'; c.fillRect(x - 2, y + 10, 22, 8); }
+}
+function drawHero(c, x, y, t) {
+  if (p.inv > 0 && Math.floor(t / 60) % 2) return;
+  const h = big ? 24 : 14, f = p.face, ride = riding(), run = p.ground && Math.abs(p.vx) > 5 && !ride ? Math.floor(p.anim / 9) % 2 : 0;
+  c.save(); c.translate(x + 6, 0); c.scale(f, 1); c.translate(-6, 0);
+  const yy = ride ? y - 6 : y;
+  if (!ride) { c.fillStyle = '#3a2a5a'; c.fillRect(2 + run * 2, yy + h - 5, 3, 5); c.fillRect(7 - run * 2, yy + h - 5, 3, 5); }
+  c.fillStyle = '#8a4ad8'; c.fillRect(1, yy + (big ? 9 : 5), 10, big ? 10 : 5);
+  c.fillStyle = '#ffcf9e'; c.fillRect(2, yy + (big ? 1 : -2), 8, 8); c.fillStyle = '#111'; c.fillRect(8, yy + (big ? 4 : 1), 1, 2);
+  c.fillStyle = '#3fd06a'; c.fillRect(1, yy + (big ? -2 : -5), 10, 4); c.fillRect(8, yy + (big ? 1 : -2), 5, 1);
+  c.restore();
+}
+function drawEnt(c, e, x, y, t) {
+  if (e.kind === 'clomper') { const k = Math.floor(t / 150) % 2; c.fillStyle = '#d07a2a'; c.fillRect(x, y + 1, 12, 10); c.fillStyle = '#ffd23f'; c.fillRect(x + 2, y + 3, 8, 2); c.fillStyle = '#fff'; c.fillRect(x + (e.vx < 0 ? 1 : 8), y + 5, 3, 3); c.fillStyle = '#000'; c.fillRect(x + (e.vx < 0 ? 1 : 10), y + 6, 1, 1); c.fillStyle = '#5a2a10'; c.fillRect(x + (k ? 0 : 2), y + 11, 4, 2); c.fillRect(x + (k ? 8 : 6), y + 11, 4, 2); }
+  else if (e.kind === 'thorn') { c.fillStyle = '#5a3a8a'; c.fillRect(x, y + 4, 12, 8); c.fillStyle = '#e8e8f0'; for (let k = 0; k < 4; k++) { c.beginPath(); c.moveTo(x + k * 3, y + 4); c.lineTo(x + k * 3 + 1.5, y - 1); c.lineTo(x + k * 3 + 3, y + 4); c.fill(); } c.fillStyle = '#ffd23f'; c.fillRect(x + (e.vx < 0 ? 1 : 9), y + 6, 2, 2); }
+  else if (e.kind === 'flapper') { const f = Math.floor(t / 90) % 2; c.fillStyle = '#e63946'; c.fillRect(x, y + 2, 12, 7); c.fillStyle = '#ffb0b0'; c.fillRect(x + 2, y - (f ? 4 : -1), 8, 3); c.fillStyle = '#000'; c.fillRect(x + 1, y + 4, 2, 2); }
+}
+function draw(c, t) {
+  if (!w) { c.fillStyle = '#9ae0ff'; c.fillRect(0, 0, VW, VH); return; }
+  const L = LANDS[li]; artBg(c, t, li);
+  P.eachVisible(w, cam, VW, VH, (ch, x, y, tx, ty) => drawTile(c, ch, x, y, tx, ty, t));
+  for (const it of items) { const x = Math.round(it.x - cam.x), y = Math.round(it.y - cam.y); c.fillStyle = '#c0306a'; c.beginPath(); c.arc(x + 6, y + 7, 6, 0, 7); c.fill(); c.fillStyle = '#3fa34d'; c.fillRect(x + 5, y - 1, 3, 3); }
+  for (const e of ents) if (e.x > cam.x - 30 && e.x < cam.x + VW + 30) drawEnt(c, e, Math.round(e.x - cam.x), Math.round(e.y - cam.y), t);
+  if (dino) drawDino(c, dino, Math.round(dino.x - cam.x), Math.round(dino.y - cam.y), t);
+  for (const f of fx) { const x = Math.round(f.x - cam.x), y = Math.round(f.y - cam.y); if (f.t === 'coin') { c.fillStyle = '#ffd23f'; c.fillRect(x + 2, y, 4, 9); } else if (f.t === 'pts') K.text(c, f.txt, x + 6, y, 7, '#fff'); else if (f.t === 'poof') { c.fillStyle = 'rgba(255,255,255,' + f.l * 3 + ')'; c.beginPath(); c.arc(x, y, (0.3 - f.l) * 40, 0, 7); c.fill(); } }
+  drawHero(c, Math.round(p.x - cam.x), Math.round(p.y - cam.y), t);
+  if (msgT > 0) K.text(c, msg, VW / 2, 60, 16, '#fff');
+}
+title();
+const ART = [{ pal: A.PAL.earth, sky: { top: '#2a7ae0', mid: '#8ad0ff', bottom: '#e8f8ff', sun: '#fff6c0', sunY: 50 }, layers: [{ factor: 0.12, base: 150, amp: 45, col: '#7ab8a8', edge: 'rgba(0,0,0,.18)', seed: 2, fog: 'rgba(220,240,255,.35)' }, { factor: 0.28, base: 185, amp: 40, col: '#4a9a5a', edge: 'rgba(0,0,0,.3)', seed: 5 }, { t: 'trees', factor: 0.45, base: 212, col: '#2a7a3a', hi: '#4aa04a', kind: 'round', spacing: 28, ground: true }], amb: "leaf", vig: .2 }, { pal: A.PAL.desert, sky: { top: "#5a8ad8", mid: "#ffd8a0", bottom: "#fff0d0", sun: "#fff8d0", sunY: 40, sunR: 16 }, layers: [{ factor: 0.12, base: 160, amp: 60, col: '#a05a5a', bands: ['rgba(255,200,150,.25)', 'rgba(120,40,40,.25)'], mesa: true, edge: 'rgba(0,0,0,.25)', seed: 1, fog: 'rgba(255,220,180,.2)' }, { factor: 0.3, base: 195, amp: 50, col: '#7a3a3a', bands: ['rgba(255,160,100,.3)', 'rgba(60,20,20,.3)'], mesa: true, edge: 'rgba(0,0,0,.45)', seed: 4 }, { t: 'trees', factor: 0.5, base: 215, col: '#4a2a2a', kind: 'palm', spacing: 46 }], amb: "dust", vig: .25 }, { pal: Object.assign({}, A.PAL.jungle, { base: "#4a4a3a", hi: "#6a6a52", lo: "#2e2e22" }), sky: { top: "#5a7a78", mid: "#a8c8c0", bottom: "#e0f0e8", clouds: true, cloud: "rgba(240,255,250,.6)" }, layers: [{ factor: 0.12, base: 160, amp: 30, col: "#7a9a90", edge: "rgba(0,0,0,.15)", seed: 3, fog: "rgba(230,255,245,.5)" }, { t: "trees", factor: 0.35, base: 205, col: "#3a5a4a", kind: "pine", spacing: 26, size: 1.3, ground: true }], amb: "dust", vig: .3 }, { pal: Object.assign({}, A.PAL.earth, { base: "#6a3a22", hi: "#8a5434", lo: "#4a2412", grass: "#ff8ac8", grassHi: "#ffc8e8", grassLo: "#c05a9a" }), sky: { top: "#6a4ad8", mid: "#c8a0ff", bottom: "#ffe0f0", sun: "#fff0f8", sunY: 50 }, layers: [{ factor: 0.12, base: 150, amp: 70, col: "#8a5a3a", bands: ["rgba(255,220,240,.25)"], edge: "rgba(0,0,0,.25)", seed: 5 }, { factor: 0.3, base: 195, amp: 45, col: "#5a3420", edge: "rgba(0,0,0,.35)", seed: 1 }], amb: "leaf", vig: .25 }, { pal: A.PAL.lavaRock, sky: { top: '#060208', mid: '#2a0a0a', bottom: '#7a1a0a', clouds: false }, layers: [{ factor: 0.15, base: 170, amp: 50, col: '#2a0a0a', mesa: true, edge: 'rgba(255,90,30,.35)', seed: 9 }, { factor: 0.3, base: 205, amp: 40, col: '#180606', mesa: true, edge: 'rgba(255,90,30,.4)', seed: 2 }], amb: "ember", vig: .45, glow: "255,80,20" }];
+
+function artBg(c, t, i) { const L = ART[i] || ART[0]; A.sky(c, VW, VH, L.sky, t); c.save(); c.translate(0, Math.round(-cam.y * 0.9)); (L.layers || []).forEach(o => o.t === 'trees' ? A.trees(c, cam.x, o) : A.ridge(c, cam.x, o)); c.restore(); if (L.glow) A.glow(c, VW / 2, VH, 220, L.glow, 0.25); }
+function artTile(c, ch, x, y, tx, ty, i, set, pal) { const sol = (a, b) => a < 0 || a >= w.cols || b >= w.rows || (b >= 0 && set.indexOf(w.g[b][a]) >= 0); A.tile(c, ch + i, x, y, A.edges(sol, tx, ty), tx, ty, pal); }
+drawDino = A.ink(drawDino);
+drawHero = A.ink(drawHero);
+drawEnt = A.ink(drawEnt);
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); if (w) { const L = ART[li] || ART[0]; A.ambient(c, VW, VH, t, L.amb, 16); A.vignette(c, VW, VH, L.vig == null ? 0.3 : L.vig); } }; }
+K.run(update, draw);
+</script>
+</body>
+</html>

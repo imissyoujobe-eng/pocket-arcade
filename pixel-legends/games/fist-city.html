@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fist City</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
+<script src="../lib/brawl.js"></script>
+<script>
+// Fist City: the mayor puts on his boots and cleans up the city himself. Smash barrels for roast chicken, grab pipes and swords, and take down the gang bosses.
+const ZMIN = B.ZMIN;
+function town(sky, wall, sign, floor, train) {
+  const pal = Object.assign({}, A.PAL.stone, { base: floor, hi: A.shade(floor, 0.18), lo: A.shade(floor, -0.25), mortar: A.shade(floor, -0.55) });
+  return function (c, cx, t) {
+    A.sky(c, 320, ZMIN, { top: sky, mid: A.shade(sky, 0.25), bottom: A.shade(sky, 0.5), stars: true, clouds: false }, t * 1000);
+    A.skyline(c, cx, { factor: 0.2, base: ZMIN - 40, col: A.shade(sky, -0.3), amp: 80 });
+    if (train) { const tx = (t * 220) % 900 - 300; A.part(c, tx, 92, 240, 40, '#9aa0aa'); for (let i = 0; i < 8; i++) { c.fillStyle = '#ffe8a0'; c.fillRect(tx + 8 + i * 29, 100, 20, 14); } c.fillStyle = '#3a4a6a'; c.fillRect(tx, 126, 240, 3); }
+    A.facades(c, cx, { factor: 1, base: ZMIN - 8, h: 100, w: 96, cols: [wall, A.shade(wall, 0.1), A.shade(wall, -0.12)], awn: [sign, '#3a3a4a'], signs: [sign, '#4ad8ff', '#ffd23a'], lit: 0.45 });
+    c.fillStyle = A.INK; c.fillRect(0, ZMIN - 10, 320, 3); c.fillStyle = '#9a9aa0'; c.fillRect(0, ZMIN - 9, 320, 2);
+    A.floor(c, cx, ZMIN - 8, 240, 320, pal);
+  };
+}const look = (top, legs, hair, extra) => Object.assign({ skin: '#e0b088', hair, top, legs, belt: '#222' }, extra || {});
+B.start({
+  title: 'FIST CITY', key: 'fistcity', button: 'Clean Up',
+  theme: { bg: '#0e0e16', ink: '#f0f4ff', accent: '#ffd23a', accentInk: '#221a00' },
+  text: 'Move with the arrows. HIT three times for a combo that ends in a big suplex slam. JUMP + HIT for a knee drop. SPECIAL is a spinning lariat that clears everyone around you but costs health. Smash barrels for food, and HIT while standing on a pipe or sword to grab it. Keyboard: Z hit, X jump, C special.',
+  hero: { hp: 70, spd: 64, dmg: 1.25, reach: 20, look: look('#d0d0c0', '#3a5a3a', '#6a4a2a', { arms: '#e0b088', gloves: '#e0b088' }) },
+  finisher: 'punch',
+  foes: {
+    punk: { name: 'PUNK', hp: 4, spd: 42, dmg: 5, look: look('#3a7a3a', '#3a3a5a', '#ff4ab0'), score: 100 },
+    biker: { name: 'BIKER', hp: 5, spd: 45, dmg: 6, kick: true, reach: 24, look: look('#2a2a2a', '#3a3a6a', '#ffd23a'), score: 150, drop: 'pipe' },
+    blade: { name: 'KNIFER', hp: 3, spd: 55, dmg: 7, weapon: 'knife', ranged: 'knife', cool: 1.6, look: look('#7a2a2a', '#2a2a2a', '#111'), score: 180, drop: 'knife' },
+    tank: { name: 'TANK', hp: 10, spd: 34, dmg: 9, charge: 150, reach: 22, knock: true, cool: 1.6, look: look('#ffa040', '#4a3a6a', '#111', { size: 1.4, skin: '#d09a70' }), score: 400 },
+    damn: { name: 'SPIKE', hp: 26, spd: 46, dmg: 8, reach: 24, knock: true, cool: 1.1, kick: true, look: look('#4a7aff', '#222', '#ffd23a', { size: 1.2 }), score: 3000, drop: 'gem' },
+    ref: { name: 'THE JUDGE', hp: 30, spd: 40, dmg: 10, charge: 170, knock: true, reach: 24, cool: 1.2, look: look('#f0f0f0', '#111', '#222', { size: 1.35 }), score: 4000, drop: 'gem' },
+    boss: { name: 'MR. BELL', hp: 36, spd: 44, dmg: 9, ranged: 'fire', shotSpd: 170, cool: 1.0, reach: 24, knock: true, look: look('#5a5a6a', '#2a2a3a', '#ddd', { size: 1.3 }), score: 6000 },
+  },
+  stages: [
+    { name: 'SLUM STREETS', len: 1400, bg: town('#1a1a2a', '#6a4a3a', '#c03a3a', '#5a5450'),
+      props: [{ x: 320, z: 190, drop: 'food' }, { x: 340, z: 215, drop: 'pipe' }, { x: 900, z: 175, drop: 'food' }],
+      waves: [{ at: 260, foes: ['punk', 'punk'] }, { at: 560, foes: ['punk', 'biker', 'blade'] }, { at: 880, foes: ['tank', 'punk', 'punk'] }, { at: 1300, foes: ['biker', 'blade'], boss: 'damn' }] },
+    { name: 'SUBWAY', len: 1500, bg: town('#101418', '#3a4a4a', '#3a8aff', '#4a4a48', true),
+      props: [{ x: 420, z: 210, drop: 'food' }, { x: 800, z: 180, kind: 'crate', drop: 'sword' }, { x: 1200, z: 200, drop: 'gem' }],
+      waves: [{ at: 300, foes: ['blade', 'blade', 'punk'] }, { at: 650, foes: ['tank', 'biker'] }, { at: 1000, foes: ['punk', 'punk', 'biker', 'blade'] }, { at: 1400, foes: ['tank'], boss: 'ref' }] },
+    { name: 'UPTOWN TOWER', len: 1600, bg: town('#202840', '#7a7a8a', '#ffd23a', '#6a6a70'),
+      props: [{ x: 400, z: 180, drop: 'food' }, { x: 950, z: 205, drop: 'food' }, { x: 1300, z: 175, kind: 'crate', drop: 'pipe' }],
+      waves: [{ at: 300, foes: ['biker', 'biker', 'blade'] }, { at: 650, foes: ['tank', 'tank'] }, { at: 1000, foes: ['blade', 'punk', 'biker', 'punk'] }, { at: 1500, foes: ['damn', 'blade'], boss: 'boss' }] },
+  ],
+  winText: 'Mr. Bell is behind bars. Fist City is clean!',
+});
+</script>
+</body>
+</html>

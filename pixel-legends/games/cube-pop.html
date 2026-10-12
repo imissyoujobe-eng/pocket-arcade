@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cube Pop</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Cube Pop: tap groups of matching cubes to pop them. Big groups build rockets, bombs and rainbow balls. Hit each level's goals before you run out of moves.
+K.theme({ bg: '#1a1240', ink: '#fff', accent: '#ff5ac8', accentInk: '#fff' });
+const COLS = 8, ROWS = 9, CS = 34, W = 300, H = 400, GX = (W - COLS * CS) / 2, GY = 70;
+K.screen(W, H, { smooth: true });
+K.hud(['score', 'level', 'moves']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'POP' }] });
+const COLORS = ['#ff4a5a', '#3a9aff', '#3ad06a', '#ffd23a', '#b06aff'];
+const CNAME = ['red', 'blue', 'green', 'yellow', 'purple'];
+let grid, state = 'title', score, level, moves, goals, cursor, busy, fx, pops, shakeCell, best = K.best('cubepop'), unlocked = Math.max(1, K.best('cubepop_lvl')), nColors, celebrate;
+function levelSpec(n) {
+  const nc = n < 4 ? 4 : 5, mv = 24 + Math.min(12, n), g = [];
+  const c1 = (n * 2) % nc, c2 = (n * 2 + 1) % nc;
+  g.push({ k: 'c', c: c1, need: 12 + n * 2 }); if (n > 1) g.push({ k: 'c', c: c2, need: 10 + n * 2 });
+  let crates = 0; if (n >= 3) { crates = Math.min(20, 4 + n * 2); g.push({ k: 'crate', need: crates }); }
+  if (n >= 6) g.push({ k: 'special', need: 2 + Math.floor(n / 4) });
+  return { nc, mv, g, crates };
+}
+function title() { K.card({ title: 'CUBE POP', text: 'Tap 2 or more touching cubes of the same color to pop them. Pop 5+ for a ROCKET, 7+ for a BOMB, 9+ for a RAINBOW ball that clears every cube of one color. Tap a special to set it off. Wooden crates break when you pop cubes next to them. Reach the goals at the top before your moves run out!', best: best ? 'BEST ' + best : '', button: 'Level ' + unlocked, onStart: () => { score = 0; startLevel(unlocked); } }); }
+function rnd() { return { c: K.ri(0, nColors - 1), y: 0 }; }
+function startLevel(n) {
+  level = n; const L = levelSpec(n - 1); nColors = L.nc; moves = L.mv; goals = L.g.map(x => ({ ...x, have: 0 })); fx = []; pops = []; busy = 0; cursor = { x: 3, y: 4 }; celebrate = 0;
+  grid = []; for (let x = 0; x < COLS; x++) { grid[x] = []; for (let y = 0; y < ROWS; y++) grid[x][y] = rnd(); }
+  // crates sit in the lower rows
+  let placed = 0, tries = 0; while (placed < L.crates && tries < 500) { tries++; const x = K.ri(0, COLS - 1), y = K.ri(ROWS - 4, ROWS - 1); if (!grid[x][y].crate) { grid[x][y] = { crate: placed % 3 === 0 ? 2 : 1, y: 0 }; placed++; } }
+  for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) grid[x][y].y = -(ROWS - y) * CS - 40 - x * 6; // drop-in
+  ensureMoves(); state = 'play'; K.tune([523, 659, 784], 0.08);
+}
+function at(x, y) { return x >= 0 && x < COLS && y >= 0 && y < ROWS ? grid[x][y] : null; }
+function groupAt(x, y) { const s = at(x, y); if (!s || s.crate || s.sp) return []; const out = [], seen = new Set(), q = [[x, y]]; while (q.length) { const [a, b] = q.pop(), k = a + ',' + b; if (seen.has(k)) continue; seen.add(k); const c = at(a, b); if (!c || c.crate || c.sp || c.c !== s.c) continue; out.push([a, b]); q.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]); } return out; }
+function hasMove() { for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) { const c = grid[x][y]; if (c.sp) return true; if (!c.crate && groupAt(x, y).length >= 2) return true; } return false; }
+function ensureMoves() { let n = 0; while (!hasMove() && n++ < 30) for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) if (!grid[x][y].crate && !grid[x][y].sp) grid[x][y].c = K.ri(0, nColors - 1); }
+function addFx(x, y, col, n) { const px = GX + x * CS + CS / 2, py = GY + y * CS + CS / 2; for (let i = 0; i < n; i++) fx.push({ x: px, y: py, vx: K.rnd(-120, 120), vy: K.rnd(-160, 40), t: K.rnd(0.3, 0.7), c: col }); }
+function goal(k, c, n) { goals.forEach(g => { if (g.k === k && (k !== 'c' || g.c === c)) g.have = Math.min(g.need, g.have + (n || 1)); }); }
+// clear a set of cells (with chain reactions). returns number of cleared cubes
+function clearCells(cells, sourceColor) {
+  const queue = cells.slice(), done = new Set(); let count = 0; const crateHits = new Set();
+  while (queue.length) {
+    const [x, y] = queue.shift(), k = x + ',' + y; if (done.has(k)) continue; done.add(k); const c = at(x, y); if (!c) continue;
+    if (c.crate) { hitCrate(x, y); continue; }
+    if (c.sp && !(x + ',' + y === cells.originKey)) { // chain: specials set off by blasts
+      const more = specialCells(x, y, c); grid[x][y] = null; more.forEach(m => queue.push(m)); goal('special'); score += 200; continue; }
+    if (c.sp) { grid[x][y] = null; continue; }
+    goal('c', c.c); addFx(x, y, COLORS[c.c], 5); grid[x][y] = null; count++;
+    if (sourceColor !== undefined) [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { const n = at(x + dx, y + dy); if (n && n.crate) crateHits.add((x + dx) + ',' + (y + dy)); });
+  }
+  crateHits.forEach(k => { const [x, y] = k.split(',').map(Number); if (at(x, y) && at(x, y).crate) hitCrate(x, y); });
+  return count;
+}
+function hitCrate(x, y) { const c = grid[x][y]; c.crate--; addFx(x, y, '#c08a4a', 6); K.noise(0.06, 0.15); if (c.crate <= 0) { grid[x][y] = null; goal('crate'); score += 100; } }
+function specialCells(x, y, c) {
+  const out = [];
+  if (c.sp === 'rowH') { for (let i = 0; i < COLS; i++) out.push([i, y]); fx.push({ beam: 'h', y, t: 0.3 }); K.beep(900, 0.2, { to: 300 }); }
+  if (c.sp === 'rowV') { for (let j = 0; j < ROWS; j++) out.push([x, j]); fx.push({ beam: 'v', x, t: 0.3 }); K.beep(900, 0.2, { to: 300 }); }
+  if (c.sp === 'bomb') { for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) out.push([x + i, y + j]); fx.push({ ring: 1, x, y, t: 0.35 }); K.noise(0.4, 0.4); }
+  if (c.sp === 'rainbow') { const col = c.c != null ? c.c : K.ri(0, nColors - 1); for (let i = 0; i < COLS; i++) for (let j = 0; j < ROWS; j++) { const d = grid[i][j]; if (d && !d.sp && !d.crate && d.c === col) out.push([i, j]); } fx.push({ flash: 1, t: 0.4 }); K.tune([523, 659, 784, 1046, 1318], 0.04); }
+  return out.filter(([a, b]) => a >= 0 && a < COLS && b >= 0 && b < ROWS);
+}
+function tap(x, y) {
+  if (busy > 0 || state !== 'play' || moves <= 0) return; const c = at(x, y); if (!c || c.crate) return;
+  if (c.sp) { moves--; const cells = specialCells(x, y, c); grid[x][y] = null; goal('special'); const n = clearCells(cells, null); score += 150 + n * 40; settle(); return; }
+  const g = groupAt(x, y);
+  if (g.length < 2) { shakeCell = { x, y, t: 0.3 }; K.beep(160, 0.08); return; }
+  moves--; const col = c.c, n = g.length; score += n * n * 10; pops.push({ x: GX + x * CS + CS / 2, y: GY + y * CS, txt: '+' + n * n * 10, t: 0.8 });
+  K.beep(400 + Math.min(n, 12) * 60, 0.12, { type: 'triangle' });
+  clearCells(g, col);
+  if (n >= 5) { const sp = n >= 9 ? 'rainbow' : n >= 7 ? 'bomb' : Math.random() < 0.5 ? 'rowH' : 'rowV'; grid[x][y] = { sp, c: sp === 'rainbow' ? col : null, y: 0, pop: 0.3 }; K.tune([660, 990], 0.05); }
+  settle();
+}
+function settle() {
+  for (let x = 0; x < COLS; x++) { const col = []; for (let y = ROWS - 1; y >= 0; y--) if (grid[x][y]) col.push({ cell: grid[x][y], from: y }); let y = ROWS - 1;
+    col.forEach(o => { const fromPix = (o.from - y) * CS + (o.cell.y || 0); grid[x][y] = o.cell; o.cell.y = Math.min(0, fromPix); y--; });
+    let k = 1; while (y >= 0) { const n = rnd(); n.y = -(k + 0.5) * CS - 10; grid[x][y] = n; y--; k++; } }
+  busy = 0.25; ensureMoves();
+}
+function update(dt) {
+  if (state !== 'play') return;
+  if (busy > 0) busy -= dt;
+  for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) { const c = grid[x][y]; if (c && c.y < 0) { c.vy = (c.vy || 0) + 1600 * dt; c.y = Math.min(0, c.y + c.vy * dt); if (c.y === 0) c.vy = 0; } if (c && c.pop > 0) c.pop -= dt; }
+  // input
+  if (K.hit('left')) cursor.x = Math.max(0, cursor.x - 1); if (K.hit('right')) cursor.x = Math.min(COLS - 1, cursor.x + 1); if (K.hit('up')) cursor.y = Math.max(0, cursor.y - 1); if (K.hit('down')) cursor.y = Math.min(ROWS - 1, cursor.y + 1);
+  if (K.hit('a')) tap(cursor.x, cursor.y);
+  if (K.ptr.tapped) { const x = Math.floor((K.ptr.x - GX) / CS), y = Math.floor((K.ptr.y - GY) / CS); if (x >= 0 && x < COLS && y >= 0 && y < ROWS) { cursor = { x, y }; tap(x, y); } }
+  if (shakeCell) { shakeCell.t -= dt; if (shakeCell.t <= 0) shakeCell = null; }
+  fx.forEach(e => { e.t -= dt; if (e.vx !== undefined) { e.vy += 500 * dt; e.x += e.vx * dt; e.y += e.vy * dt; } }); fx = fx.filter(e => e.t > 0);
+  pops.forEach(p => { p.t -= dt; p.y -= 30 * dt; }); pops = pops.filter(p => p.t > 0);
+  const won = goals.every(g => g.have >= g.need);
+  if (won && busy <= 0) { if (!celebrate) { celebrate = 1; K.tune([523, 659, 784, 1046], 0.1); }
+    if (moves > 0) { celebrate -= dt; if (celebrate <= 0.8) { celebrate = 1; moves--; score += 500; const x = K.ri(0, COLS - 1), y = K.ri(0, ROWS - 1); clearCells(specialCells(x, y, { sp: Math.random() < 0.5 ? 'rowH' : 'rowV' }), null); settle(); } }
+    else { state = 'over'; unlocked = Math.max(unlocked, level + 1); K.saveBest('cubepop_lvl', unlocked); best = K.saveBest('cubepop', score); K.card({ title: 'LEVEL ' + level + ' DONE!', text: 'Score ' + score + '. Leftover moves turned into rockets for bonus points.', best: 'BEST ' + best, button: 'Level ' + (level + 1), onStart: () => startLevel(level + 1) }); return; } }
+  else if (moves <= 0 && busy <= 0 && !won) { state = 'over'; K.beep(300, 0.5, { to: 120, type: 'triangle' }); K.card({ title: 'OUT OF MOVES', text: 'So close! Pop bigger groups to build rockets and bombs. They clear way more.', best: '', button: 'Retry Level ' + level, onStart: () => startLevel(level) }); return; }
+  K.set('score', score); K.set('level', 'LV ' + level); K.set('moves', moves + ' MOVES');
+}
+function cube(c, px, py, s, col) { c.fillStyle = col; c.beginPath(); c.roundRect(px + 2, py + 2, s - 4, s - 4, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(px + 6, py + 5, s - 12, 7, 4); c.fill(); c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(px + 5, py + s - 8, s - 10, 4); }
+function drawSpecial(c, px, py, cell, t) {
+  const cx = px + CS / 2, cy = py + CS / 2, sc = 1 + (cell.pop > 0 ? cell.pop : 0);
+  c.save(); c.translate(cx, cy); c.scale(sc, sc);
+  if (cell.sp === 'rowH' || cell.sp === 'rowV') { if (cell.sp === 'rowV') c.rotate(Math.PI / 2); c.fillStyle = '#e8e8f0'; c.beginPath(); c.roundRect(-12, -6, 20, 12, 5); c.fill(); c.fillStyle = '#ff4a5a'; c.beginPath(); c.moveTo(8, -6); c.lineTo(15, 0); c.lineTo(8, 6); c.fill(); c.fillStyle = Math.floor(t / 80) % 2 ? '#ffd23a' : '#ff8a2a'; c.beginPath(); c.moveTo(-12, -4); c.lineTo(-17, 0); c.lineTo(-12, 4); c.fill(); c.fillStyle = '#3a9aff'; c.beginPath(); c.arc(0, 0, 3, 0, 7); c.fill(); }
+  else if (cell.sp === 'bomb') { c.fillStyle = '#2a2a3a'; c.beginPath(); c.arc(0, 2, 12, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.arc(-4, -2, 4, 0, 7); c.fill(); c.strokeStyle = '#a07a4a'; c.lineWidth = 2; c.beginPath(); c.moveTo(4, -9); c.quadraticCurveTo(8, -14, 12, -12); c.stroke(); c.lineWidth = 1; c.fillStyle = Math.floor(t / 60) % 2 ? '#ffd23a' : '#ff5a2a'; c.beginPath(); c.arc(12, -12, 2.5, 0, 7); c.fill(); }
+  else { c.rotate(t / 400); for (let i = 0; i < 5; i++) { c.fillStyle = COLORS[i]; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, 13, i * 1.2566, (i + 1) * 1.2566); c.fill(); } c.fillStyle = '#fff'; c.beginPath(); c.arc(0, 0, 5, 0, 7); c.fill(); }
+  c.restore();
+}
+function draw(c, t) {
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#2a1a60'); g.addColorStop(1, '#ff6aa0'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  if (!grid) return;
+  // goals bar
+  c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.roundRect(8, 8, W - 16, 52, 12); c.fill();
+  const gw = (W - 16) / goals.length;
+  goals.forEach((gl, i) => { const x = 8 + gw * i + gw / 2 - 26;
+    if (gl.k === 'c') cube(c, x, 16, 34, COLORS[gl.c]); else if (gl.k === 'crate') { c.fillStyle = '#c08a4a'; c.fillRect(x + 3, 19, 28, 28); c.strokeStyle = '#7a5226'; c.lineWidth = 2; c.strokeRect(x + 3, 19, 28, 28); c.beginPath(); c.moveTo(x + 3, 19); c.lineTo(x + 31, 47); c.stroke(); c.lineWidth = 1; } else drawSpecial(c, x, 16, { sp: 'bomb' }, t);
+    const left = gl.need - gl.have; K.text(c, left > 0 ? String(left) : '✓', x + 50, 34, 14, left > 0 ? '#fff' : '#5aff8a'); });
+  // board
+  c.fillStyle = 'rgba(20,10,50,.55)'; c.beginPath(); c.roundRect(GX - 6, GY - 6, COLS * CS + 12, ROWS * CS + 12, 12); c.fill();
+  c.save(); c.beginPath(); c.rect(GX - 6, GY - 6, COLS * CS + 12, ROWS * CS + 12); c.clip();
+  for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) { const cell = grid[x][y]; if (!cell) continue; let px = GX + x * CS, py = GY + y * CS + cell.y;
+    if (shakeCell && shakeCell.x === x && shakeCell.y === y) px += Math.sin(t / 20) * 3;
+    if (cell.crate) { c.fillStyle = '#c08a4a'; c.fillRect(px + 2, py + 2, CS - 4, CS - 4); c.strokeStyle = '#7a5226'; c.lineWidth = 2; c.strokeRect(px + 3, py + 3, CS - 6, CS - 6); c.beginPath(); c.moveTo(px + 3, py + 3); c.lineTo(px + CS - 3, py + CS - 3); if (cell.crate > 1) { c.moveTo(px + CS - 3, py + 3); c.lineTo(px + 3, py + CS - 3); } c.stroke(); c.lineWidth = 1; }
+    else if (cell.sp) drawSpecial(c, px, py, cell, t); else cube(c, px, py, CS, COLORS[cell.c]); }
+  c.restore();
+  // cursor (keyboard players)
+  if (state === 'play') { c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 2; c.strokeRect(GX + cursor.x * CS + 1, GY + cursor.y * CS + 1, CS - 2, CS - 2); c.lineWidth = 1; }
+  fx.forEach(e => { if (e.beam === 'h') { c.fillStyle = 'rgba(255,240,150,' + e.t * 3 + ')'; c.fillRect(GX - 6, GY + e.y * CS + 8, COLS * CS + 12, CS - 16); } else if (e.beam === 'v') { c.fillStyle = 'rgba(255,240,150,' + e.t * 3 + ')'; c.fillRect(GX + e.x * CS + 8, GY - 6, CS - 16, ROWS * CS + 12); } else if (e.ring) { c.strokeStyle = 'rgba(255,170,60,' + e.t * 3 + ')'; c.lineWidth = 5; c.beginPath(); c.arc(GX + e.x * CS + CS / 2, GY + e.y * CS + CS / 2, (0.35 - e.t) * 200 + 10, 0, 7); c.stroke(); c.lineWidth = 1; } else if (e.flash) { c.fillStyle = 'rgba(255,255,255,' + e.t + ')'; c.fillRect(0, 0, W, H); } else { c.fillStyle = e.c; c.fillRect(e.x - 2, e.y - 2, 4, 4); } });
+  pops.forEach(p => K.text(c, p.txt, p.x, p.y, 10, '#fff'));
+}
+title(); K.run(update, draw);
+</script>
+</body>
+</html>

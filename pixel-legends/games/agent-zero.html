@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Agent Zero</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Agent Zero: a first-person spy mission. Sneak through three secret bases, grab the data disks and reach the exit pad.
+K.theme({ bg: '#0a0c10', ink: '#e8f0ff', accent: '#ffd23f', accentInk: '#2a1d00' });
+const W = 256, H = 176, VIEWH = 150;
+K.screen(W, H);
+K.hud(['mission', 'disks', 'ammo']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'USE' }, { id: 'a', label: 'FIRE' }] });
+const MAPS = [["########################", "#P.....#.....#.....g..d#", "#......#.....#.........#", "#..a...D..g..D....###..#", "#......#.....#....#h#..#", "####D###.....#....#.#..#", "#......####D###...#D#..#", "#..g...#......#........#", "#......#..h...#..g.....#", "#......D......####D#####", "#..d...#..g...#........#", "#......#......#..a..g..#", "###D####......#........#", "#......########.....####", "#..g...........g....#..#", "#......#####........D.E#", "#..a...#...#........#..#", "#......#.d.D..g.....####", "#......#...#...........#", "########################"], ["########################", "#P....#........#......d#", "#.....#..g.....D..g....#", "#.....D........#.......#", "#.....#####D####.......#", "##D####.....#..####K####", "#.....#..a..#..#.......#", "#..g..#.....#..#..g..k.#", "#.....D..g..D..#.......#", "#.....#.....#..###D#####", "#.h...#######..........#", "####D##.d....#..g......#", "#.....#......D.....a...#", "#..g..#..g...#.........#", "#.....#......#####D#####", "#.....D......#.........#", "#.a...#......#..g....E.#", "#######......D.........#", "#.d..........#....h....#", "########################"], ["########################", "#P..#.....g.....#.....d#", "#...D...........D..g...#", "#...#..######...#......#", "##D##..#....#...####D###", "#......#.d..K...#......#", "#..g...#....#...#..g...#", "#......######...#..h...#", "#.a.......g.....D......#", "####D#####..#####.....##", "#........#..#...#...g..#", "#..g..k..#..D.a.#......#", "#........#..#...###D####", "#####D####..#..........#", "#........#..####..g....#", "#.h...g..D..#..#.......#", "#........#..#..D...E...#", "#..d.....#..#..#...g...#", "#........#.....#.......#", "########################"]];
+const BRIEFS = ['Mission 1: Harbor Warehouse. Recover 3 data disks, then reach the green exit pad.', 'Mission 2: Mountain Lab. A keycard opens the red security door. 3 disks, then exit.', 'Mission 3: Satellite Base. The final 3 disks are behind a locked vault. Then get out!'];
+let state = 'title', mi, g, pl, sprites, doors, shots, disks, ammo, hp, keycard, flash, hurtT, msg, msgT, gunT, zbuf = new Array(W), time, kills, best = K.best('agentzero');
+function title() { K.card({ title: 'AGENT ZERO', text: 'Move with ▲ ▼, turn with ◀ ▶. FIRE shoots, USE opens doors in front of you. Guards spot you if they can see you, so pick your moment. Collect 3 data disks per mission and reach the green exit pad.', best: best ? 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0') : '', button: 'Accept mission', onStart: () => { mi = 0; time = 0; kills = 0; hp = 100; ammo = 40; load(); state = 'play'; } }); }
+function load() {
+  g = MAPS[mi].map(r => r.split('')); sprites = []; doors = {}; shots = []; disks = 0; keycard = false; flash = 0; hurtT = 0; gunT = 0;
+  for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) {
+    const ch = g[y][x];
+    if (ch === 'P') { pl = { x: x + 0.5, y: y + 0.5, a: 0 }; g[y][x] = '.'; }
+    if (ch === 'g') { sprites.push({ k: 'guard', x: x + 0.5, y: y + 0.5, hp: 3 + mi, st: 'idle', t: K.rnd(0.5, 2), a: Math.random() * 6.28, seen: 0 }); g[y][x] = '.'; }
+    if ('dahk'.includes(ch)) { sprites.push({ k: ch, x: x + 0.5, y: y + 0.5 }); g[y][x] = '.'; }
+    if (ch === 'D' || ch === 'K') doors[x + ',' + y] = { open: 0, opening: false, locked: ch === 'K' };
+  }
+  msg = BRIEFS[mi]; msgT = 4; hud();
+}
+function hud() { K.set('mission', 'MISSION ' + (mi + 1) + ' ♥' + Math.max(0, Math.ceil(hp))); K.set('disks', 'DISKS ' + disks + '/3' + (keycard ? ' ⚿' : '')); K.set('ammo', 'AMMO ' + ammo); }
+function cell(x, y) { const r = g[Math.floor(y)]; return r ? r[Math.floor(x)] || '#' : '#'; }
+function solidAt(x, y) { const ch = cell(x, y); if (ch === '#' || ch === 'E' && false) return true; if (ch === 'D' || ch === 'K') { const d = doors[Math.floor(x) + ',' + Math.floor(y)]; return !d || d.open < 0.9; } return false; }
+
+function update(dt) {
+  if (state !== 'play') return;
+  time += dt; if (msgT > 0) msgT -= dt; if (flash > 0) flash -= dt; if (hurtT > 0) hurtT -= dt; if (gunT > 0) gunT -= dt;
+  const turn = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0), mv = (K.down('up') ? 1 : 0) - (K.down('down') ? 1 : 0);
+  pl.a += turn * 2.6 * dt;
+  const sp = 2.6 * dt * mv, nx = pl.x + Math.cos(pl.a) * sp, ny = pl.y + Math.sin(pl.a) * sp, r = 0.22;
+  if (!solidAt(nx + Math.sign(nx - pl.x) * r, pl.y)) pl.x = nx;
+  if (!solidAt(pl.x, ny + Math.sign(ny - pl.y) * r)) pl.y = ny;
+  if (mv && Math.random() < dt * 4) K.beep(90, 0.03, { vol: 0.02 });
+  // doors
+  for (const k in doors) { const d = doors[k]; if (d.opening) d.open = Math.min(1, d.open + dt * 1.6); }
+  if (K.hit('b')) {
+    const fx = Math.floor(pl.x + Math.cos(pl.a) * 0.9), fy = Math.floor(pl.y + Math.sin(pl.a) * 0.9), d = doors[fx + ',' + fy];
+    if (d) { if (d.locked && !keycard) { msg = 'LOCKED. FIND THE KEYCARD.'; msgT = 1.5; K.beep(150, 0.15, { vol: 0.05 }); } else if (!d.opening) { d.opening = true; K.beep(220, 0.4, { type: 'sawtooth', to: 440, vol: 0.04 }); } }
+  }
+  // fire
+  if (K.hit('a') && gunT <= 0) {
+    if (ammo <= 0) { K.beep(120, 0.05, { vol: 0.04 }); msg = 'OUT OF AMMO'; msgT = 1; }
+    else {
+      ammo--; gunT = 0.28; flash = 0.08; K.noise(0.12, 0.35); hud();
+      // hit the guard nearest the centre of the screen that is in view
+      let best = null, bd = 1e9;
+      for (const s of sprites) if (s.k === 'guard' && s.hp > 0) { const dx = s.x - pl.x, dy = s.y - pl.y, dist = Math.hypot(dx, dy); let ang = Math.atan2(dy, dx) - pl.a; while (ang > Math.PI) ang -= 6.283; while (ang < -Math.PI) ang += 6.283; if (Math.abs(ang) < 0.12 + 0.25 / dist && dist < bd && los(pl.x, pl.y, s.x, s.y)) { best = s; bd = dist; } }
+      if (best) { best.hp -= bd < 3 ? 2 : 1; best.st = 'alert'; best.hit = 0.2; if (best.hp <= 0) { kills++; K.beep(200, 0.3, { type: 'square', to: 60, vol: 0.05 }); if (Math.random() < 0.6) sprites.push({ k: 'a', x: best.x, y: best.y }); } }
+      for (const s of sprites) if (s.k === 'guard' && s.hp > 0 && Math.hypot(s.x - pl.x, s.y - pl.y) < 8) s.st = 'alert';
+    }
+  }
+  // pickups
+  for (const s of sprites) if (s.k !== 'guard' && !s.got && Math.hypot(s.x - pl.x, s.y - pl.y) < 0.5) {
+    s.got = true;
+    if (s.k === 'd') { disks++; msg = 'DATA DISK ' + disks + '/3'; msgT = 1.5; K.tune([784, 988, 1175], 0.06); }
+    if (s.k === 'a') { ammo += 12; K.beep(600, 0.06, { vol: 0.04 }); }
+    if (s.k === 'h') { hp = Math.min(100, hp + 30); K.beep(900, 0.08, { vol: 0.04 }); }
+    if (s.k === 'k') { keycard = true; msg = 'KEYCARD ACQUIRED'; msgT = 1.5; K.tune([659, 880], 0.07); }
+    hud();
+  }
+  sprites = sprites.filter(s => !s.got);
+  // guards
+  for (const s of sprites) {
+    if (s.k !== 'guard' || s.hp <= 0) continue;
+    if (s.hit > 0) s.hit -= dt;
+    const dx = pl.x - s.x, dy = pl.y - s.y, dist = Math.hypot(dx, dy), see = dist < 9 && los(s.x, s.y, pl.x, pl.y);
+    if (see && dist < 6) s.st = 'alert';
+    s.t -= dt;
+    if (s.st === 'alert') {
+      if (see) {
+        if (dist > 2) { const nx = s.x + dx / dist * 1.1 * dt, ny = s.y + dy / dist * 1.1 * dt; if (!solidAt(nx, s.y)) s.x = nx; if (!solidAt(s.x, ny)) s.y = ny; }
+        if (s.t <= 0) { s.t = K.rnd(0.9, 1.6) - mi * 0.15; s.fire = 0.15; K.beep(300, 0.08, { type: 'square', vol: 0.04 }); if (Math.random() < Math.max(0.25, 0.85 - dist * 0.09)) { hp -= 8 + mi * 3; hurtT = 0.3; hud(); if (hp <= 0) return lose(); } }
+      } else if (s.t <= 0) { s.t = 1; s.st = 'idle'; }
+    } else if (s.t <= 0) { s.t = K.rnd(1, 3); s.a = Math.random() * 6.28; }
+    else { const nx = s.x + Math.cos(s.a) * 0.6 * dt, ny = s.y + Math.sin(s.a) * 0.6 * dt; if (!solidAt(nx, ny)) { s.x = nx; s.y = ny; } else s.t = 0; }
+    if (s.fire > 0) s.fire -= dt;
+  }
+  if (cell(pl.x, pl.y) === 'E') { if (disks >= 3) { mi++; K.tune([523, 659, 784, 1047], 0.1); if (mi >= MAPS.length) return win(); hp = Math.min(100, hp + 40); load(); } else if (msgT <= 0) { msg = 'NEED ' + (3 - disks) + ' MORE DISK' + (3 - disks > 1 ? 'S' : ''); msgT = 1.2; } }
+}
+function los(x0, y0, x1, y1) { const d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d * 4); for (let i = 1; i < n; i++) { const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n; if (solidAt(x, y)) return false; } return true; }
+function lose() { state = 'over'; K.tune([392, 330, 262, 196], 0.18, { type: 'sawtooth' }); K.card({ title: 'AGENT DOWN', text: 'You were caught on mission ' + (mi + 1) + '. Try a quieter approach.', best: best ? 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0') : '', button: 'Retry mission', onStart: () => { hp = 100; ammo = Math.max(ammo, 30); load(); state = 'play'; } }); }
+function win() { state = 'over'; const t = Math.floor(time); best = K.saveBest('agentzero', t, true); K.card({ title: 'MISSION COMPLETE', text: 'All three bases cleared in ' + Math.floor(t / 60) + 'm ' + t % 60 + 's with ' + kills + ' guards down.', best: 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0'), button: 'Play again', onStart: () => { mi = 0; time = 0; kills = 0; hp = 100; ammo = 40; load(); state = 'play'; } }); }
+
+const FOV = 1.05, WALLC = { '#': [90, 100, 120], D: [150, 110, 60], K: [190, 50, 60], E: [40, 200, 90] };
+
+const TEXC = {};
+function wallTex(ch) {
+  if (TEXC[ch]) return TEXC[ch];
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), b = WALLC[ch] || WALLC['#'], col = 'rgb(' + b[0] + ',' + b[1] + ',' + b[2] + ')';
+  const lite = 'rgb(' + Math.min(255, b[0] + 40) + ',' + Math.min(255, b[1] + 40) + ',' + Math.min(255, b[2] + 40) + ')', dark = 'rgb(' + (b[0] * 0.55 | 0) + ',' + (b[1] * 0.55 | 0) + ',' + (b[2] * 0.55 | 0) + ')';
+  g.fillStyle = col; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 400; i++) { g.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.07)'; g.fillRect(Math.random() * 64, Math.random() * 64, 1, 1); }
+  if (ch === 'D' || ch === 'K') {
+    g.fillStyle = dark; g.fillRect(0, 0, 64, 4); g.fillRect(0, 60, 64, 4); g.fillRect(0, 0, 4, 64); g.fillRect(60, 0, 4, 64);
+    g.fillStyle = lite; for (let y = 10; y < 56; y += 8) g.fillRect(8, y, 48, 2);
+    g.fillStyle = dark; for (let y = 12; y < 58; y += 8) g.fillRect(8, y, 48, 1);
+    if (ch === 'K') { for (let x = -64; x < 64; x += 12) { g.fillStyle = '#ffd23a'; g.beginPath(); g.moveTo(x, 64); g.lineTo(x + 6, 64); g.lineTo(x + 70, 0); g.lineTo(x + 64, 0); g.fill(); } g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#e63946'; g.fillRect(26, 26, 12, 12); g.fillStyle = '#fff'; g.fillRect(29, 30, 6, 4); }
+    g.fillStyle = '#111'; g.fillRect(31, 4, 2, 56);
+  } else {
+    // concrete panels with seams, bolts, vents and stains
+    g.fillStyle = dark; g.fillRect(0, 31, 64, 2); g.fillRect(31, 0, 2, 64);
+    g.fillStyle = lite; g.fillRect(0, 33, 64, 1); g.fillRect(33, 0, 1, 64);
+    g.fillStyle = dark; [[4, 4], [27, 4], [4, 27], [27, 27], [37, 37], [59, 37], [37, 59], [59, 59], [37, 4], [59, 4], [4, 37], [4, 59]].forEach(p => { g.fillRect(p[0], p[1], 2, 2); });
+    g.fillStyle = dark; g.fillRect(40, 12, 16, 10); g.fillStyle = 'rgba(0,0,0,.6)'; for (let y = 13; y < 22; y += 2) g.fillRect(41, y, 14, 1);
+    const st = g.createLinearGradient(0, 40, 0, 64); st.addColorStop(0, 'rgba(0,0,0,0)'); st.addColorStop(1, 'rgba(0,0,0,.3)'); g.fillStyle = st; g.fillRect(0, 40, 64, 24);
+    g.fillStyle = 'rgba(40,30,20,.25)'; g.fillRect(10, 44, 3, 16); g.fillRect(14, 48, 2, 12);
+  }
+  return (TEXC[ch] = cv);
+}
+function draw(c, t) {
+  c.fillStyle = '#0a0c10'; c.fillRect(0, 0, W, H);
+  if (!g) return;
+  // ceiling + floor
+  const sky = c.createLinearGradient(0, 0, 0, VIEWH / 2); sky.addColorStop(0, '#1a2030'); sky.addColorStop(1, '#3a4258'); c.fillStyle = sky; c.fillRect(0, 0, W, VIEWH / 2);
+  const fl = c.createLinearGradient(0, VIEWH / 2, 0, VIEWH); fl.addColorStop(0, '#16161a'); fl.addColorStop(1, '#4a4a54'); c.fillStyle = fl; c.fillRect(0, VIEWH / 2, W, VIEWH / 2);
+  // floor tiles in perspective
+  c.strokeStyle = 'rgba(255,255,255,.07)'; c.lineWidth = 1; for (let k = 1; k < 9; k++) { const y = VIEWH / 2 + (VIEWH / 2) * Math.pow(k / 9, 1.8); c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  const ph = (pl.a / (Math.PI * 2)) * 8 % 1; for (let k = -8; k <= 8; k++) { c.beginPath(); c.moveTo(W / 2 + (k + ph) * 6, VIEWH / 2); c.lineTo(W / 2 + (k + ph) * 70, VIEWH); c.stroke(); }
+  // ceiling lights
+  for (let k = 0; k < 5; k++) { const x = ((k * 70 - pl.a * 120) % 350 + 350) % 350 - 40; c.fillStyle = 'rgba(255,250,220,.5)'; c.fillRect(x, 8 + (k % 2) * 6, 26, 3); }
+  // walls by DDA raycasting
+  for (let col = 0; col < W; col++) {
+    const ra = pl.a - FOV / 2 + FOV * col / W, dx = Math.cos(ra), dy = Math.sin(ra);
+    let mx = Math.floor(pl.x), my = Math.floor(pl.y); const ddx = Math.abs(1 / dx), ddy = Math.abs(1 / dy);
+    let sx, sy, side = 0, distX, distY;
+    if (dx < 0) { sx = -1; distX = (pl.x - mx) * ddx; } else { sx = 1; distX = (mx + 1 - pl.x) * ddx; }
+    if (dy < 0) { sy = -1; distY = (pl.y - my) * ddy; } else { sy = 1; distY = (my + 1 - pl.y) * ddy; }
+    let ch = '.', dist = 30, hitDoor = 0;
+    for (let i = 0; i < 64; i++) {
+      if (distX < distY) { distX += ddx; mx += sx; side = 0; } else { distY += ddy; my += sy; side = 1; }
+      ch = cell(mx, my);
+      if (ch === '#' || ch === 'D' || ch === 'K' || ch === 'E' && false) {
+        if (ch === 'D' || ch === 'K') { const d = doors[mx + ',' + my]; if (d && d.open >= 0.9) continue; hitDoor = d ? d.open : 0; }
+        dist = side === 0 ? distX - ddx : distY - ddy; break;
+      }
+    }
+    const perp = dist * Math.cos(ra - pl.a), hh = Math.min(VIEWH * 3, VIEWH / Math.max(0.05, perp)), top = VIEWH / 2 - hh / 2 + (hitDoor ? hh * hitDoor : 0);
+    const base = WALLC[ch] || WALLC['#'], shade = Math.max(0.2, 1 - perp / 12) * (side ? 0.78 : 1);
+    const wx = side === 0 ? pl.y + perp * dy : pl.x + perp * dx, frac = wx - Math.floor(wx), stripe = frac < 0.06 || frac > 0.94 ? 0.7 : 1;
+    const tex = wallTex(ch), tx = Math.min(63, Math.floor(frac * 64)), vis = hh - (hitDoor ? hh * hitDoor : 0);
+    if (vis > 0) { c.drawImage(tex, tx, hitDoor ? 64 * hitDoor : 0, 1, 64 * (1 - (hitDoor || 0)) || 1, col, top, 1, vis); c.fillStyle = 'rgba(0,0,8,' + (1 - shade * stripe).toFixed(3) + ')'; c.fillRect(col, top, 1, vis); }
+    zbuf[col] = perp;
+  }
+  // exit pad glow on floor (draw as sprite)
+  // sprites, far to near
+  const list = sprites.map(s => ({ s, d: Math.hypot(s.x - pl.x, s.y - pl.y) }));
+  for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) if (g[y][x] === 'E') list.push({ s: { k: 'E', x: x + 0.5, y: y + 0.5 }, d: Math.hypot(x + 0.5 - pl.x, y + 0.5 - pl.y) });
+  list.sort((a, b) => b.d - a.d);
+  for (const { s, d } of list) {
+    let ang = Math.atan2(s.y - pl.y, s.x - pl.x) - pl.a; while (ang > Math.PI) ang -= 6.283; while (ang < -Math.PI) ang += 6.283;
+    if (Math.abs(ang) > FOV / 2 + 0.3 || d < 0.2) continue;
+    const perp = d * Math.cos(ang), size = VIEWH / perp, sx = W / 2 + Math.tan(ang) / Math.tan(FOV / 2) * W / 2;
+    const x0 = Math.floor(sx - size / 2), x1 = Math.floor(sx + size / 2);
+    c.save(); c.beginPath(); let any = false;
+    for (let col = Math.max(0, x0); col < Math.min(W, x1); col++) if (zbuf[col] > perp) { c.rect(col, 0, 1, VIEWH); any = true; }
+    if (!any) { c.restore(); continue; }
+    c.clip();
+    const fy = VIEWH / 2 + size / 2, shade = Math.max(0.3, 1 - perp / 12);
+    c.globalAlpha = 1;
+    if (s.k === 'guard') {
+      const dead = s.hp <= 0, h = size * 0.85, w2 = size * 0.42;
+      if (dead) { c.fillStyle = '#3a3a2a'; c.fillRect(sx - w2, fy - size * 0.12, w2 * 2, size * 0.12); }
+      else {
+        c.fillStyle = s.hit > 0 ? '#fff' : 'rgba(' + (70 * shade | 0) + ',' + (90 * shade | 0) + ',' + (60 * shade | 0) + ',1)'; c.fillRect(sx - w2 / 2, fy - h * 0.82, w2, h * 0.5);
+        c.fillStyle = 'rgba(' + (200 * shade | 0) + ',' + (160 * shade | 0) + ',' + (130 * shade | 0) + ',1)'; c.fillRect(sx - w2 / 4, fy - h, w2 / 2, h * 0.2);
+        c.fillStyle = '#222'; c.fillRect(sx - w2 / 3, fy - h * 0.32, w2 / 4, h * 0.32); c.fillRect(sx + w2 / 12, fy - h * 0.32, w2 / 4, h * 0.32);
+        c.fillStyle = '#111'; c.fillRect(sx - w2 / 3.5, fy - h * 1.02, w2 / 1.75, h * 0.06);
+        if (s.st === 'alert') { c.fillStyle = '#333'; c.fillRect(sx - w2 / 8, fy - h * 0.7, w2 * 0.6, h * 0.06); if (s.fire > 0) { c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(sx + w2 * 0.5, fy - h * 0.67, size * 0.06, 0, 7); c.fill(); } }
+      }
+    } else if (s.k === 'E') { c.fillStyle = 'rgba(60,255,120,' + (0.35 + Math.sin(t / 200) * 0.15) + ')'; c.fillRect(sx - size * 0.4, fy - size * 0.9, size * 0.8, size * 0.9); }
+    else { const col = { d: '#46d0ff', a: '#c8a050', h: '#ff3b5c', k: '#ffd23f' }[s.k]; const bs = size * 0.22, by = fy - bs - Math.sin(t / 250) * size * 0.04; c.fillStyle = col; c.fillRect(sx - bs / 2, by, bs, bs * (s.k === 'd' ? 1 : 0.7)); c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(sx - bs / 4, by + bs * 0.15, bs / 2, bs * 0.15); }
+    c.restore();
+  }
+  // gun
+  const bob = Math.sin(t / 120) * ((K.down('up') || K.down('down')) ? 3 : 0.5);
+  c.fillStyle = '#2a2a30'; c.fillRect(W / 2 + 18, VIEWH - 34 + bob + (gunT > 0.18 ? 6 : 0), 22, 34); c.fillStyle = '#4a4a55'; c.fillRect(W / 2 + 22, VIEWH - 44 + bob + (gunT > 0.18 ? 6 : 0), 12, 14); c.fillStyle = '#d8a878'; c.fillRect(W / 2 + 16, VIEWH - 12 + bob, 28, 12);
+  if (flash > 0) { c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(W / 2 + 28, VIEWH - 48, 8, 0, 7); c.fill(); }
+  // crosshair
+  c.fillStyle = 'rgba(255,255,255,.7)'; c.fillRect(W / 2 - 1, VIEWH / 2 - 5, 2, 3); c.fillRect(W / 2 - 1, VIEWH / 2 + 2, 2, 3); c.fillRect(W / 2 - 5, VIEWH / 2 - 1, 3, 2); c.fillRect(W / 2 + 2, VIEWH / 2 - 1, 3, 2);
+  if (hurtT > 0) { c.fillStyle = 'rgba(255,0,0,' + hurtT + ')'; c.fillRect(0, 0, W, VIEWH); }
+  // bottom strip: health + minimap
+  c.fillStyle = '#12141c'; c.fillRect(0, VIEWH, W, H - VIEWH);
+  c.fillStyle = '#333'; c.fillRect(8, VIEWH + 9, 80, 8); c.fillStyle = hp > 30 ? '#3df07a' : '#ff3b5c'; c.fillRect(8, VIEWH + 9, 80 * Math.max(0, hp) / 100, 8);
+  K.text(c, 'HEALTH', 116, VIEWH + 13, 7, '#aaa');
+  const ms = 1.1, ox = W - g[0].length * ms - 8, oy = VIEWH + 2;
+  for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) { const ch = g[y][x]; if (ch === '#') { c.fillStyle = '#4a5a7a'; c.fillRect(ox + x * ms, oy + y * ms, ms, ms); } if (ch === 'E') { c.fillStyle = '#3df07a'; c.fillRect(ox + x * ms, oy + y * ms, ms, ms); } }
+  c.fillStyle = '#ffd23f'; c.fillRect(ox + pl.x * ms - 1, oy + pl.y * ms - 1, 2, 2);
+  if (msgT > 0) { c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(0, 6, W, 22); c.font = '9px Rubik, sans-serif'; c.textAlign = 'center'; c.fillStyle = '#ffd23f'; c.fillText(msg, W / 2, 20, W - 10); }
+}
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

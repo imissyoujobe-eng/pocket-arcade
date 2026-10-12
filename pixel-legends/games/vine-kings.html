@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Vine Kings</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/plat.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+// Vine Kings: a lemur's jungle romp. Roll through enemies, blast out of barrel cannons, ride the mine cart and spell V-I-N-E in every level.
+K.theme({ bg: '#0a1a0c', ink: '#fffaf0', accent: '#ffd23f', accentInk: '#2a1d00' });
+const VW = 256, VH = 192, T = 16;
+K.screen(VW, VH);
+K.hud(['score', 'fruit', 'lives', 'letters']);
+K.pad({ dpad: 'lr', buttons: [{ id: 'b', label: 'ROLL' }, { id: 'a', label: 'JUMP' }] });
+
+const E = '................', G = '################';
+const CH = {
+  start: [E, E, E, E, E, E, E, E, E, E, E, E, '.S..............', G, G],
+  fruit: [E, E, E, E, E, E, '....ffff........', E, E, '...======.......', E, E, '..........r.....', G, G],
+  treetops: [E, E, E, E, '.........ff.....', '........====....', E, '...f............', '..===...........', E, '......====...V..', E, E, '####........####', '####........####'],
+  cannon: [E, E, E, E, '..........fff...', E, E, '.........======.', E, E, E, '...O............', '...=............', '######........##', '######........##'],
+  crocs: [E, E, E, E, E, E, E, '.....I..........', E, E, '..ff......ff....', E, '...r......r.....', G, G],
+  bees: [E, E, E, E, '......z.........', E, E, E, E, '...ff.....N.....', '..====..........', E, '..........r.....', G, G],
+  pit: [E, E, E, E, E, E, E, '......fff.......', '.....=====......', E, E, E, '.q..............', '###.........####', '###.........####'],
+  temple: ['HHHHHHHHHHHHHHHH', 'HHHHHHHHHHHHHHHH', E, E, E, E, E, '......E.........', '.....HHHH.......', E, E, '..HH.......HH...', '..HH...r...HH...', G, G],
+  end: ['........................', '........................', '........................', '........................', '........................', '........................', '........................', '................DDDD....', '................D..D....', '................D..D....', '................D..D....', '................D..D....', '........................', '########################', '########################'],
+  // mine cart track chunks (rows 12 = rail, cart rolls on it)
+  rail0: [E, E, E, E, E, E, E, E, E, E, E, '.S..............', '================', 'HHHHHHHHHHHHHHHH', 'HHHHHHHHHHHHHHHH'],
+  rail1: [E, E, E, E, E, E, E, '.......fff......', E, E, E, E, '=====....=======', 'HHHHH....HHHHHHH', 'HHHHH....HHHHHHH'],
+  rail2: [E, E, E, E, E, E, '......V.........', E, E, '..........====..', E, '...r............', '=====.....======', 'HHHHH.....HHHHHH', 'HHHHH.....HHHHHH'],
+  rail3: [E, E, E, E, E, E, E, '..ff......I.....', E, '.......=====....', E, E, '====.......=====', 'HHHH.......HHHHH', 'HHHH.......HHHHH'],
+  rail4: [E, E, E, E, E, E, E, '...N......ff....', E, E, E, '........q.......', '=======...======', 'HHHHHHH...HHHHHH', 'HHHHHHH...HHHHHH'],
+  rail5: [E, E, E, E, E, E, E, '.....E..........', E, E, E, E, '=====.....======', 'HHHHH.....HHHHHH', 'HHHHH.....HHHHHH'],
+  railend: ['........................', '........................', '........................', '........................', '........................', '........................', '........................', '................DDDD....', '................D..D....', '................D..D....', '................D..D....', '................D..D....', '========================', 'HHHHHHHHHHHHHHHHHHHHHHHH', 'HHHHHHHHHHHHHHHHHHHHHHHH']
+};
+const LVLS = [
+  { n: 'Jungle Floor', sky: '#2a6a3a', g: '#7a4a2a', top: '#5cc23a', chunks: ['start', 'fruit', 'crocs', 'cannon', 'bees', 'pit', 'treetops', 'end'] },
+  { n: 'Treetop Town', sky: '#ffb27a', g: '#8a5a2a', top: '#8ad04a', chunks: ['start', 'treetops', 'bees', 'cannon', 'treetops', 'crocs', 'pit', 'end'] },
+  { n: 'Mine Cart Madness', sky: '#1a120c', g: '#5a4a3a', top: '#8a7a6a', chunks: ['rail0', 'rail1', 'rail2', 'rail1', 'rail3', 'rail4', 'rail5', 'rail3', 'railend'], cart: true },
+  { n: 'Temple Run', sky: '#3a3a1a', g: '#8a8a6a', top: '#b0b090', chunks: ['start', 'temple', 'crocs', 'cannon', 'temple', 'bees', 'pit', 'temple', 'end'] }
+];
+let state = 'title', li, w, p, cam, ents, fx, score, lives, fruit, letters, deadT, winT, rollT, cannon, msg, msgT, best = K.best('vinekings');
+function newGame() { li = 0; score = 0; lives = 4; fruit = 0; load(); state = 'play'; }
+function title() { K.card({ title: 'VINE KINGS', text: 'Swing through the jungle as Bongo the lemur. ROLL to bowl over enemies (bees need a roll, not a stomp). Jump into barrel cannons and press JUMP to blast off. Grab 100 fruit for an extra life and spell V-I-N-E in each level for a bonus.', best: best ? 'BEST ' + best : '', button: 'Into the jungle', onStart: newGame }); }
+function load() {
+  const L = LVLS[li];
+  w = P.world(P.join(L.chunks.map(k => CH[k])));
+  P.SOLID = '#H'; P.ONEWAY = '=';
+  ents = []; fx = []; cam = { x: 0, y: 0 }; deadT = 0; winT = 0; rollT = 0; cannon = null; letters = ''; msg = L.n.toUpperCase(); msgT = 1.6;
+  for (let y = 0; y < w.rows; y++) for (let x = 0; x < w.cols; x++) {
+    const ch = w.g[y][x], X = x * T, Y = y * T;
+    if (ch === 'S') { w.start = { x: X, y: Y }; w.g[y][x] = '.'; }
+    if (ch === 'r') { ents.push(P.walker(X + 1, Y + 2, { kind: 'croc', w: 14, vx: -30 - li * 4, smart: true })); w.g[y][x] = '.'; }
+    if (ch === 'z') { ents.push({ kind: 'bee', x: X, y: Y, y0: Y, x0: X, w: 12, h: 12, ph: Math.random() * 6, alive: true, stompable: false }); w.g[y][x] = '.'; }
+    if (ch === 'q') { ents.push({ kind: 'bird', x: X, y: Y, y0: Y, w: 14, h: 10, vx: -45, ph: 0, alive: true }); w.g[y][x] = '.'; }
+    if (ch === 'O') { ents.push({ kind: 'cannon', x: X, y: Y, w: 16, h: 16, alive: true }); w.g[y][x] = '.'; }
+  }
+  p = P.player(w.start.x, w.start.y, { h: 14, w: 12 });
+  hud();
+}
+function hud() { K.set('score', score); K.set('fruit', '◆ ' + fruit); K.set('lives', '♥' + lives); K.set('letters', ['V', 'I', 'N', 'E'].map(l => letters.includes(l) ? l : '·').join('')); }
+function die() { if (deadT) return; deadT = 2; p.vy = -240; cannon = null; K.tune([440, 392, 349, 330], 0.12, { type: 'triangle' }); }
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  for (const f of fx) { f.l -= dt; if (f.vy != null) { f.y += f.vy * dt; f.vy += 400 * dt; } } fx = fx.filter(f => f.l > 0);
+  if (deadT > 0) { deadT -= dt; p.vy += 700 * dt; p.y += p.vy * dt; if (deadT <= 0) { lives--; hud(); if (lives < 0) return over(); load(); } return; }
+  if (winT > 0) { winT -= dt; if (winT <= 0) { li++; if (li >= LVLS.length) return victory(); load(); } return; }
+  const L = LVLS[li];
+  if (cannon) {
+    p.x = cannon.x + 2; p.y = cannon.y + 1; p.vx = 0; p.vy = 0;
+    if (K.hit('a')) { p.vx = 190; p.vy = -380; p.blast = 0.5; cannon.cool = 0.6; cannon = null; K.noise(0.3, 0.3); K.beep(200, 0.3, { to: 900, vol: 0.06 }); }
+  } else if (L.cart) {
+    p.vx = 140; p.vy = Math.min(330, p.vy + 820 * dt);
+    if (K.hit('a') && p.ground) { p.vy = -300; K.beep(500, 0.06, { to: 800, vol: 0.04 }); }
+    if (!K.down('a') && p.vy < -120) p.vy = -120;
+    P.move(w, p, dt); if (p.y > w.py + 20) return die();
+    if (Math.random() < 0.3) K.beep(90, 0.03, { type: 'sawtooth', vol: 0.01 });
+  } else {
+    if (p.blast > 0) { p.blast -= dt; p.vy = Math.min(330, p.vy + 700 * dt); P.move(w, p, dt); }
+    else P.control(w, p, dt);
+    if (K.hit('b') && rollT <= 0 && p.ground) { rollT = 0.45; p.vx = p.face * 180; K.beep(300, 0.12, { to: 150, vol: 0.05 }); }
+    if (rollT > 0) { rollT -= dt; p.vx = p.face * Math.max(Math.abs(p.vx), 150); }
+    if (p.fell) { p.fell = false; return die(); }
+  }
+  const tc = P.touches(w, p, 'fVINED');
+  if (tc) {
+    if (tc.ch === 'f') { P.set(w, tc.tx, tc.ty, '.'); fruit++; score += 50; if (fruit >= 100) { fruit -= 100; lives++; K.tune([660, 880, 1320], 0.08); } K.beep(1100, 0.04, { vol: 0.04 }); hud(); }
+    else if ('VINE'.includes(tc.ch)) { P.set(w, tc.tx, tc.ty, '.'); letters += tc.ch; score += 500; K.tune([659, 784, 988], 0.06); if (letters.length === 4) { lives++; msg = 'V-I-N-E! EXTRA LIFE'; msgT = 1.6; } hud(); }
+    else if (tc.ch === 'D') { score += 3000; hud(); winT = 2.5; msg = 'LEVEL CLEAR!'; msgT = 2.5; p.vx = 0; K.tune([392, 523, 659, 784, 1047, 1319], 0.1); }
+  }
+  for (const e of ents) {
+    if (!e.alive || e.x > cam.x + VW + 50) continue;
+    if (e.kind === 'cannon') { if (e.cool > 0) e.cool -= dt; else if (!cannon && Math.abs(p.x + 6 - (e.x + 8)) < 10 && Math.abs(p.y + 7 - (e.y + 8)) < 12) { cannon = e; K.beep(300, 0.1, { vol: 0.05 }); } continue; }
+    if (e.kind === 'croc') P.stepWalker(w, e, dt);
+    else if (e.kind === 'bee') { e.ph += dt * 2; e.x = e.x0 + Math.sin(e.ph * 0.7) * 30; e.y = e.y0 + Math.sin(e.ph) * 26; }
+    else if (e.kind === 'bird') { e.ph += dt * 3; e.x += e.vx * dt; e.y = e.y0 + Math.sin(e.ph) * 10; }
+    if (!P.overlap(p, e)) continue;
+    if (rollT > 0 && e.kind !== 'bee') { kill(e); continue; }
+    if (p.blast > 0 || cannon) { kill(e); continue; }
+    const r = P.contact(p, e);
+    if (r === 'stomp') { p.vy = K.down('a') ? -310 : -200; p.jumping = K.down('a'); kill(e); }
+    else if (r === 'hurt' && rollT <= 0) die();
+  }
+  ents = ents.filter(e => e.alive);
+  cam = P.cam(w, p, cam, VW, VH);
+}
+function kill(e) { e.alive = false; score += 200; hud(); fx.push({ x: e.x, y: e.y, vy: -150, l: 0.8, kind: e.kind }); K.beep(250, 0.1, { type: 'square', vol: 0.05 }); }
+function over() { state = 'over'; best = K.saveBest('vinekings', score); K.card({ title: 'GAME OVER', text: 'You reached ' + LVLS[li].n + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Swing again', onStart: newGame }); }
+function victory() { state = 'over'; const f = score + lives * 5000; best = K.saveBest('vinekings', f); K.card({ title: 'JUNGLE KING!', text: 'All four levels cleared. Final score ' + f + '.', best: 'BEST ' + best, button: 'Play again', onStart: newGame }); }
+
+function drawTile(c, ch, x, y, tx, ty, t) {
+  const L = LVLS[li];
+  if (ch === '#') { artTile(c, '#', x, y, tx, ty, li, '#', (ART[li] || ART[0]).pal); }
+  else if (ch === 'H') { artTile(c, 'H', x, y, tx, ty, li, 'H', (li === 2 ? A.PAL.wood : A.PAL.stone)); }
+  else if (ch === '=') { if (LVLS[li].cart) { c.fillStyle = '#5a3a1a'; for (let k = 0; k < T; k += 6) c.fillRect(x + k, y + 4, 3, 4); c.fillStyle = '#c0c6d6'; c.fillRect(x, y + 2, T, 2); } else { c.fillStyle = '#8a5a2a'; c.fillRect(x, y, T, 5); c.fillStyle = '#5cc23a'; c.fillRect(x, y, T, 2); c.fillStyle = '#3a8a2a'; c.fillRect(x + (tx % 3) * 4, y + 5, 4, 4); } }
+  else if (ch === 'f') { const b = Math.sin(t / 250 + tx) * 1.5; c.fillStyle = '#ffd23f'; c.beginPath(); c.ellipse(x + 8, y + 8 + b, 3, 6, 0.5, 0, 7); c.fill(); c.fillStyle = '#7a5a1a'; c.fillRect(x + 10, y + 2 + b, 2, 2); }
+  else if ('VINE'.includes(ch)) { c.fillStyle = '#fff'; c.beginPath(); c.arc(x + 8, y + 8, 7, 0, 7); c.fill(); K.text(c, ch, x + 8, y + 9, 10, '#e63946'); }
+  else if (ch === 'D') { c.fillStyle = '#c8a050'; c.fillRect(x, y, T, T); c.fillStyle = '#8a6a2a'; c.fillRect(x + 2, y + 2, 12, 12); if (w.g[ty - 1][tx] !== 'D') { c.fillStyle = '#ffd23f'; c.fillRect(x, y, T, 3); } }
+}
+function drawLemur(c, x, y, t) {
+  const f = p.face, run = p.ground && Math.abs(p.vx) > 5 ? Math.floor(p.anim / 9) % 2 : 0;
+  if (rollT > 0) { c.save(); c.translate(x + 6, y + 8); c.rotate(t / 40 * f); c.fillStyle = '#9a9aa8'; c.beginPath(); c.arc(0, 0, 7, 0, 7); c.fill(); c.fillStyle = '#2a2a2a'; c.fillRect(-7, -1, 14, 2); c.restore(); return; }
+  if (LVLS[li].cart) { c.fillStyle = '#6a6a7a'; c.fillRect(x - 4, y + 6, 20, 8); c.fillStyle = '#3a3a4a'; c.fillRect(x - 4, y + 6, 20, 2); c.fillStyle = '#222'; c.beginPath(); c.arc(x, y + 15, 3, 0, 7); c.arc(x + 12, y + 15, 3, 0, 7); c.fill(); }
+  c.save(); c.translate(x + 6, 0); c.scale(f, 1); c.translate(-6, 0);
+  const tail = Math.sin(t / 150) * 2; for (let k = 0; k < 5; k++) { c.fillStyle = k % 2 ? '#2a2a2a' : '#f0f0f0'; c.fillRect(-4 - k, y + 2 - k * 2 + tail, 3, 3); }
+  c.fillStyle = '#9a9aa8'; c.fillRect(1, y + 5, 10, 6); c.fillStyle = '#e8e8f0'; c.fillRect(4, y + 6, 6, 4);
+  c.fillStyle = '#9a9aa8'; c.fillRect(2, y - 3, 9, 8); c.fillStyle = '#2a2a2a'; c.fillRect(7, y - 1, 5, 4); c.fillStyle = '#ffd23f'; c.fillRect(8, y, 2, 2); c.fillStyle = '#111'; c.fillRect(11, y + 2, 2, 1);
+  c.fillStyle = '#e63946'; c.fillRect(1, y + 9, 10, 2);
+  if (!LVLS[li].cart) { c.fillStyle = '#5a5a6a'; c.fillRect(2 + run * 2, y + 11, 3, 3); c.fillRect(7 - run * 2, y + 11, 3, 3); }
+  c.restore();
+}
+function drawEnt(c, e, x, y, t) {
+  if (e.kind === 'croc') { const k = Math.floor(t / 150) % 2, d = e.vx < 0 ? -1 : 1; c.fillStyle = '#3a8a3a'; c.fillRect(x, y + 3, 14, 9); c.fillRect(x + (d < 0 ? -5 : 13), y + 5, 6, 5); c.fillStyle = '#fff'; for (let i = 0; i < 3; i++) c.fillRect(x + (d < 0 ? -4 : 14) + i * 2, y + 9, 1, 1); c.fillStyle = '#ffd23f'; c.fillRect(x + (d < 0 ? 1 : 10), y + 3, 3, 3); c.fillStyle = '#2a6a2a'; c.fillRect(x + (k ? 1 : 3), y + 12, 3, 2); c.fillRect(x + (k ? 9 : 11), y + 12, 3, 2); for (let i = 2; i < 13; i += 3) c.fillRect(x + i, y + 1, 2, 2); }
+  else if (e.kind === 'bee') { const f = Math.floor(t / 50) % 2; c.fillStyle = '#ffb02e'; c.beginPath(); c.ellipse(x + 6, y + 6, 7, 6, 0, 0, 7); c.fill(); c.fillStyle = '#2a1a0a'; c.fillRect(x + 3, y + 1, 2, 10); c.fillRect(x + 8, y + 1, 2, 10); c.fillStyle = 'rgba(255,255,255,.8)'; c.fillRect(x + 2, y - (f ? 5 : 2), 8, 3); c.fillStyle = '#e8e8f0'; c.fillRect(x + 12, y + 6, 3, 1); }
+  else if (e.kind === 'bird') { const f = Math.floor(t / 90) % 2; c.fillStyle = '#e63946'; c.fillRect(x, y + 2, 14, 7); c.fillStyle = '#ffd23f'; c.fillRect(x - 3, y + 4, 3, 2); c.fillStyle = '#c0203a'; c.fillRect(x + 3, y - (f ? 4 : -2), 8, 3); }
+  else if (e.kind === 'cannon') { c.save(); c.translate(x + 8, y + 8); c.rotate(-Math.PI / 4); c.fillStyle = cannon === e ? '#c8a050' : '#8a5a2a'; c.fillRect(-9, -7, 18, 14); c.fillStyle = '#3a2a1a'; c.fillRect(-9, -7, 3, 14); c.fillRect(6, -7, 3, 14); c.fillStyle = '#ffd23f'; c.fillRect(-2, -3, 6, 6); c.restore(); }
+}
+function draw(c, t) {
+  if (!w) { c.fillStyle = '#2a6a3a'; c.fillRect(0, 0, VW, VH); return; }
+  const L = LVLS[li]; artBg(c, t, li);
+  P.eachVisible(w, cam, VW, VH, (ch, x, y, tx, ty) => drawTile(c, ch, x, y, tx, ty, t));
+  for (const e of ents) if (e.x > cam.x - 30 && e.x < cam.x + VW + 30) drawEnt(c, e, Math.round(e.x - cam.x), Math.round(e.y - cam.y), t);
+  for (const f of fx) { c.save(); c.translate(Math.round(f.x - cam.x) + 6, Math.round(f.y - cam.y) + 6); c.scale(1, -1); drawEnt(c, f, -6, -6, t); c.restore(); }
+  if (!cannon && !(deadT > 0 && Math.floor(t / 80) % 2)) drawLemur(c, Math.round(p.x - cam.x), Math.round(p.y - cam.y), t);
+  if (cannon) K.text(c, 'JUMP TO BLAST!', Math.round(cannon.x - cam.x) + 8, Math.round(cannon.y - cam.y) - 12, 8, '#ffd23f');
+  if (msgT > 0) K.text(c, msg, VW / 2, 60, 15, '#fff');
+}
+title();
+const ART = [{ pal: A.PAL.jungle, sky: { top: '#1a5a7a', mid: '#5ab0a0', bottom: '#d0f0c0', sun: '#fff8c0', sunY: 40 }, layers: [{ factor: 0.12, base: 150, amp: 50, col: '#2a6a5a', edge: 'rgba(0,0,0,.2)', seed: 3, fog: 'rgba(200,255,220,.3)' }, { t: 'trees', factor: 0.3, base: 190, col: '#1a5a3a', hi: '#2a7a4a', kind: 'round', spacing: 22, size: 1.4, ground: true }, { t: 'trees', factor: 0.5, base: 212, col: '#0e3a22', kind: 'palm', spacing: 40, size: 1.2 }], amb: "leaf", vig: .3 }, { pal: A.PAL.earth, sky: { top: '#3a2a6a', mid: '#ff8a5a', bottom: '#ffd88a', sun: '#ffe8a0', sunY: 80, sunR: 18 }, layers: [{ factor: 0.12, base: 160, amp: 50, col: "#c87a5a", edge: "rgba(0,0,0,.2)", seed: 2, fog: "rgba(255,220,180,.25)" }, { t: "trees", factor: 0.3, base: 200, col: "#6a3a2a", hi: "#8a4a3a", kind: "round", spacing: 30, size: 1.5, ground: true }], amb: "leaf", vig: .25 }, { pal: A.PAL.cave, sky: { top: '#06060f', mid: '#10102a', bottom: '#1a1a3a', clouds: false }, layers: [{ factor: 0.15, base: 150, amp: 70, col: '#18183a', edge: 'rgba(120,140,255,.25)', seed: 7 }, { factor: 0.3, base: 200, amp: 50, col: '#10102a', edge: 'rgba(120,140,255,.3)', seed: 3 }], amb: "dust", vig: .5 }, { pal: Object.assign({}, A.PAL.stone, { base: "#6a6a4a", hi: "#8a8a62", lo: "#44442e", mortar: "#1e1e12", grass: "#5a9a3a", grassHi: "#8ac85a", grassLo: "#3a6a22" }), sky: { top: "#2a3a1a", mid: "#6a7a3a", bottom: "#c8c88a", sun: "#fff0a0", sunY: 40 }, layers: [{ factor: 0.12, base: 150, amp: 60, col: "#4a5a2a", mesa: true, edge: "rgba(0,0,0,.3)", seed: 7, fog: "rgba(220,230,180,.25)" }, { t: "trees", factor: 0.35, base: 205, col: "#2a3a1a", kind: "palm", spacing: 36, size: 1.2 }], amb: "leaf", vig: .35 }];
+
+function artBg(c, t, i) { const L = ART[i] || ART[0]; A.sky(c, VW, VH, L.sky, t); c.save(); c.translate(0, Math.round(-cam.y * 0.9)); (L.layers || []).forEach(o => o.t === 'trees' ? A.trees(c, cam.x, o) : A.ridge(c, cam.x, o)); c.restore(); if (L.glow) A.glow(c, VW / 2, VH, 220, L.glow, 0.25); }
+function artTile(c, ch, x, y, tx, ty, i, set, pal) { const sol = (a, b) => a < 0 || a >= w.cols || b >= w.rows || (b >= 0 && set.indexOf(w.g[b][a]) >= 0); A.tile(c, ch + i, x, y, A.edges(sol, tx, ty), tx, ty, pal); }
+drawLemur = A.ink(drawLemur);
+drawEnt = A.ink(drawEnt);
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); if (w) { const L = ART[li] || ART[0]; A.ambient(c, VW, VH, t, L.amb, 16); A.vignette(c, VW, VH, L.vig == null ? 0.3 : L.vig); } }; }
+K.run(update, draw);
+</script>
+</body>
+</html>

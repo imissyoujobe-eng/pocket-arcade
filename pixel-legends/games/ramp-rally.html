@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ramp Rally</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+// Ramp Rally: side-view dirt bike racing on a four-lane track. Switch lanes, launch off ramps, land level and keep the engine cool.
+K.theme({ bg: '#1a1020', ink: '#fff6ea', accent: '#ff7a1a', accentInk: '#1a0a00' });
+const W = 320, H = 240, LANE0 = 150, LH = 18, PX = 96;
+K.screen(W, H);
+K.hud(['heat', 'pos', 'time']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'TURBO' }, { id: 'a', label: 'GAS' }] });
+
+const HEATS = [{ n: 'Valley', len: 3200, cpu: 205 }, { n: 'Canyon', len: 3800, cpu: 222 }, { n: 'Thunder Hill', len: 4400, cpu: 238 }];
+const COLS = ['#ff7a1a', '#3fa9ff', '#7cff6b', '#ff4fa3'];
+let state = 'title', heat, track, riders, me, time, finished, msg, msgT, best = K.best('ramprally'), parts, cam;
+function title() { K.card({ title: 'RAMP RALLY', text: 'Hold GAS to ride and TURBO to go faster, but turbo heats your engine. Up and down switch lanes. In the air, left leans back and right leans forward. Land level with the ground or you wipe out! Finish in the top 2 to reach the next heat.', best: best ? 'BEST ' + (best / 100).toFixed(2) + 's' : '', button: 'Start engine', onStart: () => { heat = 0; startHeat(); } }); }
+
+function rng(seed) { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+function buildTrack(h) {
+  const r = rng(11 + h * 77), t = { ramps: [], mud: [], hay: [], cool: [], len: HEATS[h].len };
+  let x = 380;
+  while (x < t.len - 260) {
+    const k = r();
+    if (k < 0.3) t.ramps.push({ x, up: 40, top: 10, down: 30, h: 14, l0: 0, l1: 3 });
+    else if (k < 0.5) { const l0 = Math.floor(r() * 3); t.ramps.push({ x, up: 60, top: 30, down: 50, h: 30, l0, l1: l0 + 1 }); }
+    else if (k < 0.62) { t.ramps.push({ x, up: 34, top: 0, down: 20, h: 18, l0: 0, l1: 3 }); t.ramps.push({ x: x + 110, up: 34, top: 0, down: 40, h: 22, l0: 0, l1: 3 }); x += 110; }
+    else if (k < 0.76) { const l = Math.floor(r() * 4); t.mud.push({ x, len: 70 + r() * 60, l0: l, l1: Math.min(3, l + Math.floor(r() * 2)) }); }
+    else if (k < 0.92) { const a = Math.floor(r() * 4); t.hay.push({ x, l: a }); if (r() < 0.5) t.hay.push({ x: x + 50, l: (a + 2) % 4 }); }
+    else t.cool.push({ x, l: Math.floor(r() * 4) });
+    x += 150 + r() * 120 + h * 0;
+  }
+  return t;
+}
+function gh(x, lane) {
+  const l = Math.round(lane);
+  for (const r of track.ramps) {
+    if (l < r.l0 || l > r.l1) continue;
+    const d = x - r.x;
+    if (d < 0 || d > r.up + r.top + r.down) continue;
+    if (d < r.up) return r.h * d / r.up;
+    if (d < r.up + r.top) return r.h;
+    return r.h * (1 - (d - r.up - r.top) / r.down);
+  }
+  return 0;
+}
+const slope = (x, l) => (gh(x + 2, l) - gh(x - 2, l)) / 4;
+const inMud = (x, l) => track.mud.some(m => x > m.x && x < m.x + m.len && Math.round(l) >= m.l0 && Math.round(l) <= m.l1);
+function rider(lane, cpu, col) { return { x: 40 - lane * 8, v: 0, lane, tl: lane, h: 0, vh: 0, air: false, tilt: 0, heat: 0, stall: 0, crash: 0, wob: 0, cpu, col, done: false, t: 0, wheel: 0, think: 0 }; }
+function startHeat() {
+  track = buildTrack(heat); parts = [];
+  riders = [rider(2, false, COLS[0]), rider(0, true, COLS[1]), rider(1, true, COLS[2]), rider(3, true, COLS[3])];
+  me = riders[0]; riders.slice(1).forEach((r, i) => { r.top = HEATS[heat].cpu * (0.94 + i * 0.03); });
+  time = -3; finished = []; cam = 0; state = 'play'; msg = 'HEAT ' + (heat + 1) + ': ' + HEATS[heat].n.toUpperCase(); msgT = 2.4; hud();
+}
+function hud() {
+  K.set('heat', 'HEAT ' + (heat + 1) + '/3');
+  const pos = 1 + riders.filter(r => r !== me && (r.done ? (!me.done || r.t < me.t) : (!me.done && r.x > me.x))).length;
+  K.set('pos', ['1ST', '2ND', '3RD', '4TH'][pos - 1]);
+  K.set('time', Math.max(0, time).toFixed(1) + 's');
+}
+
+function crash(r) {
+  r.crash = 1.6; r.air = false; r.vh = 0;
+  if (!r.cpu) { K.noise(0.5, 0.35); msg = 'WIPEOUT!'; msgT = 1.2; }
+  for (let i = 0; i < 16; i++) parts.push({ x: r.x, y: laneY(r.lane) - r.h, vx: K.rnd(-60, 60), vy: K.rnd(-90, -10), l: K.rnd(0.4, 0.9), c: i % 2 ? '#a8723a' : r.col });
+}
+function step(r, dt, gas, turbo, lean, up, down) {
+  if (r.done) { r.v = Math.max(0, r.v - 120 * dt); r.x += r.v * dt; return; }
+  r.lane += (r.tl - r.lane) * Math.min(1, dt * 10);
+  if (r.crash > 0) { r.crash -= dt; r.v *= Math.pow(0.15, dt); r.x += r.v * dt; r.tilt += 9 * dt; if (r.crash <= 0) { r.v = 0; r.tilt = 0; r.h = gh(r.x, r.tl); } return; }
+  // engine
+  let max = 0;
+  if (r.stall > 0) { r.stall -= dt; r.heat = Math.max(40, r.heat - 25 * dt); if (r.stall <= 0 && !r.cpu) { msg = 'ENGINE COOLED'; msgT = 0.8; } }
+  else if (turbo) { max = 300; r.heat += 30 * dt; }
+  else if (gas) { max = 232; r.heat -= 5 * dt; }
+  else r.heat -= 20 * dt;
+  r.heat = K.clamp(r.heat, 0, 100);
+  if (r.heat >= 100 && r.stall <= 0) { r.stall = 2.4; if (!r.cpu) { msg = 'OVERHEATED!'; msgT = 1.4; K.noise(0.4, 0.3); } }
+  if (r.stall > 0) max = 0;
+  if (!r.air) {
+    if (up && r.tl > 0 && Math.abs(r.lane - r.tl) < 0.2) r.tl--;
+    if (down && r.tl < 3 && Math.abs(r.lane - r.tl) < 0.2) r.tl++;
+    if (inMud(r.x, r.tl)) max *= 0.45;
+    if (r.wob > 0) { r.wob -= dt; max *= 0.6; }
+    r.v += (r.v < max ? (turbo ? 260 : 190) : -(inMud(r.x, r.tl) ? 420 : 110)) * dt;
+    r.v -= slope(r.x, r.tl) * 160 * dt; r.v = Math.max(0, r.v);
+    const sl = slope(r.x, r.tl), nx = r.x + r.v * dt, pred = r.h + r.v * sl * dt, g = gh(nx, r.tl);
+    r.x = nx;
+    if (pred > g + 2 && r.v > 70) { r.air = true; r.vh = r.v * sl; r.h = pred; }
+    else { r.h = g; r.tilt += (Math.atan(slope(r.x, r.tl)) - r.tilt) * Math.min(1, dt * 16); }
+  } else {
+    r.vh -= 560 * dt; r.h += r.vh * dt; r.x += r.v * dt;
+    r.tilt += (lean === 0 ? -r.tilt * 0.8 : lean * 2.6) * dt;
+    const g = gh(r.x, r.tl);
+    if (r.h <= g) {
+      const diff = Math.abs(r.tilt - Math.atan(slope(r.x, r.tl)));
+      r.h = g; r.air = false; r.vh = 0;
+      if (diff > 0.65) crash(r);
+      else if (diff > 0.32) { r.wob = 0.6; if (!r.cpu) { K.beep(140, 0.15, { vol: 0.06 }); msg = 'WOBBLY'; msgT = 0.7; } }
+      else if (!r.cpu) K.noise(0.08, 0.15);
+    }
+  }
+  // hay bales
+  if (r.h < 8 && r.crash <= 0) for (const b of track.hay) if (Math.round(r.lane) === b.l && Math.abs(r.x - b.x) < 9) { crash(r); break; }
+  for (const c of track.cool) if (Math.round(r.lane) === c.l && Math.abs(r.x - c.x) < 10 && r.heat > 0) { r.heat = 0; if (!r.cpu) { K.tune([880, 1175], 0.05); msg = 'COOLED!'; msgT = 0.6; } }
+  r.wheel += r.v * dt / 6;
+  if (r.x >= track.len && !r.done) { r.done = true; r.t = time; finished.push(r); }
+}
+function cpuThink(r, dt) {
+  // steer around hay bales and mud, lean to land level, use a little turbo when cool
+  r.think -= dt;
+  let up = false, down = false;
+  const ahead = l => track.hay.some(b => b.l === l && b.x - r.x > 0 && b.x - r.x < 90) || inMud(r.x + 60, l);
+  if (!r.air && ahead(r.tl) && Math.abs(r.lane - r.tl) < 0.2) { if (r.tl > 0 && !ahead(r.tl - 1)) up = true; else if (r.tl < 3 && !ahead(r.tl + 1)) down = true; }
+  let lean = 0;
+  if (r.air) { const want = Math.atan(slope(r.x + r.v * 0.15, r.tl)); lean = r.tilt > want + 0.1 ? -1 : r.tilt < want - 0.1 ? 1 : 0; }
+  // rubber band so races stay close
+  const gap = r.x - me.x, top = r.top * (gap > 250 ? 0.9 : gap < -250 ? 1.12 : 1);
+  const turbo = r.heat < 55 && r.v < top && Math.random() < 0.6;
+  const gas = r.v < top;
+  step(r, dt, gas, turbo && r.v < top - 10, lean, up, down);
+}
+function bump() {
+  for (let i = 0; i < riders.length; i++) for (let j = i + 1; j < riders.length; j++) {
+    const a = riders[i], b = riders[j];
+    if (a.crash > 0 || b.crash > 0 || Math.abs(a.lane - b.lane) > 0.6 || Math.abs(a.h - b.h) > 10) continue;
+    const d = b.x - a.x;
+    if (Math.abs(d) < 16) { const back = d > 0 ? a : b, front = d > 0 ? b : a; back.x = front.x - 16; back.v = Math.min(back.v, front.v - 25); if (back === me || front === me) K.beep(120, 0.06, { vol: 0.05 }); }
+  }
+}
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.l -= dt; } parts = parts.filter(p => p.l > 0);
+  if (time < 0) { const b = Math.ceil(time); time += dt; if (Math.ceil(time) !== b) K.beep(b === 0 ? 880 : 440, b === 0 ? 0.35 : 0.12, { vol: 0.07 }); hud(); return; }
+  time += dt;
+  const lean = (K.down('left') ? 1 : 0) - (K.down('right') ? 1 : 0);
+  let up = K.hit('up'), down = K.hit('down');
+  if (K.ptr.tapped && K.ptr.y > LANE0 - 10) { const l = K.clamp(Math.round((K.ptr.y - LANE0) / LH), 0, 3); if (l < me.tl) up = true; if (l > me.tl) down = true; }
+  step(me, dt, K.down('a') || K.down('b'), K.down('b'), lean, up, down);
+  if ((K.down('a') || K.down('b')) && Math.random() < 0.5 && me.crash <= 0) K.beep(55 + me.v * 0.4, 0.04, { type: 'sawtooth', vol: 0.02 });
+  for (const r of riders) if (r.cpu) cpuThink(r, dt);
+  bump();
+  cam = me.x - PX;
+  hud();
+  if (me.done) {
+    state = 'over';
+    const pos = finished.indexOf(me) + 1, ok = pos <= 2;
+    if (ok) best = K.saveBest('ramprally', Math.round(me.t * 100), true);
+    K.tune(ok ? [523, 659, 784, 1047] : [392, 330, 262], 0.1);
+    setTimeout(() => {
+      if (ok && heat < 2) K.card({ title: (pos === 1 ? '1ST' : '2ND') + ' PLACE!', text: 'Heat ' + (heat + 1) + ' done in ' + me.t.toFixed(2) + ' seconds. Next up: ' + HEATS[heat + 1].n + '.', best: best ? 'BEST ' + (best / 100).toFixed(2) + 's' : '', button: 'Next heat', onStart: () => { heat++; startHeat(); } });
+      else if (ok) K.card({ title: 'CHAMPION!', text: 'You won through all three heats! Final heat time ' + me.t.toFixed(2) + ' seconds.', best: 'BEST ' + (best / 100).toFixed(2) + 's', button: 'Race again', onStart: () => { heat = 0; startHeat(); } });
+      else K.card({ title: ['', '', '', '3RD PLACE', '4TH PLACE'][pos], text: 'You need the top 2 to move on. Try heat ' + (heat + 1) + ' again!', best: best ? 'BEST ' + (best / 100).toFixed(2) + 's' : '', button: 'Retry heat', onStart: startHeat });
+    }, 1200);
+  }
+}
+
+const laneY = l => LANE0 + l * LH;
+function drawRamp(c, r, l) {
+  const y = laneY(l) + 6, sx = r.x - cam;
+  if (sx > W + 10 || sx + r.up + r.top + r.down < -10) return;
+  c.fillStyle = '#b5793a'; c.beginPath(); c.moveTo(sx, y); c.lineTo(sx + r.up, y - r.h); c.lineTo(sx + r.up + r.top, y - r.h); c.lineTo(sx + r.up + r.top + r.down, y); c.fill();
+  c.fillStyle = '#d99a52'; c.beginPath(); c.moveTo(sx, y); c.lineTo(sx + r.up, y - r.h); c.lineTo(sx + r.up, y - r.h + 3); c.lineTo(sx + 3, y); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.5)'; for (let k = 1; k < 4; k++) { const d = r.up * k / 4; c.fillRect(sx + d, y - r.h * k / 4 - 1, 3, 2); }
+}
+function drawBike(c, r, t) {
+  const sx = r.x - cam; if (sx < -30 || sx > W + 30) return;
+  const y = laneY(r.lane) + 4 - r.h;
+  c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(sx, laneY(r.lane) + 5 - gh(r.x, r.lane), 12, 2.5, 0, 0, 7); c.fill();
+  c.save(); c.translate(sx, y); c.rotate(-r.tilt);
+  for (const wx of [-9, 9]) { c.fillStyle = '#151518'; c.beginPath(); c.arc(wx, -5, 5, 0, 7); c.fill(); c.strokeStyle = '#999'; c.lineWidth = 1; c.beginPath(); c.moveTo(wx, -5); c.lineTo(wx + Math.cos(r.wheel) * 4, -5 + Math.sin(r.wheel) * 4); c.stroke(); }
+  c.fillStyle = r.col; c.beginPath(); c.moveTo(-10, -10); c.lineTo(2, -14); c.lineTo(10, -11); c.lineTo(6, -7); c.lineTo(-6, -7); c.fill();
+  c.strokeStyle = '#ccc'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(9, -5); c.lineTo(6, -15); c.stroke();
+  // rider
+  const lean = r.air ? 0 : 2;
+  c.fillStyle = '#2a2a3a'; c.fillRect(-3, -13, 4, 6);
+  c.fillStyle = r.col; c.fillRect(-4 + lean, -22, 6, 9);
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(lean, -25, 4, 0, 7); c.fill(); c.fillStyle = '#222'; c.fillRect(lean + 1, -26, 3, 2);
+  c.restore();
+  if (r.stall > 0 && Math.floor(t / 120) % 2) { c.fillStyle = 'rgba(200,200,200,.6)'; c.beginPath(); c.arc(sx - 4, y - 30, 4, 0, 7); c.fill(); }
+}
+function draw(c, t) {
+  const cm = cam || 0;
+  c.save(); c.beginPath(); c.rect(0, 0, W, 132); c.clip();
+  A.sky(c, W, 132, { top: '#4a5ad8', mid: '#ff9a6a', bottom: '#ffe0a0', sun: '#fff0b0', sunY: 50, sunR: 16 }, t);
+  A.ridge(c, cm, { factor: 0.08, base: 100, amp: 40, col: '#c87a6a', bands: ['rgba(255,220,180,.25)', 'rgba(140,60,50,.25)'], mesa: true, edge: 'rgba(0,0,0,.2)', seed: 3 });
+  A.ridge(c, cm, { factor: 0.15, base: 112, amp: 26, col: '#a05a4a', edge: 'rgba(0,0,0,.3)', seed: 7 });
+  c.restore();
+  // grandstand crowd
+  c.fillStyle = '#3a2a4a'; c.fillRect(0, 104, W, 28);
+  const crowd = ['#ffd23f', '#ff4fa3', '#fff', '#3fa9ff', '#7cff6b'];
+  for (let i = -1; i < W / 8 + 1; i++) { const x = i * 8 - ((cm * 0.5) % 8), id = Math.floor((i * 8 + cm * 0.5) / 8); c.fillStyle = crowd[((id % 5) + 5) % 5]; c.fillRect(x, 110 + (id % 2) * 8 - (Math.sin(t / 150 + id) > 0.6 ? 2 : 0), 4, 4); }
+  c.fillStyle = '#e8e2d8'; c.fillRect(0, 132, W, 4);
+  // lanes
+  for (let l = 0; l < 4; l++) { c.fillStyle = l % 2 ? '#a8683a' : '#b5763f'; c.fillRect(0, laneY(l) - 9, W, LH); for (let k = 0; k < 60; k++) { const x = ((A.hash(k, l) * 600 - cm) % 600 + 600) % 600 - 20; c.fillStyle = k % 3 ? 'rgba(80,40,20,.35)' : 'rgba(255,220,170,.3)'; c.fillRect(x, laneY(l) - 8 + A.hash(k, l + 9) * (LH - 2), 2 + (k % 3), 1.5); } c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(0, laneY(l) + LH - 11, W, 2); }
+  for (let ty = 0; ty < (H - laneY(3) - 9) / 16 + 1; ty++) for (let x = -(cm % 16) - 16; x < W; x += 16) A.grassTD(c, x, laneY(3) + 9 + ty * 16, Math.floor((x + cm) / 16), ty, { base: '#4e9a3a', hi: '#6aba52', lo: '#367a2a' });
+  c.fillStyle = A.INK; c.fillRect(0, laneY(3) + 9, W, 1.5);
+  c.fillStyle = 'rgba(255,255,255,.18)'; for (let l = 1; l < 4; l++) for (let x = -((cm) % 24); x < W; x += 24) c.fillRect(x, laneY(l) - 9, 12, 1);
+  if (!track) return;
+  // start and finish lines
+  for (const fx of [40, track.len]) { const sx = fx - cm; if (sx > -10 && sx < W + 10) for (let k = 0; k < 18; k++) { c.fillStyle = k % 2 ? '#111' : '#fff'; c.fillRect(sx, laneY(0) - 9 + k * 4, 4, 4); c.fillStyle = k % 2 ? '#fff' : '#111'; c.fillRect(sx + 4, laneY(0) - 9 + k * 4, 4, 4); } }
+  for (const m of track.mud) { const sx = m.x - cm; if (sx > W || sx + m.len < 0) continue; c.fillStyle = '#5a3a1e'; for (let l = m.l0; l <= m.l1; l++) { c.beginPath(); c.ellipse(sx + m.len / 2, laneY(l), m.len / 2, 6, 0, 0, 7); c.fill(); } }
+  for (const a of track.cool) { const sx = a.x - cm; if (sx < -10 || sx > W + 10) continue; c.fillStyle = '#7ee0ff'; c.beginPath(); c.moveTo(sx - 6, laneY(a.l) - 4); c.lineTo(sx + 6, laneY(a.l)); c.lineTo(sx - 6, laneY(a.l) + 4); c.fill(); }
+  const order = [...riders].sort((a, b) => a.lane - b.lane);
+  for (let l = 0; l < 4; l++) {
+    for (const r of track.ramps) if (l >= r.l0 && l <= r.l1) drawRamp(c, r, l);
+    for (const b of track.hay) if (b.l === l) { const sx = b.x - cm; if (sx < -10 || sx > W + 10) continue; c.fillStyle = '#e8c45a'; c.fillRect(sx - 6, laneY(l) - 6, 12, 10); c.fillStyle = '#b8902e'; c.fillRect(sx - 6, laneY(l) - 3, 12, 1); c.fillRect(sx - 6, laneY(l) + 1, 12, 1); }
+    for (const r of order) if (Math.round(r.lane) === l) drawBike(c, r, t);
+  }
+  for (const p of parts) { c.fillStyle = p.c; c.fillRect(p.x - cm, p.y, 3, 3); }
+  // heat gauge + progress
+  c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(6, H - 14, 86, 9); c.fillStyle = me.heat > 75 || me.stall > 0 ? '#ff3b3b' : '#7cff6b'; c.fillRect(7, H - 13, 84 * me.heat / 100, 7);
+  K.text(c, 'HEAT', 106, H - 9, 7, '#fff');
+  c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(130, H - 13, 180, 6);
+  for (const r of riders) { c.fillStyle = r.col; c.fillRect(130 + 176 * K.clamp(r.x / track.len, 0, 1), H - 15, 4, 10); }
+  K.text(c, Math.round(me.v * 0.25) + ' MPH', 40, 12, 9, '#fff');
+  if (time < 0) K.text(c, Math.ceil(-time) > 0 ? String(Math.ceil(-time)) : 'GO!', W / 2, 60, 24, '#fff');
+  else if (time < 0.8) K.text(c, 'GO!', W / 2, 60, 24, '#7cff6b');
+  if (msgT > 0) K.text(c, msg, W / 2, 44, 13, '#ffd23f');
+}
+title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.25); }; }
+K.run(update, draw);
+</script>
+</body>
+</html>

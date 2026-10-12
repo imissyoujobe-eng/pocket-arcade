@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Commando Sights</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+// Commando Sights: a first-person gallery shooter. Move the crosshair, pick off soldiers and vehicles, rescue hostages and save your rockets for the big stuff.
+K.theme({ bg: '#1a1408', ink: '#fff6e0', accent: '#ffb24a', accentInk: '#2a1600' });
+const W = 320, H = 220, HY = 120;
+K.screen(W, H, { smooth: true });
+K.hud(['score', 'ammo', 'hp']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'ROCKET' }, { id: 'a', label: 'FIRE' }] });
+
+let state = 'title', score, hp, ammo, mags, rockets, stage, kills, need, cx, cy, foes, pickups, flashes, parts, spawnT, reload, scroll, best = K.best('commandosights'), hurtFlash;
+function title() { K.card({ title: 'COMMANDO SIGHTS', text: 'Aim with the arrows or drag on the screen. FIRE shoots, ROCKET blows up anything near the crosshair. Shoot ammo crates for more bullets. Do NOT shoot the hostages in white! Clear the quota to finish each stage.', best: best ? 'BEST ' + best : '', button: 'Lock & Load', onStart: start }); }
+function start() { score = 0; hp = 10; stage = 1; ammo = 30; mags = 4; rockets = 3; cx = W / 2; cy = HY; hurtFlash = 0; startStage(); state = 'play'; }
+function startStage() { kills = 0; need = 15 + stage * 5; foes = []; pickups = []; flashes = []; parts = []; spawnT = 1; reload = 0; scroll = 0; }
+function boom(x, y, c, n) { for (let i = 0; i < (n || 10); i++) parts.push({ x, y, vx: K.rnd(-80, 80), vy: K.rnd(-100, 20), t: K.rnd(0.3, 0.8), c }); }
+function spawn() {
+  const r = Math.random(), side = Math.random() < 0.5 ? -1 : 1;
+  if (r < 0.62) { const d = K.rnd(0.35, 1); foes.push({ k: 'sol', x: side < 0 ? -10 : W + 10, y: HY + 8 + d * 70, d, vx: -side * K.rnd(20, 45) * d, hp: 1, cd: K.rnd(1, 3), duck: 0 }); }
+  else if (r < 0.75) foes.push({ k: 'host', x: side < 0 ? -10 : W + 10, y: HY + 50, d: 0.7, vx: -side * 30, hp: 1 });
+  else if (r < 0.88) foes.push({ k: 'jeep', x: side < 0 ? -40 : W + 40, y: HY + 30, d: 0.6, vx: -side * 70, hp: 6, cd: 1 });
+  else if (r < 0.95) foes.push({ k: 'heli', x: side < 0 ? -40 : W + 40, y: 40, d: 0.8, vx: -side * 35, hp: 12, cd: 1.5 });
+  else foes.push({ k: 'crate', x: K.rnd(40, W - 40), y: HY + 40, d: 0.7, vx: 0, hp: 1, life: 5, give: Math.random() < 0.7 ? 'mag' : 'rocket' });
+}
+function hitTest(f, x, y, r) { const s = f.d; if (f.k === 'jeep') return Math.abs(x - f.x) < 26 * s + r && Math.abs(y - (f.y - 8 * s)) < 12 * s + r; if (f.k === 'heli') return Math.abs(x - f.x) < 30 * s + r && Math.abs(y - f.y) < 12 * s + r; if (f.k === 'crate') return Math.abs(x - f.x) < 10 + r && Math.abs(y - f.y + 8) < 9 + r; return Math.abs(x - f.x) < 6 * s + r && y < f.y + r && y > f.y - 26 * s - r; }
+function kill(f) {
+  f.dead = true; boom(f.x, f.y - 10 * f.d, f.k === 'host' ? '#fff' : '#ffb04a', f.k === 'sol' || f.k === 'host' ? 8 : 26);
+  if (f.k === 'host') { score = Math.max(0, score - 500); hp--; flashes.push({ t: 1.2, s: 'HOSTAGE HIT!' }); K.beep(150, 0.4, { to: 80 }); return; }
+  if (f.k === 'crate') { if (f.give === 'mag') { mags++; flashes.push({ t: 1, s: '+1 MAGAZINE' }); } else { rockets++; flashes.push({ t: 1, s: '+1 ROCKET' }); } K.tune([660, 880], 0.06); return; }
+  score += { sol: 100, jeep: 500, heli: 1000 }[f.k]; kills += f.k === 'sol' ? 1 : 3; K.noise(f.k === 'sol' ? 0.1 : 0.5, 0.3);
+}
+function hurt() { hp--; hurtFlash = 0.25; K.beep(120, 0.2, { to: 60, type: 'sawtooth' }); if (hp <= 0) { state = 'over'; best = K.saveBest('commandosights', score); K.card({ title: 'MISSION FAILED', text: 'You reached stage ' + stage + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); } }
+function update(dt) {
+  if (state !== 'play') return;
+  const sp = 170; if (K.down('left')) cx -= sp * dt; if (K.down('right')) cx += sp * dt; if (K.down('up')) cy -= sp * dt; if (K.down('down')) cy += sp * dt;
+  if (K.ptr.down) { cx += (K.ptr.x - cx) * Math.min(1, dt * 14); cy += (K.ptr.y - 20 - cy) * Math.min(1, dt * 14); }
+  cx = K.clamp(cx, 0, W); cy = K.clamp(cy, 0, H);
+  scroll += dt * 8;
+  if (reload > 0) { reload -= dt; if (reload <= 0) { ammo = 30; K.beep(500, 0.05); } }
+  const firing = K.down('a') || (K.ptr.down);
+  if (firing && reload <= 0 && Math.floor(performance.now() / 90) !== Math.floor((performance.now() - dt * 1000) / 90)) {
+    if (ammo > 0) { ammo--; K.beep(180, 0.05, { type: 'sawtooth', vol: 0.04 }); flashes.push({ t: 0.05, x: cx + K.rnd(-3, 3), y: cy + K.rnd(-3, 3), shot: 1 });
+      const tx = cx + K.rnd(-3, 3), ty = cy + K.rnd(-3, 3);
+      const hitList = foes.filter(f => !f.dead && hitTest(f, tx, ty, 0)).sort((a, b) => b.d - a.d);
+      if (hitList[0]) { const f = hitList[0]; if (--f.hp <= 0) kill(f); else boom(tx, ty, '#ccc', 3); }
+      if (ammo === 0) { if (mags > 0) { mags--; reload = 1.1; } }
+    }
+  }
+  if (K.hit('b') && rockets > 0) { rockets--; K.noise(0.6, 0.5); boom(cx, cy, '#ffe04a', 30); foes.forEach(f => { if (!f.dead && hitTest(f, cx, cy, 30)) { f.hp -= 8; if (f.hp <= 0) kill(f); } }); }
+  spawnT -= dt; if (spawnT <= 0 && foes.length < 6 + stage) { spawn(); spawnT = K.rnd(0.5, 1.4) - stage * 0.05; }
+  foes.forEach(f => {
+    f.x += f.vx * dt;
+    if (f.k === 'heli') f.y = 40 + Math.sin(performance.now() / 500) * 10;
+    if (f.k === 'crate') { f.life -= dt; if (f.life <= 0) f.dead = true; }
+    if (f.cd !== undefined && f.k !== 'host' && f.k !== 'crate' && f.x > 10 && f.x < W - 10) { f.cd -= dt; if (f.cd <= 0) { f.cd = K.rnd(1.5, 3.2) - stage * 0.1; f.aim = 0.5; } if (f.aim > 0) { f.aim -= dt; if (f.aim <= 0) { if (Math.random() < 0.45 + f.d * 0.3) hurt(); flashes.push({ t: 0.08, x: f.x, y: f.y - 18 * f.d, muzzle: 1 }); if (state !== 'play') return; } } }
+    if (f.x < -60 || f.x > W + 60) f.dead = true;
+  });
+  if (state !== 'play') return;
+  foes = foes.filter(f => !f.dead);
+  if (ammo === 0 && mags === 0 && reload <= 0 && rockets === 0) { if (!foes.some(f => f.k === 'crate')) foes.push({ k: 'crate', x: K.rnd(40, W - 40), y: HY + 40, d: 0.7, vx: 0, hp: 1, life: 6, give: 'mag' }); }
+  flashes.forEach(f => f.t -= dt); flashes = flashes.filter(f => f.t > 0);
+  parts.forEach(p => { p.t -= dt; p.vy += 200 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
+  if (hurtFlash > 0) hurtFlash -= dt;
+  if (kills >= need) { score += 1000 + hp * 100; stage++; hp = Math.min(10, hp + 3); mags += 2; K.tune([523, 659, 784, 1046], 0.12); flashes.push({ t: 2, s: 'STAGE ' + stage }); startStage(); flashes.push({ t: 2, s: 'STAGE CLEAR!' }); }
+  K.set('score', score); K.set('ammo', (reload > 0 ? 'RELOAD' : ammo + '') + ' ×' + mags + ' R' + rockets); K.set('hp', 'HP ' + Math.max(0, hp));
+}
+function drawSol(c, f, host) { const s = f.d, x = f.x, y = f.y, step = Math.sin(performance.now() / 90 + x) * 3 * s;
+  c.fillStyle = host ? '#ddd' : '#4a5a2a'; c.fillRect(x - 4 * s, y - 20 * s, 8 * s, 12 * s); c.fillStyle = host ? '#bbb' : '#2a3a1a'; c.fillRect(x - 4 * s + step, y - 8 * s, 3 * s, 8 * s); c.fillRect(x + 1 * s - step, y - 8 * s, 3 * s, 8 * s);
+  c.fillStyle = '#e0b090'; c.beginPath(); c.arc(x, y - 23 * s, 3.5 * s, 0, 7); c.fill(); if (!host) { c.fillStyle = '#3a4a1a'; c.fillRect(x - 4 * s, y - 27 * s, 8 * s, 3 * s); c.fillStyle = '#222'; c.fillRect(x + (f.vx > 0 ? 2 : -9) * s, y - 17 * s, 7 * s, 2 * s); } }
+function draw(c, t) {
+  A.sky(c, W, HY, { top: '#4a3a7a', mid: '#e8885a', bottom: '#ffd890', sun: '#fff0b0', sunX: 230, sunY: 70, sunR: 18, cloud: 'rgba(255,220,200,.6)' }, t);
+  A.ridge(c, scroll * 20, { factor: 1, base: HY, amp: 45, col: '#8a5a4a', bands: ['rgba(255,200,150,.2)', 'rgba(100,40,30,.2)'], mesa: true, edge: 'rgba(0,0,0,.25)', seed: 2 });
+  A.ridge(c, scroll * 40, { factor: 1, base: HY + 6, amp: 18, col: '#6a4a32', edge: 'rgba(0,0,0,.35)', seed: 6 });
+  const gg = c.createLinearGradient(0, HY, 0, H); gg.addColorStop(0, '#8a6a3a'); gg.addColorStop(1, '#5a4024'); c.fillStyle = gg; c.fillRect(0, HY, W, H - HY);
+  for (let k = 0; k < 90; k++) { c.fillStyle = k % 3 ? 'rgba(60,40,20,.35)' : 'rgba(255,230,180,.25)'; c.fillRect(A.hash(k, 1) * W, HY + 4 + A.hash(k, 2) * (H - HY - 4), 2 + (k % 3), 1.5); }
+  for (let k = 0; k < 8; k++) { const x = A.hash(k, 4) * W, y = HY + 20 + A.hash(k, 5) * 70; c.fillStyle = '#6a7a3a'; c.fillRect(x, y, 1.5, -5); c.fillRect(x + 2, y, 1.5, -7); c.fillRect(x + 4, y, 1.5, -4); }
+  [[20, 50], [230, 60]].forEach(([bx, bw]) => { A.part(c, bx, HY - 20, bw, 20, '#5a4a32'); c.fillStyle = '#1a1208'; c.fillRect(bx + bw / 2 - 6, HY - 14, 12, 6); for (let k = 0; k < bw; k += 9) A.part(c, bx + k - 2, HY - 4, 10, 5, '#a8946a'); for (let k = 4; k < bw - 4; k += 9) A.part(c, bx + k - 2, HY - 8, 10, 5, '#b8a47a'); });
+  foes.slice().sort((a, b) => a.d - b.d).forEach(f => {
+    if (f.k === 'sol' || f.k === 'host') drawSol(c, f, f.k === 'host');
+    else if (f.k === 'jeep') { const s = f.d; c.fillStyle = '#5a6a3a'; c.fillRect(f.x - 26 * s, f.y - 18 * s, 52 * s, 14 * s); c.fillStyle = '#222'; c.beginPath(); c.arc(f.x - 15 * s, f.y - 3 * s, 5 * s, 0, 7); c.arc(f.x + 15 * s, f.y - 3 * s, 5 * s, 0, 7); c.fill(); c.fillStyle = '#333'; c.fillRect(f.x - 3, f.y - 30 * s, 4, 12 * s); }
+    else if (f.k === 'heli') { const s = f.d; c.fillStyle = '#3a4a3a'; c.beginPath(); c.ellipse(f.x, f.y, 22 * s, 9 * s, 0, 0, 7); c.fill(); c.fillRect(f.x + (f.vx > 0 ? -44 : 14) * s, f.y - 3 * s, 30 * s, 4 * s); c.strokeStyle = '#222'; c.beginPath(); const r = Math.sin(t / 30) * 34 * s; c.moveTo(f.x - r, f.y - 12 * s); c.lineTo(f.x + r, f.y - 12 * s); c.stroke(); c.fillStyle = '#9cf'; c.fillRect(f.x + (f.vx > 0 ? 8 : -16) * s, f.y - 5 * s, 8 * s, 5 * s); }
+    else if (f.k === 'crate') { c.fillStyle = '#a07a3a'; c.fillRect(f.x - 10, f.y - 16, 20, 16); c.strokeStyle = '#5a3a10'; c.strokeRect(f.x - 10, f.y - 16, 20, 16); K.text(c, f.give === 'mag' ? 'A' : 'R', f.x, f.y - 8, 9, '#fff'); }
+    if (f.aim > 0) { c.fillStyle = '#ff3030'; c.beginPath(); c.arc(f.x, f.y - 34 * f.d, 2.5, 0, 7); c.fill(); }
+  });
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+  flashes.forEach(f => { if (f.shot) { c.fillStyle = '#fff6a0'; c.beginPath(); c.arc(f.x, f.y, 3, 0, 7); c.fill(); } else if (f.muzzle) { c.fillStyle = '#ffec6a'; c.beginPath(); c.arc(f.x, f.y, 4, 0, 7); c.fill(); } });
+  const msgs = flashes.filter(f => f.s); if (msgs.length) K.text(c, msgs[msgs.length - 1].s, W / 2, 30, 14, '#fff');
+  if (hurtFlash > 0) { c.fillStyle = 'rgba(255,0,0,' + hurtFlash + ')'; c.fillRect(0, 0, W, H); }
+  if (state === 'play') { c.strokeStyle = '#ff2a2a'; c.lineWidth = 1.5; c.beginPath(); c.arc(cx, cy, 9, 0, 7); c.moveTo(cx - 14, cy); c.lineTo(cx - 4, cy); c.moveTo(cx + 4, cy); c.lineTo(cx + 14, cy); c.moveTo(cx, cy - 14); c.lineTo(cx, cy - 4); c.moveTo(cx, cy + 4); c.lineTo(cx, cy + 14); c.stroke();
+    c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(6, H - 12, 120, 6); c.fillStyle = '#ffb24a'; c.fillRect(6, H - 12, 120 * (kills / need), 6); }
+}
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.3); }; }
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>

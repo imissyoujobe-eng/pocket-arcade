@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Powder Peak</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+// Powder Peak: carve down three mountain runs, launch off kickers, spin and grab for points, and slide the rails. Beat the clock.
+K.theme({ bg: '#0b1d33', ink: '#f2f8ff', accent: '#5fd6ff', accentInk: '#00202e' });
+const W = 240, H = 340, RY = 110;
+K.screen(W, H, { smooth: true });
+K.hud(['run', 'score', 'time']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'GRAB' }, { id: 'a', label: 'SPIN' }] });
+const RUNS = [{ n: 'Bunny Ridge', len: 3000, time: 50 }, { n: 'Pine Chute', len: 3600, time: 55 }, { n: 'Summit Drop', len: 4200, time: 60 }];
+
+let state = 'title', run, total, things, me, timeLeft, runScore, trail, msg, msgT, combo, parts, best = K.best('powderpeak'), flakes;
+function title() { K.card({ title: 'POWDER PEAK', text: 'Steer with ◀ ▶, tuck with ▼ for speed, brake with ▲. Hit a blue kicker to fly. In the air, hold SPIN and press ◀ or ▶ to rotate, or hold GRAB. Let go and land straight or you wipe out! Slide the rails and pass between flags for extra time.', best: best ? 'BEST ' + best : '', button: 'Drop in', onStart: () => { run = 0; total = 0; startRun(); } }); }
+function rng(seed) { let s = seed; return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+function build(r) {
+  const R = rng(7 + r * 101), L = RUNS[r].len, list = [];
+  for (let y = 260; y < L - 120; y += 70 + R() * 60) {
+    const k = R();
+    if (k < 0.22) list.push({ t: 'kick', x: 40 + R() * 160, y, w: 34 });
+    else if (k < 0.34) list.push({ t: 'rail', x: 50 + R() * 140, y, len: 70 });
+    else if (k < 0.5) { const x = 60 + R() * 120; list.push({ t: 'gate', x, y, w: 46 }); }
+    else if (k < 0.62) list.push({ t: 'mogul', x: 30 + R() * 180, y });
+    else for (let i = 0; i < 2 + Math.floor(R() * 3 + r); i++) list.push({ t: R() < 0.75 ? 'tree' : 'rock', x: 14 + R() * 212, y: y + R() * 50 });
+    if (R() < 0.5) list.push({ t: 'flake', x: 20 + R() * 200, y: y + 30 });
+  }
+  // keep a clear lane next to every kicker and gate
+  return list.filter(o => !((o.t === 'tree' || o.t === 'rock') && list.some(q => (q.t === 'kick' || q.t === 'gate' || q.t === 'rail') && Math.abs(q.x - o.x) < 34 && o.y - q.y > -40 && o.y - q.y < 70)));
+}
+function startRun() {
+  things = build(run); me = { x: 120, y: 0, a: 0, v: 60, z: 0, vz: 0, spin: 0, spinV: 0, grab: 0, crash: 0, grind: null, air: false };
+  timeLeft = RUNS[run].time; runScore = 0; combo = 0; trail = []; parts = []; flakes = Array.from({ length: 40 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: K.rnd(0.5, 1.6) }));
+  state = 'play'; msg = 'RUN ' + (run + 1) + ': ' + RUNS[run].n.toUpperCase(); msgT = 2; hud();
+}
+function hud() { K.set('run', 'RUN ' + (run + 1) + '/3'); K.set('score', total + runScore); K.set('time', Math.max(0, Math.ceil(timeLeft)) + 's'); }
+function say(t, d) { msg = t; msgT = d || 1.2; }
+function wipe(why) { me.crash = 1.3; me.air = false; me.z = 0; me.vz = 0; me.v = 0; me.spin = 0; me.spinV = 0; me.grab = 0; me.grind = null; combo = 0; say(why || 'WIPEOUT!'); K.noise(0.4, 0.3); for (let i = 0; i < 20; i++) parts.push({ x: me.x, y: RY, vx: K.rnd(-70, 70), vy: K.rnd(-70, 30), l: 0.7 }); }
+function trickName(deg, grabT) {
+  const s = Math.round(deg / 180) * 180;
+  let n = s >= 180 ? s + (s >= 360 ? ' SPIN' : '') : '';
+  if (grabT > 0.25) n = (n ? n + ' + ' : '') + (grabT > 0.8 ? 'LONG GRAB' : 'GRAB');
+  return n;
+}
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  for (const p of parts) { p.x += p.vx * dt; p.y += p.vy * dt; p.l -= dt; } parts = parts.filter(p => p.l > 0);
+  timeLeft -= dt; if (timeLeft <= 0) { timeLeft = 0; return endRun(false); }
+  const steer = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0);
+  if (me.crash > 0) { me.crash -= dt; if (me.crash <= 0) { me.v = 40; me.a = 0; } }
+  else if (!me.air) {
+    if (!me.grind) me.a = K.clamp(me.a + steer * 2.4 * dt, -1.25, 1.25);
+    if (!steer) me.a *= Math.pow(0.4, dt);
+    const tuck = K.down('down'), brake = K.down('up');
+    const target = (brake ? 40 : tuck ? 250 : 190) * Math.cos(me.a) + 20;
+    me.v += (target - me.v) * Math.min(1, dt * (brake ? 2.5 : 0.8));
+  } else {
+    // in the air: spin, grab
+    if (K.down('a')) { me.spinV += steer * 900 * dt; me.spinV = K.clamp(me.spinV, -700, 700); }
+    else me.spinV *= Math.pow(0.05, dt);
+    me.spin += me.spinV * dt;
+    if (K.down('b')) me.grab += dt;
+    me.vz -= 420 * dt; me.z += me.vz * dt;
+    if (me.z <= 0) land();
+  }
+  me.x += Math.sin(me.a) * me.v * dt; me.y += Math.cos(me.a) * me.v * dt;
+  if (me.x < 12 || me.x > W - 12) { me.x = K.clamp(me.x, 12, W - 12); if (!me.air && me.crash <= 0 && me.v > 120) wipe('FENCE!'); else me.a *= -0.5; }
+  if (!me.air && me.crash <= 0) { trail.push({ x: me.x, y: me.y }); if (trail.length > 70) trail.shift(); }
+  // grinding
+  if (me.grind) {
+    const r = me.grind; me.x += (r.x - me.x) * Math.min(1, dt * 12); me.a = 0;
+    me.gt += dt; if (Math.floor(me.gt * 4) !== Math.floor((me.gt - dt) * 4)) { runScore += 40; hud(); K.beep(1400, 0.03, { vol: 0.02 }); }
+    if (Math.random() < 0.6) parts.push({ x: me.x, y: RY + 4, vx: K.rnd(-30, 30), vy: K.rnd(-60, -10), l: 0.25, spark: true });
+    if (me.y > r.y + r.len || Math.abs(me.x - r.x) > 10 || (me.gt > 0.2 && (K.hit('left') || K.hit('right')))) { me.grind = null; combo++; say('RAIL SLIDE x' + combo, 0.9); }
+  }
+  for (const o of things) {
+    if (o.done) continue;
+    const dy = o.y - me.y, dx = o.x - me.x;
+    if (dy < -(o.len || 0) - 60) { o.done = true; continue; }
+    if (dy > 20) continue;
+    if (o.t === 'kick' && !me.air && me.crash <= 0 && Math.abs(dx) < o.w / 2 && dy < 6 && dy > -6) { o.done = true; me.air = true; me.vz = 70 + me.v * 0.55; me.spin = 0; me.spinV = 0; me.grab = 0; K.beep(500, 0.1, { to: 900, vol: 0.05 }); }
+    else if (o.t === 'mogul' && !me.air && me.crash <= 0 && Math.abs(dx) < 10 && Math.abs(dy) < 5) { o.done = true; me.air = true; me.vz = 60; me.spin = 0; me.spinV = 0; me.grab = 0; }
+    else if (o.t === 'rail' && !me.grind && me.crash <= 0 && Math.abs(dx) < 7 && dy < 2 && dy > -o.len + 8 && (me.air ? me.z < 12 && me.vz < 0 : true)) {
+      if (me.air) { if (Math.abs(((me.spin % 180) + 180) % 180 - 90) < 50 && Math.abs(me.spin) > 60) { wipe('CROSSED UP!'); continue; } me.air = false; me.z = 0; me.vz = 0; }
+      me.grind = o; me.gt = 0; o.done = true; K.beep(900, 0.05, { vol: 0.04 });
+    }
+    else if ((o.t === 'tree' || o.t === 'rock') && me.crash <= 0 && me.z < (o.t === 'rock' ? 8 : 22) && Math.hypot(dx, dy) < (o.t === 'tree' ? 9 : 8)) { o.done = true; wipe(o.t === 'tree' ? 'TREE!' : 'ROCK!'); }
+    else if (o.t === 'gate' && Math.abs(dy) < 4 && !o.done) { o.done = true; if (Math.abs(dx) < o.w / 2) { timeLeft += 2; runScore += 100; say('+2 SEC', 0.7); K.tune([784, 988], 0.05, { type: 'triangle' }); hud(); } }
+    else if (o.t === 'flake' && Math.hypot(dx, dy) < 10 && me.z < 26) { o.done = true; runScore += 50; K.beep(1500, 0.06, { type: 'sine', vol: 0.04 }); hud(); }
+  }
+  if (me.y >= RUNS[run].len) return endRun(true);
+  if (Math.floor(timeLeft * 4) !== Math.floor((timeLeft + dt) * 4)) hud();
+  for (const f of flakes) { f.y -= (me.v * 0.4 + 10) * f.s * dt; f.x += Math.sin(f.y / 30) * 6 * dt; if (f.y < 0) { f.y = H; f.x = Math.random() * W; } }
+}
+function land() {
+  me.z = 0; me.vz = 0; me.air = false;
+  const r = ((me.spin % 180) + 180) % 180, off = Math.min(r, 180 - r), deg = Math.abs(me.spin);
+  if (off > 40) return wipe('BAD LANDING!');
+  if (K.down('b') && me.grab > 0.15) return wipe('STILL GRABBING!');
+  // landing backwards is fine — it's called riding switch
+  const name = trickName(deg, me.grab);
+  if (name) {
+    const pts = Math.round(deg / 180) * 150 * (deg >= 360 ? 1.5 : 1) + Math.floor(me.grab * 4) * 40;
+    combo++; const total2 = Math.round(pts * (1 + (combo - 1) * 0.25));
+    runScore += total2; say(name + ' +' + total2, 1.1); K.tune([660, 880, 1100], 0.06, { type: 'triangle' });
+  } else K.noise(0.08, 0.15);
+  me.spin = 0; me.spinV = 0; me.grab = 0; me.v *= 0.9; hud();
+}
+function endRun(finished) {
+  const bonus = finished ? Math.ceil(timeLeft) * 30 : 0;
+  runScore += bonus; total += runScore; state = 'between';
+  K.tune(finished ? [523, 659, 784, 1047] : [392, 330], 0.1);
+  setTimeout(() => {
+    if (run < 2) K.card({ title: finished ? 'RUN COMPLETE' : 'OUT OF TIME', text: RUNS[run].n + ': ' + runScore + ' points' + (finished ? ' (time bonus ' + bonus + ')' : '') + '. Total so far ' + total + '. Next: ' + RUNS[run + 1].n + '.', best: best ? 'BEST ' + best : '', button: 'Next run', onStart: () => { run++; startRun(); } });
+    else { state = 'over'; best = K.saveBest('powderpeak', total); K.card({ title: 'MOUNTAIN DONE', text: 'Three runs, ' + total + ' points.', best: 'BEST ' + best, button: 'Ride again', onStart: () => { run = 0; total = 0; startRun(); } }); }
+  }, 900);
+}
+
+function draw(c, t) {
+  c.fillStyle = '#f4f9ff'; c.fillRect(0, 0, W, H);
+  if (!me) { c.fillStyle = '#dbe8f5'; for (let i = 0; i < 10; i++) c.fillRect(0, i * 36, W, 14); return; }
+  const cy = me.y - RY;
+  // snow shading
+  for (let i = -1; i < 14; i++) { const y = i * 34 - (cy % 34), id = Math.floor((cy + y) / 34); c.fillStyle = '#dde9f6'; c.beginPath(); c.ellipse(40 + (((id * 37) % 5 + 5) % 5) * 40, y, 60, 7, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.9)'; c.beginPath(); c.ellipse(40 + (((id * 37) % 5 + 5) % 5) * 40 - 6, y - 3, 40, 3, 0, 0, 7); c.fill(); }
+  for (let k = 0; k < 60; k++) { const y = ((A.hash(k, 1) * 600 - cy) % 600 + 600) % 600 - 50; c.fillStyle = 'rgba(160,190,225,.5)'; c.fillRect(A.hash(k, 2) * W, y, 2, 1); c.fillStyle = 'rgba(255,255,255,.95)'; c.fillRect(A.hash(k, 3) * W, y + 7, 1.5, 1.5); }
+  c.fillStyle = '#c7d6e6'; c.fillRect(0, 0, 8, H); c.fillRect(W - 8, 0, 8, H);
+  // pine trees along both sides of the run
+  for (let i = -2; i < H / 26 + 2; i++) { const id = Math.floor(cy / 26) + i, y = id * 26 - cy; [[-4 + A.hash(id, 1) * 10, 0], [W - 6 - A.hash(id, 2) * 10, 1]].forEach(([x, sd]) => { const s2 = 0.8 + A.hash(id, sd + 4) * 0.5; c.fillStyle = 'rgba(80,110,160,.25)'; c.beginPath(); c.ellipse(x + 4, y + 2, 9 * s2, 3, 0, 0, 7); c.fill(); c.fillStyle = A.INK; c.beginPath(); c.moveTo(x, y - 22 * s2); c.lineTo(x - 9 * s2, y); c.lineTo(x + 9 * s2, y); c.fill(); c.fillStyle = '#2a5a4a'; c.beginPath(); c.moveTo(x, y - 21 * s2); c.lineTo(x - 8 * s2, y - 1); c.lineTo(x + 8 * s2, y - 1); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.moveTo(x, y - 21 * s2); c.lineTo(x - 4 * s2, y - 13 * s2); c.lineTo(x + 3 * s2, y - 14 * s2); c.fill(); c.fillRect(x - 6 * s2, y - 6 * s2, 6 * s2, 1.5); }); }
+  c.fillStyle = '#ff7a1a'; for (let y = -(cy % 24); y < H; y += 24) { c.fillRect(6, y, 3, 12); c.fillRect(W - 9, y, 3, 12); }
+  // finish line
+  const fy = RUNS[run].len - cy; if (fy < H + 10) { for (let i = 0; i < 24; i++) { c.fillStyle = i % 2 ? '#111' : '#fff'; c.fillRect(i * 10, fy, 10, 6); } K.text(c, 'FINISH', W / 2, fy - 10, 12, '#e63946'); }
+  // board tracks
+  c.strokeStyle = 'rgba(150,180,215,.6)'; c.lineWidth = 2; c.beginPath(); trail.forEach((p, i) => { const y = p.y - cy; i ? c.lineTo(p.x, y) : c.moveTo(p.x, y); }); c.stroke();
+  for (const o of things) {
+    const y = o.y - cy; if (y < -100 || y > H + 30) continue;
+    if (o.t === 'kick') { c.fillStyle = '#9fd6ff'; c.beginPath(); c.moveTo(o.x - o.w / 2, y + 8); c.lineTo(o.x + o.w / 2, y + 8); c.lineTo(o.x + o.w / 2 - 4, y - 6); c.lineTo(o.x - o.w / 2 + 4, y - 6); c.fill(); c.fillStyle = '#5fb0e8'; c.fillRect(o.x - o.w / 2 + 4, y - 6, o.w - 8, 3); }
+    else if (o.t === 'rail') { c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(o.x - 1, y + 3, 4, o.len); c.fillStyle = '#7a8496'; c.fillRect(o.x - 2, y, 4, o.len); c.fillStyle = '#c0c8d6'; c.fillRect(o.x - 1, y, 1, o.len); }
+    else if (o.t === 'mogul') { c.fillStyle = '#dbe7f4'; c.beginPath(); c.ellipse(o.x, y, 12, 6, 0, 0, 7); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.ellipse(o.x - 2, y - 2, 7, 3, 0, 0, 7); c.fill(); }
+    else if (o.t === 'gate') { for (const s of [-1, 1]) { c.fillStyle = '#555'; c.fillRect(o.x + s * o.w / 2 - 1, y - 14, 2, 14); c.fillStyle = s < 0 ? '#e63946' : '#2f7dff'; c.beginPath(); c.moveTo(o.x + s * o.w / 2, y - 14); c.lineTo(o.x + s * o.w / 2 - s * 9, y - 11); c.lineTo(o.x + s * o.w / 2, y - 8); c.fill(); } }
+    else if (o.t === 'tree') { c.fillStyle = 'rgba(0,30,60,.12)'; c.beginPath(); c.ellipse(o.x + 4, y + 3, 9, 4, 0, 0, 7); c.fill(); c.fillStyle = '#1f6b44'; c.beginPath(); c.moveTo(o.x, y - 24); c.lineTo(o.x + 10, y); c.lineTo(o.x - 10, y); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.moveTo(o.x, y - 24); c.lineTo(o.x + 4, y - 15); c.lineTo(o.x - 4, y - 15); c.fill(); }
+    else if (o.t === 'rock') { c.fillStyle = '#8a92a0'; c.beginPath(); c.ellipse(o.x, y, 8, 5, 0, 0, 7); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.ellipse(o.x - 1, y - 3, 5, 2, 0, 0, 7); c.fill(); }
+    else if (o.t === 'flake' && !o.done) { c.strokeStyle = '#5fd6ff'; c.lineWidth = 1.5; for (let k = 0; k < 3; k++) { const a = k * Math.PI / 3 + t / 500; c.beginPath(); c.moveTo(o.x - Math.cos(a) * 6, y - Math.sin(a) * 6); c.lineTo(o.x + Math.cos(a) * 6, y + Math.sin(a) * 6); c.stroke(); } }
+  }
+  // rider
+  const s = 1 + me.z / 70;
+  c.fillStyle = 'rgba(0,30,60,.18)'; c.beginPath(); c.ellipse(me.x + me.z * 0.3, RY + 4 + me.z * 0.2, 9, 4, 0, 0, 7); c.fill();
+  if (me.crash > 0) { c.fillStyle = '#e63946'; c.beginPath(); c.arc(me.x, RY, 6, 0, 7); c.fill(); c.fillStyle = '#ffd23f'; c.fillRect(me.x - 10, RY + 2, 20, 4); }
+  else {
+    c.save(); c.translate(me.x, RY - me.z * 0.6); c.scale(s, s); c.rotate(-me.a + me.spin * Math.PI / 180);
+    c.fillStyle = '#ffd23f'; c.beginPath(); c.ellipse(0, 0, 14, 4, 0, 0, 7); c.fill(); c.fillStyle = '#111'; c.fillRect(-6, -2, 3, 4); c.fillRect(3, -2, 3, 4);
+    c.fillStyle = '#e63946'; c.beginPath(); c.ellipse(0, 0, 6, 5, 0, 0, 7); c.fill();
+    if (me.air && K.down('b')) { c.fillStyle = '#ffcf9e'; c.fillRect(6, -2, 3, 3); }
+    c.fillStyle = '#2f7dff'; c.beginPath(); c.arc(0, -1, 3.2, 0, 7); c.fill();
+    c.restore();
+  }
+  for (const p of parts) { c.fillStyle = p.spark ? '#ffd23f' : '#cfe3f7'; c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); }
+  c.fillStyle = 'rgba(255,255,255,.8)'; for (const f of flakes) c.fillRect(f.x, f.y, f.s * 1.5, f.s * 1.5);
+  // speed + progress
+  c.fillStyle = 'rgba(11,29,51,.6)'; c.fillRect(W - 14, 20, 6, 300); c.fillStyle = '#5fd6ff'; c.fillRect(W - 14, 20, 6, 300 * Math.min(1, me.y / RUNS[run].len));
+  K.text(c, Math.round(me.v * 0.2) + ' MPH', 34, 14, 9, '#0b1d33');
+  if (combo > 1 && !me.air) K.text(c, 'COMBO x' + combo, 196, 14, 8, '#2f7dff');
+  if (msgT > 0) K.text(c, msg, W / 2, 60, 13, '#0b4a8a');
+}
+title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.ambient(c, W, H, t, 'snow', 26); A.vignette(c, W, H, 0.2); }; }
+K.run(update, draw);
+</script>
+</body>
+</html>

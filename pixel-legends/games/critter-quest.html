@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Critter Quest</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/td.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+// Critter Quest: pick a partner critter, catch wild ones in the tall grass, and beat the three trainers to become champion.
+K.theme({ bg: '#101a10', ink: '#fffaf0', accent: '#ffd23f', accentInk: '#2a1d00' });
+const VW = 256, VH = 192, T = 16;
+K.screen(VW, VH);
+K.hud(['badges', 'orbs', 'party']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'BACK' }, { id: 'a', label: 'OK' }] });
+const MAP = ["TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT", "T..............T,,,,,,,,,,,,,,,T", "T.HHHH...HHHH..T,,,,..,,,,,,,,,T", "T.HHHH...HHHH..T,,,,..,,,TT,,,,T", "T.HHdH...HHCH..T,,,,..,,,TT,,,,T", "T..............T,,,,........,,,T", "T..............A.....,,,,...,,,T", "T...TTT..TTT...........,,,,..1.T", "T.....GGGG.....T,,,,,,,,,,,,,,,T", "T.....H..H.....T,,,,,,,,,,,,,,,T", "T.....HH3H.....T,,,,,,,,,,,,,,,T", "TTTTTT....TTTTTTTTTTTT....TTTTTT", "TTTTTT....TTTTTTTTTTTT....TTTTTT", "T,,,,,,......,,T.......WWWWWWWWT", "T,,TT,,,,,,..,,T...,,..WWWWWWWWT", "T,,TT,,,,,,..,,T...,,,.WWWWWWWWT", "T,,,,,,,o,,..,,T...,,,...WWWWWWT", "T,,,,,,,,,,..........,,..WWWWWWT", "T,,,,TT,,,,..........,,....2.WWT", "T,,,,TT,,,,..,,T.......WWWWWWWWT", "T,,,,,,,,,,..,,T.......WWWWWWWWT", "T,,,,,,,,,,..,,T.......WWWWWWWWT", "T..,,,,,,,,..,,T.......WWWWWWWWT", "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT"];
+
+const TYPES = { fire: { col: '#ff6a3a', beats: 'leaf' }, water: { col: '#3a8aff', beats: 'fire' }, leaf: { col: '#4ad04a', beats: 'water' }, normal: { col: '#c8b8a0', beats: '' } };
+const MOVES = {
+  tackle: { n: 'Tackle', type: 'normal', pow: 35 }, peck: { n: 'Quick Peck', type: 'normal', pow: 45 },
+  ember: { n: 'Ember', type: 'fire', pow: 42 }, blaze: { n: 'Blaze Dash', type: 'fire', pow: 65 },
+  splash: { n: 'Bubble', type: 'water', pow: 42 }, surge: { n: 'Tide Surge', type: 'water', pow: 65 },
+  vine: { n: 'Vine Snap', type: 'leaf', pow: 42 }, bloom: { n: 'Petal Storm', type: 'leaf', pow: 65 }
+};
+const SPECIES = {
+  emberpup: { n: 'Emberpup', type: 'fire', hp: 20, atk: 11, def: 9, spd: 11, moves: ['tackle', 'ember', 'blaze'], col: '#ff8a3a', shape: 'pup' },
+  tidekit: { n: 'Tidekit', type: 'water', hp: 22, atk: 10, def: 11, spd: 9, moves: ['tackle', 'splash', 'surge'], col: '#4aa8ff', shape: 'kit' },
+  sproutle: { n: 'Sproutle', type: 'leaf', hp: 21, atk: 10, def: 10, spd: 10, moves: ['tackle', 'vine', 'bloom'], col: '#5ad06a', shape: 'sprout' },
+  pebblit: { n: 'Pebblit', type: 'normal', hp: 18, atk: 9, def: 12, spd: 6, moves: ['tackle', 'peck'], col: '#a89888', shape: 'rock' },
+  flitwing: { n: 'Flitwing', type: 'normal', hp: 15, atk: 10, def: 7, spd: 14, moves: ['peck', 'tackle'], col: '#c8a0ff', shape: 'bird' },
+  mossnail: { n: 'Mossnail', type: 'leaf', hp: 20, atk: 8, def: 13, spd: 5, moves: ['tackle', 'vine'], col: '#7ab04a', shape: 'snail' },
+  sparkfin: { n: 'Sparkfin', type: 'water', hp: 17, atk: 11, def: 8, spd: 12, moves: ['tackle', 'splash'], col: '#46d0ff', shape: 'fish' },
+  cindermoth: { n: 'Cindermoth', type: 'fire', hp: 16, atk: 12, def: 7, spd: 13, moves: ['peck', 'ember'], col: '#ffb02e', shape: 'bird' },
+  thornet: { n: 'Thornet', type: 'leaf', hp: 17, atk: 12, def: 8, spd: 12, moves: ['peck', 'vine', 'bloom'], col: '#3fa34d', shape: 'bug' }
+};
+const AREAS = [ // by screen: [sx,sy] -> wild list and level range
+  { sx: 1, sy: 0, wild: ['pebblit', 'flitwing', 'thornet'], lv: [2, 4] },
+  { sx: 0, sy: 1, wild: ['mossnail', 'cindermoth', 'thornet', 'pebblit'], lv: [4, 6] },
+  { sx: 1, sy: 1, wild: ['sparkfin', 'flitwing', 'mossnail', 'cindermoth'], lv: [6, 8] }
+];
+const TRAINERS = {
+  1: { n: 'RANGER ADA', team: [['thornet', 5], ['mossnail', 6]], hello: 'The tall grass made my critters tough. Let\'s battle!', bye: 'You earned the Leaf Badge!' },
+  2: { n: 'CAPTAIN BO', team: [['sparkfin', 8], ['pebblit', 8], ['tidekit', 9]], hello: 'Ahoy! My crew has sailed every lake. Ready?', bye: 'You earned the Wave Badge!' },
+  3: { n: 'CHAMPION CY', team: [['cindermoth', 11], ['thornet', 11], ['emberpup', 12]], hello: 'So you beat Ada and Bo. Show me what a champion looks like!', bye: 'Incredible... You are the new Critter Champion!' }
+};
+
+let state = 'title', w, p, cam, trans, party, orbs, badges, talk, menu, battle, beaten, steps, time, best = K.best('critter');
+function mk(sp, lv) { const s = SPECIES[sp]; const c = { sp, n: s.n, type: s.type, lv, xp: 0 }; stats(c); c.hp = c.max; return c; }
+function stats(c) { const s = SPECIES[c.sp]; c.max = s.hp + c.lv * 3; c.atk = s.atk + c.lv * 2; c.def = s.def + c.lv * 2; c.spd = s.spd + c.lv * 2; c.moves = s.moves.filter((m, i) => i < 2 || c.lv >= 7); }
+function title() { K.card({ title: 'CRITTER QUEST', text: 'Choose a partner, then walk through tall grass to meet wild critters. Weaken them and throw a snare orb to catch them. Fire beats leaf, leaf beats water, water beats fire. Beat Ranger Ada and Captain Bo, then the Champion waits in town!', best: best ? 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0') : '', button: 'Choose partner', onStart: start }); }
+function start() {
+  w = D.world(MAP); D.SOLID = 'THWGdC123';
+  party = []; orbs = 5; badges = 0; beaten = {}; steps = 0; time = 0; battle = null; talk = null;
+  p = { x: 7 * T + 2, y: 6 * T + 2, w: 12, h: 12, face: 'd' }; const s = D.screenOf(p.x, p.y); cam = D.camFor(s); trans = null;
+  menu = { kind: 'starter', items: ['emberpup', 'tidekit', 'sproutle'], i: 0 };
+  state = 'play'; hud();
+}
+function hud() { K.set('badges', 'BADGES ' + badges + '/3'); K.set('orbs', 'ORBS ' + orbs); K.set('party', party.map(c => c.n.slice(0, 4) + c.lv).join(' ')); }
+function heal() { party.forEach(c => c.hp = c.max); }
+
+// ---------- overworld ----------
+function update(dt) {
+  if (state !== 'play') return;
+  time += dt;
+  if (menu && menu.kind === 'starter') { if (K.hit('left')) menu.i = (menu.i + 2) % 3; if (K.hit('right')) menu.i = (menu.i + 1) % 3; if (K.ptr.tapped) menu.i = K.clamp(Math.floor(K.ptr.x / (VW / 3)), 0, 2); if (K.hit('a') || (K.ptr.tapped && K.ptr.y > 60)) { const sp = menu.items[menu.i]; party.push(mk(sp, 5)); menu = null; hud(); K.tune([523, 659, 784, 1047], 0.1); talk = { lines: ['You chose ' + SPECIES[sp].n + '! It looks happy to see you.', 'The critter center (the door with the red sign) heals your team for free.'] }; } return; }
+  if (battle) return battleUpdate(dt);
+  if (talk) { if (K.hit('a') || K.hit('b') || K.ptr.tapped) { talk.lines.shift(); if (!talk.lines.length) { const d = talk.done; talk = null; if (d) d(); } } return; }
+  if (trans) { trans.t += dt / 0.4; cam.x = trans.fx + (trans.tx - trans.fx) * Math.min(1, trans.t); cam.y = trans.fy + (trans.ty - trans.fy) * Math.min(1, trans.t); if (trans.t >= 1) trans = null; return; }
+  const d = D.input(p);
+  if (d[0] || d[1]) {
+    const ox = Math.floor((p.x + 6) / T), oy = Math.floor((p.y + 6) / T);
+    D.move(w, p, d[0] * 70 * dt, 0); D.move(w, p, 0, d[1] * 70 * dt); p.walk = (p.walk || 0) + dt;
+    const nx = Math.floor((p.x + 6) / T), ny = Math.floor((p.y + 6) / T);
+    if ((nx !== ox || ny !== oy) && D.tile(w, p.x + 6, p.y + 6) === ',' && Math.random() < 0.13) wildBattle();
+    if (D.tile(w, p.x + 6, p.y + 6) === 'o') { D.set(w, nx, ny, ','); orbs += 5; hud(); K.tune([784, 988], 0.07); talk = { lines: ['You found 5 snare orbs!'] }; }
+  }
+  if (K.hit('a')) interact();
+  const s = D.screenOf(p.x + 6, p.y + 6), c2 = D.camFor(s);
+  if (c2.x !== cam.x || c2.y !== cam.y) trans = { fx: cam.x, fy: cam.y, tx: c2.x, ty: c2.y, t: 0 };
+}
+function interact() {
+  const v = D.faceVec(p.face), fx = p.x + 6 + v[0] * 14, fy = p.y + 6 + v[1] * 14, ch = D.tile(w, fx, fy);
+  if (ch === 'C' || ch === 'd') { heal(); K.tune([659, 784, 988, 1319], 0.08); talk = { lines: [ch === 'C' ? 'CRITTER CENTER: Your team is fully healed! Here are some spare orbs.' : 'Mom: You look tired! Rest up. (Team healed.)'] }; if (ch === 'C') { orbs = Math.max(orbs, 5); hud(); } return; }
+  if (ch === 'G') { talk = { lines: [badges >= 2 ? 'The arena gate is open.' : 'ARENA: Only trainers with 2 badges may challenge the Champion.'] }; return; }
+  if ('123'.includes(ch)) { const id = +ch; const tr = TRAINERS[id]; if (beaten[id]) { talk = { lines: [tr.n + ': Great battle! Keep training.'] }; return; } if (!party.some(c => c.hp > 0)) { talk = { lines: ['Your team needs healing first!'] }; return; } talk = { lines: [tr.n + ': ' + tr.hello], done: () => startBattle(tr.team.map(t => mk(t[0], t[1])), id) }; }
+}
+function wildBattle() {
+  const s = D.screenOf(p.x + 6, p.y + 6), a = AREAS.find(a => a.sx === s.sx && a.sy === s.sy); if (!a || !party.some(c => c.hp > 0)) return;
+  startBattle([mk(a.wild[K.ri(0, a.wild.length - 1)], K.ri(a.lv[0], a.lv[1]))], 0);
+}
+
+// ---------- battle ----------
+function startBattle(foes, trainer) {
+  battle = { foes, foe: foes[0], trainer, me: party.find(c => c.hp > 0), mode: 'menu', sel: 0, msgs: [], anim: 0 };
+  battle.msgs.push(trainer ? TRAINERS[trainer].n + ' sends out ' + battle.foe.n + '!' : 'A wild ' + battle.foe.n + ' appeared!');
+  battle.msgs.push('Go, ' + battle.me.n + '!'); battle.mode = 'msg';
+  K.tune([392, 523, 392, 659], 0.08, { type: 'square' });
+}
+function mult(mt, def) { const a = TYPES[mt]; if (a.beats === def) return 2; if (TYPES[def] && TYPES[def].beats === mt) return 0.5; return 1; }
+function damage(att, def, mv) { const m = MOVES[mv]; const stab = SPECIES[att.sp].type === m.type ? 1.25 : 1; const k = mult(m.type, def.type); return { d: Math.max(1, Math.floor(((2 * att.lv / 5 + 2) * m.pow * att.atk / def.def / 50 + 2) * stab * k * K.rnd(0.85, 1))), k }; }
+function useMove(att, def, mv, mine) {
+  const r = damage(att, def, mv); def.hp = Math.max(0, def.hp - r.d); battle.shake = mine ? 'foe' : 'me'; battle.anim = 0.4;
+  battle.msgs.push((mine ? '' : 'Foe ') + att.n + ' used ' + MOVES[mv].n + '!'); if (r.k > 1) battle.msgs.push('It\'s super effective!'); if (r.k < 1) battle.msgs.push('It\'s not very effective...');
+  K.beep(r.k > 1 ? 200 : 300, 0.15, { type: 'square', vol: 0.06 });
+}
+function foeTurn() { const b = battle; if (b.foe.hp <= 0) return; const mv = b.foe.moves[K.ri(0, b.foe.moves.length - 1)]; useMove(b.foe, b.me, mv, false); }
+function playerAct(act) {
+  const b = battle;
+  if (act.kind === 'move') {
+    const meFirst = b.me.spd >= b.foe.spd;
+    if (meFirst) { useMove(b.me, b.foe, act.mv, true); if (b.foe.hp > 0) foeTurn(); }
+    else { foeTurn(); if (b.me.hp > 0) useMove(b.me, b.foe, act.mv, true); }
+  } else if (act.kind === 'orb') {
+    if (b.trainer) { b.msgs.push('You can\'t catch a trainer\'s critter!'); }
+    else if (orbs <= 0) { b.msgs.push('You are out of snare orbs!'); }
+    else {
+      orbs--; hud(); const chance = (1 - b.foe.hp / b.foe.max) * 0.75 + 0.18;
+      b.msgs.push('You threw a snare orb...');
+      if (Math.random() < chance) { b.msgs.push('Gotcha! ' + b.foe.n + ' was caught!'); if (party.length < 4) { party.push(b.foe); b.msgs.push(b.foe.n + ' joined your team.'); } else b.msgs.push('Your team is full, so it was set free with a wave.'); b.caught = true; K.tune([523, 659, 784, 1047], 0.08); hud(); }
+      else { b.msgs.push('Oh no! It broke free!'); foeTurn(); }
+    }
+  } else if (act.kind === 'swap') { b.me = act.c; b.msgs.push('Go, ' + b.me.n + '!'); foeTurn(); }
+  else if (act.kind === 'run') { if (b.trainer) b.msgs.push('You can\'t run from a trainer battle!'); else if (Math.random() < 0.8) { b.msgs.push('You got away safely.'); b.fled = true; } else { b.msgs.push('Couldn\'t get away!'); foeTurn(); } }
+  b.mode = 'msg';
+}
+function afterMsgs() {
+  const b = battle;
+  if (b.caught || b.fled) return endBattle(false);
+  if (b.foe.hp <= 0) {
+    const xp = b.foe.lv * 10 * (b.trainer ? 1.5 : 1) | 0; b.me.xp += xp; b.msgs.push(b.foe.n + ' fainted! ' + b.me.n + ' gained ' + xp + ' XP.');
+    while (b.me.xp >= 20 + b.me.lv * 15) { b.me.xp -= 20 + b.me.lv * 15; b.me.lv++; const old = b.me.moves.length; stats(b.me); b.me.hp = Math.min(b.me.max, b.me.hp + 5); b.msgs.push(b.me.n + ' grew to level ' + b.me.lv + '!'); if (b.me.moves.length > old) b.msgs.push(b.me.n + ' learned ' + MOVES[b.me.moves[b.me.moves.length - 1]].n + '!'); K.tune([659, 784, 988], 0.07); }
+    const next = b.foes.find(f => f.hp > 0);
+    if (next) { b.foe = next; b.msgs.push(TRAINERS[b.trainer].n + ' sends out ' + next.n + '!'); b.mode = 'msg'; return; }
+    b.won = true; if (b.trainer) { b.msgs.push(TRAINERS[b.trainer].bye); } b.mode = 'msg'; b.finish = true; return;
+  }
+  if (b.me.hp <= 0) {
+    if (!b.swapNote) { b.swapNote = 1; b.msgs.push(b.me.n + ' fainted!'); b.mode = 'msg'; return; }
+    b.swapNote = 0;
+    const alt = party.find(c => c.hp > 0);
+    if (alt) { b.mode = 'swapForced'; b.sel = party.indexOf(alt); }
+    else { b.msgs.push('You have no critters left... You hurry back to the critter center.'); b.lost = true; b.finish = true; }
+    return;
+  }
+  b.mode = 'menu'; b.sel = 0;
+}
+function endBattle() {
+  const b = battle; battle = null; hud();
+  if (b.won && b.trainer) { beaten[b.trainer] = true; badges = Object.keys(beaten).filter(k => k < 3).length; hud(); if (b.trainer === 3) return win(); if (badges >= 2) { for (let y = 0; y < w.rows; y++) for (let x = 0; x < w.cols; x++) if (w.g[y][x] === 'G') w.g[y][x] = '.'; talk = { lines: ['You have two badges! The arena gate in town is now open.'] }; } }
+  if (b.lost) { heal(); p.x = 11 * T + 2; p.y = 5 * T + 2; const s = D.screenOf(p.x, p.y); cam = D.camFor(s); }
+}
+function battleUpdate(dt) {
+  const b = battle; if (b.anim > 0) b.anim -= dt;
+  if (b.mode === 'msg') { if (K.hit('a') || K.hit('b') || K.ptr.tapped) { b.msgs.shift(); K.beep(700, 0.03, { vol: 0.03 }); if (!b.msgs.length) { if (b.finish) return endBattle(); afterMsgs(); } } return; }
+  const opts = optsFor(b);
+  if (K.hit('up')) b.sel = (b.sel + opts.length - (opts.length > 2 ? 2 : 1)) % opts.length;
+  if (K.hit('down')) b.sel = (b.sel + (opts.length > 2 ? 2 : 1)) % opts.length;
+  if (K.hit('left')) b.sel = (b.sel + opts.length - 1) % opts.length;
+  if (K.hit('right')) b.sel = (b.sel + 1) % opts.length;
+  if (K.ptr.tapped) { const r = optRects(opts); r.forEach((rc, i) => { if (K.ptr.x > rc.x && K.ptr.x < rc.x + rc.w && K.ptr.y > rc.y && K.ptr.y < rc.y + rc.h) { if (b.sel === i) choose(opts[i]); b.sel = i; } }); }
+  if (K.hit('a')) choose(opts[b.sel]);
+  if (K.hit('b') && (b.mode === 'fight' || b.mode === 'swap')) { b.mode = 'menu'; b.sel = 0; }
+}
+function optsFor(b) {
+  if (b.mode === 'menu') return [{ t: 'FIGHT', a: 'fight' }, { t: 'TEAM', a: 'swap' }, { t: 'ORB x' + orbs, a: 'orb' }, { t: 'RUN', a: 'run' }];
+  if (b.mode === 'fight') return b.me.moves.map(m => ({ t: MOVES[m].n, a: 'mv', mv: m }));
+  if (b.mode === 'swap' || b.mode === 'swapForced') return party.map(c => ({ t: c.n + ' ' + c.hp + '/' + c.max, a: 'sw', c, dis: c.hp <= 0 || c === b.me }));
+  return [];
+}
+function choose(o) {
+  const b = battle; if (!o || o.dis) { K.beep(150, 0.05, { vol: 0.04 }); return; }
+  K.beep(800, 0.03, { vol: 0.03 });
+  if (o.a === 'fight') { b.mode = 'fight'; b.sel = 0; }
+  else if (o.a === 'swap') { b.mode = 'swap'; b.sel = 0; }
+  else if (o.a === 'orb') playerAct({ kind: 'orb' });
+  else if (o.a === 'run') playerAct({ kind: 'run' });
+  else if (o.a === 'mv') playerAct({ kind: 'move', mv: o.mv });
+  else if (o.a === 'sw') { if (b.mode === 'swapForced') { b.me = o.c; b.msgs.push('Go, ' + o.c.n + '!'); b.mode = 'msg'; } else playerAct({ kind: 'swap', c: o.c }); }
+}
+function optRects(opts) { return opts.map((o, i) => ({ x: 8 + (i % 2) * 122, y: VH - 52 + Math.floor(i / 2) * 22, w: 118, h: 20 })); }
+function win() { state = 'over'; const tt = Math.floor(time); best = K.saveBest('critter', tt, true); K.tune([523, 659, 784, 1047, 1319, 1568], 0.12); K.card({ title: 'CHAMPION!', text: 'You beat all three trainers with a team of ' + party.length + ' in ' + Math.floor(tt / 60) + ' minutes.', best: 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0'), button: 'New adventure', onStart: start }); }
+
+// ---------- drawing ----------
+function critter(c, sp, x, y, s, flip) {
+  const S = SPECIES[sp], col = S.col; c.save(); c.translate(x, y); c.scale(flip ? -s : s, s);
+  c.fillStyle = 'rgba(0,0,0,.2)'; c.beginPath(); c.ellipse(0, 14, 14, 4, 0, 0, 7); c.fill();
+  c.fillStyle = col;
+  switch (S.shape) {
+    case 'pup': c.beginPath(); c.ellipse(0, 4, 12, 9, 0, 0, 7); c.fill(); c.beginPath(); c.arc(8, -6, 8, 0, 7); c.fill(); c.beginPath(); c.moveTo(4, -12); c.lineTo(6, -20); c.lineTo(9, -12); c.fill(); c.beginPath(); c.moveTo(10, -12); c.lineTo(13, -19); c.lineTo(15, -10); c.fill(); c.fillStyle = '#ffd23f'; c.beginPath(); c.moveTo(-12, 0); c.lineTo(-20, -8); c.lineTo(-16, 4); c.fill(); break;
+    case 'kit': c.beginPath(); c.ellipse(0, 4, 12, 10, 0, 0, 7); c.fill(); c.beginPath(); c.arc(6, -6, 8, 0, 7); c.fill(); c.fillStyle = '#c8e8ff'; c.beginPath(); c.ellipse(0, 7, 7, 5, 0, 0, 7); c.fill(); c.fillStyle = col; c.beginPath(); c.ellipse(-14, 0, 6, 3, -0.5, 0, 7); c.fill(); break;
+    case 'sprout': c.beginPath(); c.ellipse(0, 5, 11, 9, 0, 0, 7); c.fill(); c.fillStyle = '#3a8a2a'; c.beginPath(); c.ellipse(-5, -10, 4, 8, -0.6, 0, 7); c.fill(); c.beginPath(); c.ellipse(5, -10, 4, 8, 0.6, 0, 7); c.fill(); break;
+    case 'rock': c.beginPath(); c.moveTo(-12, 12); c.lineTo(-10, -4); c.lineTo(0, -10); c.lineTo(11, -2); c.lineTo(12, 12); c.fill(); break;
+    case 'bird': c.beginPath(); c.ellipse(0, 2, 9, 8, 0, 0, 7); c.fill(); c.beginPath(); c.ellipse(-8, -4, 9, 4, -0.6, 0, 7); c.fill(); c.fillStyle = '#ffd23f'; c.beginPath(); c.moveTo(8, 0); c.lineTo(15, 2); c.lineTo(8, 4); c.fill(); break;
+    case 'snail': c.fillStyle = '#c8b090'; c.fillRect(-12, 6, 24, 6); c.fillStyle = col; c.beginPath(); c.arc(-2, 0, 9, 0, 7); c.fill(); c.strokeStyle = '#3a6a2a'; c.beginPath(); c.arc(-2, 0, 5, 0, 5); c.stroke(); c.fillStyle = '#c8b090'; c.fillRect(9, -4, 3, 10); break;
+    case 'fish': c.beginPath(); c.ellipse(0, 2, 12, 7, 0, 0, 7); c.fill(); c.beginPath(); c.moveTo(-10, 2); c.lineTo(-18, -6); c.lineTo(-18, 10); c.fill(); c.fillStyle = '#ffd23f'; c.fillRect(-2, -8, 4, 5); break;
+    case 'bug': c.beginPath(); c.ellipse(-4, 4, 9, 6, 0, 0, 7); c.fill(); c.beginPath(); c.arc(7, 0, 6, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.6)'; c.beginPath(); c.ellipse(-3, -6, 6, 3, -0.4, 0, 7); c.fill(); c.fillStyle = '#ffd23f'; c.fillRect(-14, 3, 4, 2); break;
+  }
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(S.shape === 'rock' ? 2 : 8, S.shape === 'pup' || S.shape === 'kit' ? -7 : -1, 2.5, 0, 7); c.fill(); c.fillStyle = '#000'; c.beginPath(); c.arc(S.shape === 'rock' ? 3 : 9, S.shape === 'pup' || S.shape === 'kit' ? -7 : -1, 1.3, 0, 7); c.fill();
+  c.restore();
+}
+function hpBar(c, x, y, cr) { c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(x - 2, y - 2, 104, 24); K.text(c, cr.n + ' L' + cr.lv, x + 50, y + 5, 8, '#fff'); c.fillStyle = '#333'; c.fillRect(x, y + 12, 100, 5); const f = cr.hp / cr.max; c.fillStyle = f > 0.5 ? '#3df07a' : f > 0.2 ? '#ffd23f' : '#ff3b5c'; c.fillRect(x, y + 12, 100 * f, 5); c.fillStyle = TYPES[cr.type].col; c.fillRect(x + 92, y - 1, 8, 4); }
+function drawBattle(c, t) {
+  const b = battle;
+  const g = c.createLinearGradient(0, 0, 0, VH); g.addColorStop(0, '#bfe8ff'); g.addColorStop(1, '#8ad06a'); c.fillStyle = g; c.fillRect(0, 0, VW, VH);
+  c.fillStyle = '#7ab85a'; c.beginPath(); c.ellipse(190, 72, 52, 12, 0, 0, 7); c.fill(); c.beginPath(); c.ellipse(64, 128, 58, 14, 0, 0, 7); c.fill();
+  const sf = b.anim > 0 && b.shake === 'foe' ? Math.sin(t / 20) * 4 : 0, sm = b.anim > 0 && b.shake === 'me' ? Math.sin(t / 20) * 4 : 0;
+  if (!b.caught && b.foe.hp > 0) critter(c, b.foe.sp, 190 + sf, 56 + Math.sin(t / 300) * 2, 1.4, true);
+  if (b.me && b.me.hp > 0) critter(c, b.me.sp, 64 + sm, 108 + Math.sin(t / 300 + 1) * 2, 1.8, false);
+  hpBar(c, 10, 14, b.foe); hpBar(c, 146, 100, b.me);
+  c.fillStyle = 'rgba(10,10,20,.9)'; c.fillRect(0, VH - 56, VW, 56);
+  if (b.mode === 'msg') { if (b.msgs[0]) { c.font = '10px Rubik, sans-serif'; c.fillStyle = '#fff'; c.textAlign = 'left'; let line = '', yy = VH - 36; for (const wd of b.msgs[0].split(' ')) { const tst = line ? line + ' ' + wd : wd; if (c.measureText(tst).width > VW - 24) { c.fillText(line, 10, yy); yy += 13; line = wd; } else line = tst; } c.fillText(line, 10, yy); } if (Math.floor(t / 400) % 2) K.text(c, '▼', VW - 14, VH - 10, 8, '#ffd23f'); return; }
+  const opts = optsFor(b), rects = optRects(opts);
+  opts.forEach((o, i) => { const r = rects[i]; c.fillStyle = i === b.sel ? '#ffd23f' : 'rgba(255,255,255,.12)'; c.fillRect(r.x, r.y, r.w, r.h); c.font = '9px Rubik, sans-serif'; c.textAlign = 'left'; c.fillStyle = o.dis ? '#777' : i === b.sel ? '#1a1200' : '#fff'; c.fillText(o.t, r.x + 6, r.y + 13); if (o.mv) { c.fillStyle = TYPES[MOVES[o.mv].type].col; c.fillRect(r.x + r.w - 10, r.y + 6, 6, 8); } });
+  if (b.mode === 'swapForced') K.text(c, 'CHOOSE YOUR NEXT CRITTER', VW / 2, VH - 64, 8, '#fff');
+}
+function drawTile(c, ch, x, y, tx, ty, t) {
+  c.fillStyle = (tx + ty) % 2 ? '#8ad06a' : '#84ca64'; c.fillRect(x, y, T, T);
+  if (ch === ',') { c.fillStyle = '#4aa83a'; for (let k = 0; k < 3; k++) { c.beginPath(); c.moveTo(x + 2 + k * 5, y + 14); c.lineTo(x + 4 + k * 5, y + 4 + (k % 2) * 3 + Math.sin(t / 400 + tx) * 1); c.lineTo(x + 6 + k * 5, y + 14); c.fill(); } }
+  else if (ch === 'T') { c.fillStyle = '#2f7a2c'; c.beginPath(); c.arc(x + 8, y + 7, 7, 0, 7); c.fill(); c.fillStyle = '#6a3a1a'; c.fillRect(x + 6, y + 12, 4, 4); }
+  else if (ch === 'W') { c.fillStyle = '#3a8aff'; c.fillRect(x, y, T, T); c.fillStyle = '#9ad8ff'; c.fillRect(x + (t / 80 + tx * 3) % 12, y + 6, 4, 1); }
+  else if (ch === 'H' || ch === 'd' || ch === 'C') { c.fillStyle = '#f2e3c6'; c.fillRect(x, y, T, T); const up = D.tile(w, x + cam.x, y + cam.y - T); if (!'HdC'.includes(up)) { c.fillStyle = tx > 8 ? '#e63946' : '#2a6fdb'; c.fillRect(x, y, T, 8); } if (ch === 'd' || ch === 'C') { c.fillStyle = '#6a3a1a'; c.fillRect(x + 4, y + 4, 8, 12); } if (ch === 'C') { c.fillStyle = '#fff'; c.fillRect(x + 3, y - 4, 10, 6); c.fillStyle = '#e63946'; c.fillRect(x + 7, y - 3, 2, 4); c.fillRect(x + 6, y - 2, 4, 2); } }
+  else if (ch === 'G') { c.fillStyle = '#9aa0a8'; c.fillRect(x, y + 4, T, 8); for (let k = 2; k < T; k += 4) c.fillRect(x + k, y, 2, T); }
+  else if (ch === 'o') { c.fillStyle = '#4aa83a'; c.fillRect(x + 2, y + 10, 12, 4); c.fillStyle = '#e63946'; c.beginPath(); c.arc(x + 8, y + 8, 4, Math.PI, 0); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(x + 8, y + 8, 4, 0, Math.PI); c.fill(); }
+  if ('123'.includes(ch)) { const cols = { 1: '#3fa34d', 2: '#2a6fdb', 3: '#c8402c' }; c.fillStyle = cols[ch]; c.fillRect(x + 3, y + 5, 10, 9); c.fillStyle = '#ffcf9e'; c.fillRect(x + 4, y, 8, 6); c.fillStyle = '#3a2a1a'; c.fillRect(x + 3, y - 1, 10, 2); if (beaten[+ch]) K.text(c, '★', x + 8, y - 6, 7, '#ffd23f'); else K.text(c, '!', x + 8, y - 6, 8, '#ff3b5c'); }
+}
+function draw(c, t) {
+  c.fillStyle = '#101a10'; c.fillRect(0, 0, VW, VH);
+  if (!w) return;
+  if (menu && menu.kind === 'starter') {
+    c.fillStyle = '#2a4a2a'; c.fillRect(0, 0, VW, VH); K.text(c, 'CHOOSE YOUR PARTNER', VW / 2, 24, 12, '#ffd23f');
+    menu.items.forEach((sp, i) => { const x = VW / 6 + i * VW / 3; c.fillStyle = i === menu.i ? 'rgba(255,210,63,.25)' : 'rgba(255,255,255,.06)'; c.fillRect(x - 38, 46, 76, 110); critter(c, sp, x, 90 + Math.sin(t / 300 + i) * 3, 1.5, false); K.text(c, SPECIES[sp].n, x, 132, 8, '#fff'); K.text(c, SPECIES[sp].type.toUpperCase(), x, 146, 7, TYPES[SPECIES[sp].type].col); });
+    K.text(c, '◀ ▶ TO PICK, OK TO CHOOSE (OR TAP TWICE)', VW / 2, 176, 7, '#fff'); return;
+  }
+  if (battle) return drawBattle(c, t);
+  const x0 = Math.floor(cam.x / T), y0 = Math.floor(cam.y / T);
+  for (let ty = y0; ty <= y0 + D.SH; ty++) for (let tx = x0; tx <= x0 + D.SW; tx++) { if (ty < 0 || tx < 0 || ty >= w.rows || tx >= w.cols) continue; drawTile(c, w.g[ty][tx], tx * T - Math.round(cam.x), ty * T - Math.round(cam.y), tx, ty, t); }
+  const x = Math.round(p.x - cam.x), y = Math.round(p.y - cam.y), step = Math.floor((p.walk || 0) * 8) % 2;
+  c.fillStyle = '#e63946'; c.fillRect(x + 1, y + 4, 10, 7); c.fillStyle = '#ffcf9e'; c.fillRect(x + 2, y, 8, 6); c.fillStyle = '#e63946'; c.fillRect(x + 1, y - 2, 10, 3); c.fillStyle = '#fff'; c.fillRect(x + 4, y - 2, 4, 1);
+  c.fillStyle = '#000'; if (p.face !== 'u') { if (p.face !== 'l') c.fillRect(x + 7, y + 2, 1, 2); if (p.face !== 'r') c.fillRect(x + 4, y + 2, 1, 2); }
+  c.fillStyle = '#2a3a6a'; c.fillRect(x + 2 + step, y + 11, 3, 2); c.fillRect(x + 7 - step, y + 11, 3, 2);
+  if (party[0]) { const v = D.faceVec(p.face); critter(c, party[0].sp, x + 6 - v[0] * 14, y + 6 - v[1] * 14, 0.45, p.face === 'l'); }
+  if (talk && talk.lines.length) D.dialog(c, talk.lines[0], VW, VH, '');
+}
+title();
+function tall(c, x, y, tx, t) { for (let k = 0; k < 4; k++) { const bx = x + 2 + k * 4, sw = Math.sin(t / 400 + tx + k) * 1.2; c.fillStyle = A.INK; c.beginPath(); c.moveTo(bx - 1.5, y + 15); c.lineTo(bx + sw, y + 3 + (k % 2) * 3); c.lineTo(bx + 2.5, y + 15); c.fill(); c.fillStyle = k % 2 ? '#4aa83a' : '#6ac84a'; c.beginPath(); c.moveTo(bx - 0.8, y + 15); c.lineTo(bx + sw + 0.3, y + 4.5 + (k % 2) * 3); c.lineTo(bx + 1.8, y + 15); c.fill(); } }
+{ const _dt = drawTile; drawTile = function (c, ch, x, y, tx, ty, t) {
+    if (false) return _dt(c, ch, x, y, tx, ty, t);
+    const land = (a, b) => { const r = w.g[b]; const q = r ? r[a] : undefined; return q !== undefined && q !== 'W' && q !== '~'; };
+    if (ch === '.') { A.grassTD(c, x, y, tx, ty); return; }
+    if (ch === ',') { A.grassTD(c, x, y, tx, ty, { base: '#5aa83a', hi: '#7ac85a', lo: '#3a8a2a' }); tall(c, x, y, tx, t); return; }
+    if (ch === 'T') { A.grassTD(c, x, y, tx, ty); A.treeTD(c, x, y, tx, ty); return; }
+    if (ch === 'W') { A.waterTD(c, x, y, tx, ty, t, land); return; }
+    return _dt(c, ch, x, y, tx, ty, t);
+  }; }
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); if (w && state === 'play') { A.ambient(c, VW, VH, t, (false) ? 'dust' : 'leaf', 10); A.vignette(c, VW, VH, (false) ? 0.5 : 0.25); } }; }
+K.run(update, draw);
+</script>
+</body>
+</html>

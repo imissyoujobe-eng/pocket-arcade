@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sky Tail</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Sky Tail: a fox's adventure across a world map. Find the sky leaf, run until your meter fills, then flap your tail to fly over the clouds.
+K.theme({ bg: '#120c1e', ink: '#fffaf0', accent: '#ff8a1f', accentInk: '#2a1000' });
+const VW = 256, VH = 192, T = 16;
+K.screen(VW, VH);
+K.hud(['score', 'coins', 'lives', 'time']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'SPIN' }, { id: 'a', label: 'JUMP' }] });
+</script>
+<script src="../lib/plat.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+const E = '................', G = '################';
+// ground chunks (15 rows) and sky chunks (15 rows) stacked into 30-row levels
+const GC = {
+  start: [E, E, E, E, E, E, E, E, E, E, E, E, '.S..............', G, G],
+  boxes: [E, E, E, E, E, E, E, E, E, '...?W?W.........', E, E, '.........g......', G, G],
+  notes: [E, E, E, E, E, E, E, E, E, '.....NNN........', E, E, '..g.......g.....', G, G],
+  leaf: [E, E, E, E, E, E, E, E, E, '......M.........', E, E, '..........z.....', G, G],
+  gap: [E, E, E, E, E, E, E, E, E, E, '..........WW....', '.........WWW....', '..g.....WWWW....', '####....########', '####....########'],
+  hills: [E, E, E, E, E, E, E, E, '......====......', E, '..=====....====.', E, '...g.....z......', G, G],
+  wood: [E, E, E, E, E, E, '....WWWW........', '....W..W........', '....W.oW........', '....WWWW...?....', E, E, '..........g.....', G, G],
+  flyers: [E, E, E, E, '......b.........', E, E, E, '.........b......', E, E, '..g.............', E, G, G],
+  pit: [E, E, E, E, E, E, E, E, E, E, '...WW......WW...', E, E, '###..........###', '###..........###'],
+  castle: [G, G, E, E, E, E, E, '.......WW.......', E, E, '...WW......WW...', E, E, '##LLLLLLLLLLLL##', G],
+  end: ['........................', '........................', '.................F......', '.................F......', '.................F......', '.................F......', '.................F......', '.................F......', '.................F......', '.........WWWW....F......', '........WWWWW....F......', '.......WWWWWW....F......', '......WWWWWWW....W......', '########################', '########################']
+};
+const SKYC = [
+  [E, E, E, '....oooooooo....', E, E, '...CCCCCC.......', E, E, E, E, E, E, E, E],
+  [E, E, '..........ooo...', '.........CCCCC..', E, E, E, '..ooo...........', '.CCCCC..........', E, E, E, E, E, E],
+  [E, '......oooo......', E, E, E, '..oo........oo..', E, E, '....CCCCCCCC....', E, E, E, E, E, E],
+  [E, E, E, E, E, E, E, E, E, E, E, E, E, E, E]
+];
+const LEVELS = [
+  ['start', 'boxes', 'leaf', 'hills', 'notes', 'gap', 'end'],
+  ['start', 'wood', 'flyers', 'notes', 'pit', 'boxes', 'end'],
+  ['start', 'leaf', 'pit', 'hills', 'pit', 'flyers', 'end'],
+  ['start', 'notes', 'gap', 'wood', 'pit', 'leaf', 'gap', 'end'],
+  ['start', 'flyers', 'pit', 'flyers', 'pit', 'notes', 'pit', 'end'],
+  ['start', 'leaf', 'castle', 'boxes', 'castle', 'pit', 'castle', 'end']
+];
+const NODES = [{ x: 40, y: 190 }, { x: 96, y: 150 }, { x: 160, y: 176 }, { x: 214, y: 128 }, { x: 160, y: 84 }, { x: 250, y: 54 }];
+const PAL = [{ sky: '#8fd8ff', g: '#e8a050', d: '#b06a2a', top: '#5cc23a' }, { sky: '#ffd0a0', g: '#d07a3a', d: '#9a4a1a', top: '#8ad04a' }, { sky: '#7ab8ff', g: '#c8c0b0', d: '#8a8478', top: '#f4f4ff' }, { sky: '#9ae0c8', g: '#6a9a4a', d: '#3a6a2a', top: '#aaf07a' }, { sky: '#5a6ad8', g: '#8a7ab8', d: '#5a4a8a', top: '#c8b8ff' }, { sky: '#2a1414', g: '#6a6a7a', d: '#3a3a4a', top: '#9a9aa8' }];
+
+let state = 'title', mode, node, cleared, li, w, p, cam, ents, items, fx, score, coins, lives, timeLeft, power, deadT, winT, msg, msgT, pmeter, fly, spinT, best = K.best('skytail');
+function title() { K.card({ title: 'SKY TAIL', text: 'Pick a level on the map. Bonk blocks, stomp critters, and find the SKY LEAF. With it, sprint until your meter fills, then tap JUMP over and over to fly! SPIN whips your tail at enemies. Spiky ones can\'t be stomped.', best: best ? 'BEST ' + best : '', button: 'Start adventure', onStart: newGame }); }
+function newGame() { score = 0; coins = 0; lives = 4; power = 0; cleared = 0; node = 0; mode = 'map'; state = 'play'; hud(); }
+function hud() { K.set('score', score); K.set('coins', '● ' + coins); K.set('lives', '♥' + lives); K.set('time', mode === 'level' ? Math.ceil(timeLeft) : 'MAP'); }
+function load() {
+  li = node; const pal = PAL[li];
+  const ground = P.join(LEVELS[li].map(k => GC[k]));
+  const sky = P.join(LEVELS[li].map((k, i) => { const s = SKYC[(i + li) % SKYC.length]; return s.map(r => r.padEnd(GC[k][0].length, '.').slice(0, GC[k][0].length)); }));
+  w = P.world(sky.concat(ground));
+  P.SOLID = '#WNHU?M'; P.ONEWAY = '=C';
+  ents = []; items = []; fx = []; cam = { x: 0, y: 0 }; deadT = 0; winT = 0; timeLeft = 300; pmeter = 0; fly = 0; spinT = 0; msg = 'LEVEL ' + (li + 1); msgT = 1.5;
+  for (let y = 0; y < w.rows; y++) for (let x = 0; x < w.cols; x++) {
+    const ch = w.g[y][x], X = x * T, Y = y * T;
+    if (ch === 'S') { w.start = { x: X, y: Y }; w.g[y][x] = '.'; }
+    if (ch === 'g') { ents.push(P.walker(X + 2, Y + 4, { kind: 'shroom', vx: -26 - li * 3 })); w.g[y][x] = '.'; }
+    if (ch === 'z') { ents.push(P.walker(X + 2, Y + 4, { kind: 'spiky', stompable: false, smart: true, vx: -22 })); w.g[y][x] = '.'; }
+    if (ch === 'b') { ents.push({ kind: 'birdy', x: X, y: Y, y0: Y, w: 12, h: 10, vx: -30, ph: Math.random() * 6, alive: true }); w.g[y][x] = '.'; }
+  }
+  p = P.player(w.start.x, w.start.y, { h: power ? 24 : 14, sprint: 150 });
+  mode = 'level'; hud();
+}
+function setPower(n) { if (n > 0 && power === 0) { p.y -= 10; p.h = 24; } if (n === 0 && power > 0) { p.h = 14; p.y += 10; } power = n; }
+function addCoin() { coins++; score += 100; if (coins >= 100) { coins -= 100; lives++; K.tune([660, 880, 1320], 0.08); } K.beep(988, 0.05, { vol: 0.05 }); K.beep(1319, 0.1, { vol: 0.05, at: 0.05 }); hud(); }
+function hurt() { if (p.inv > 0 || deadT) return; if (power > 0) { setPower(power === 2 ? 1 : 0); p.inv = 2; fly = 0; K.beep(300, 0.4, { to: 120, vol: 0.06 }); return; } die(); }
+function die() { deadT = 2.2; p.vy = -260; K.tune([494, 440, 392, 349], 0.12, { type: 'triangle' }); }
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  if (mode === 'map') return mapUpdate(dt);
+  for (const f of fx) { f.l -= dt; if (f.vy != null) { f.y += f.vy * dt; f.vy += 600 * dt; } if (f.vx != null) f.x += f.vx * dt; } fx = fx.filter(f => f.l > 0);
+  P.stepBumps(w, dt);
+  if (deadT > 0) { deadT -= dt; p.vy += 700 * dt; p.y += p.vy * dt; if (deadT <= 0) { lives--; setPower(0); hud(); if (lives < 0) return over(); mode = 'map'; msg = 'TRY AGAIN'; msgT = 1.2; } return; }
+  if (winT > 0) { winT -= dt; p.vx = 60; p.vy = Math.min(200, p.vy + 800 * dt); P.move(w, p, dt); if (timeLeft > 0) { const d = Math.min(timeLeft, dt * 120); timeLeft -= d; score += Math.round(d) * 10; hud(); } if (winT <= 0) { cleared = Math.max(cleared, li + 1); node = Math.min(NODES.length - 1, li + 1); mode = 'map'; hud(); if (cleared >= NODES.length) return victory(); } return; }
+  timeLeft -= dt * 2.5; if (timeLeft <= 0) { timeLeft = 0; die(); }
+  if (Math.floor(timeLeft) !== Math.floor(timeLeft + dt * 2.5)) hud();
+  // run meter: fills while sprinting on the ground
+  if (p.ground) pmeter = p.running && Math.abs(p.vx) > 135 ? Math.min(1, pmeter + dt * 1.1) : Math.max(0, pmeter - dt * 0.8);
+  if (power === 2 && pmeter >= 1 && K.hit('a') && !p.ground && fly <= 0) fly = 4;
+  if (fly > 0) { fly -= dt; if (K.hit('a')) { p.vy = -150; K.beep(500, 0.05, { to: 900, vol: 0.04 }); } if (fly <= 0) pmeter = 0; }
+  const wasVy = p.vy;
+  P.control(w, p, dt);
+  // with the leaf, holding jump while falling floats you down
+  if (power === 2 && !p.ground && p.vy > 40 && K.down('a') && fly <= 0) p.vy = 40;
+  if (fly > 0 && K.down('a') && p.vy > 30) p.vy = 30;
+  if (power === 2 && K.hit('b') && spinT <= 0) { spinT = 0.3; K.beep(800, 0.08, { to: 400, vol: 0.04 }); }
+  if (spinT > 0) spinT -= dt;
+  if (p.hitHead) bonk(p.hitHead.tx, p.hitHead.ty);
+  // note blocks bounce you high
+  const below = P.tile(w, p.x + p.w / 2, p.y + p.h + 2);
+  if (p.ground && below === 'N') { p.vy = K.down('a') ? -420 : -260; p.ground = false; P.bump(w, Math.floor((p.x + p.w / 2) / T), Math.floor((p.y + p.h + 2) / T)); K.beep(660, 0.08, { type: 'triangle', vol: 0.05 }); }
+  const tc = P.touches(w, p, 'oFL');
+  if (tc) {
+    if (tc.ch === 'o') { P.set(w, tc.tx, tc.ty, '.'); addCoin(); }
+    if (tc.ch === 'L') return die();
+    if (tc.ch === 'F') { score += Math.max(0, 28 - tc.ty) * 200; hud(); winT = 3; fly = 0; K.tune([392, 523, 659, 784, 1047, 1319], 0.1); return; }
+  }
+  if (p.fell) { p.fell = false; return die(); }
+  for (const it of items) {
+    if (it.rise > 0) { it.rise -= dt; it.y -= 20 * dt; continue; }
+    if (it.kind === 'berry') { it.vy = Math.min(250, (it.vy || 0) + 800 * dt); const v0 = it.vx; P.move(w, it, dt); if (it.hitWall) it.vx = -v0; }
+    else { it.ph = (it.ph || 0) + dt * 3; it.y += 22 * dt; it.x += Math.sin(it.ph) * 50 * dt; }
+    if (P.overlap(p, it)) { it.dead = true; score += 1000; hud(); setPower(it.kind === 'berry' ? Math.max(1, power) : 2); K.tune([523, 659, 784, 1047], 0.05); }
+    if (it.y > w.py) it.dead = true;
+  }
+  items = items.filter(i => !i.dead);
+  for (const e of ents) {
+    if (!e.alive || e.x > cam.x + VW + 40) continue;
+    if (e.kind === 'birdy') { e.ph += dt * 2.5; e.x += e.vx * dt; e.y = e.y0 + Math.sin(e.ph) * 30; }
+    else P.stepWalker(w, e, dt);
+    if (spinT > 0 && Math.abs(e.x + e.w / 2 - (p.x + p.w / 2)) < 22 && Math.abs(e.y + e.h / 2 - (p.y + p.h / 2)) < 16) { kill(e, 200); continue; }
+    const r = P.contact(p, e);
+    if (r === 'stomp') { p.vy = K.down('a') ? -300 : -180; p.jumping = K.down('a'); kill(e, 100, true); }
+    else if (r === 'hurt') hurt();
+  }
+  ents = ents.filter(e => e.alive);
+  cam = P.cam(w, p, cam, VW, VH);
+}
+function kill(e, pts, squash) { e.alive = false; score += pts; hud(); fx.push({ t: 'pts', x: e.x, y: e.y - 6, txt: String(pts), vy: -30, l: 0.7 }); fx.push({ t: 'poof', x: e.x + 6, y: e.y + 6, l: 0.3 }); K.beep(squash ? 300 : 500, 0.08, { vol: 0.05 }); }
+function bonk(tx, ty) {
+  const ch = w.g[ty][tx];
+  for (const e of ents) if (e.alive && Math.abs(e.x + e.w / 2 - (tx * T + 8)) < 14 && Math.abs(e.y + e.h - ty * T) < 4) kill(e, 100);
+  if (ch === '?') { P.set(w, tx, ty, 'U'); P.bump(w, tx, ty); addCoin(); fx.push({ t: 'coin', x: tx * T + 4, y: ty * T - 8, vy: -160, l: 0.5 }); }
+  else if (ch === 'M') { P.set(w, tx, ty, 'U'); P.bump(w, tx, ty); items.push({ kind: power === 0 ? 'berry' : 'leaf', x: tx * T + 2, y: ty * T, w: 12, h: 12, vx: 50, vy: 0, rise: 0.6 }); K.beep(600, 0.2, { to: 1200, vol: 0.05 }); }
+  else { P.bump(w, tx, ty); K.beep(150, 0.05, { vol: 0.04 }); }
+}
+// ---- world map ----
+function mapUpdate(dt) {
+  if (K.hit('right') || K.hit('up')) { if (node < Math.min(cleared, NODES.length - 1)) { node++; K.beep(700, 0.05, { vol: 0.04 }); } }
+  if (K.hit('left') || K.hit('down')) { if (node > 0) { node--; K.beep(600, 0.05, { vol: 0.04 }); } }
+  if (K.ptr.tapped) { NODES.forEach((n, i) => { if (i <= cleared && Math.hypot(K.ptr.x - n.x, K.ptr.y - n.y) < 16) { if (node === i) load(); node = i; } }); }
+  if (K.hit('a') || K.hit('start')) load();
+}
+function over() { state = 'over'; best = K.saveBest('skytail', score); K.card({ title: 'GAME OVER', text: 'You cleared ' + cleared + ' of 6 levels and scored ' + score + '.', best: 'BEST ' + best, button: 'Try again', onStart: newGame }); }
+function victory() { state = 'over'; const f = score + lives * 5000; best = K.saveBest('skytail', f); K.card({ title: 'SKY HIGH!', text: 'You beat all six levels and the sky castle! Final score ' + f + '.', best: 'BEST ' + best, button: 'Play again', onStart: newGame }); }
+
+function drawTile(c, ch, x, y, tx, ty, t) {
+  const pal = PAL[li]; y += P.bumpOffset(w, tx, ty);
+  if (ch === '#') { artTile(c, '#', x, y, tx, ty, li, '#', (ART[li] || ART[0]).pal); }
+  else if (ch === 'W') { artTile(c, 'W', x, y, tx, ty, li, 'W', A.PAL.wood); }
+  else if (ch === 'N') { c.fillStyle = '#fff4e0'; c.fillRect(x, y, T, T); c.fillStyle = '#ff5fa2'; c.fillRect(x + 6, y + 3, 2, 8); c.beginPath(); c.arc(x + 5, y + 11, 3, 0, 7); c.fill(); c.fillRect(x + 6, y + 3, 5, 2); }
+  else if (ch === '?' || ch === 'M') { c.fillStyle = Math.floor(t / 200) % 2 ? '#ffd23f' : '#ffb02e'; c.fillRect(x, y, T, T); c.fillStyle = '#8a4a10'; c.fillRect(x, y + 15, T, 1); K.text(c, '?', x + 8, y + 8, 10, '#8a4a10'); }
+  else if (ch === 'U') { c.fillStyle = '#8a6a4a'; c.fillRect(x, y, T, T); c.fillStyle = '#5a3a1a'; c.fillRect(x + 2, y + 2, 12, 1); }
+  else if (ch === 'H') { artTile(c, 'H', x, y, tx, ty, li, 'H', A.PAL.stone); }
+  else if (ch === '=') { c.fillStyle = '#ff8fb0'; c.fillRect(x, y, T, 6); c.fillStyle = '#c05a7a'; c.fillRect(x, y + 6, T, 2); c.fillStyle = '#fff'; c.fillRect(x + 3, y + 2, 2, 2); }
+  else if (ch === 'C') { c.fillStyle = '#fff'; c.beginPath(); c.arc(x + 4, y + 6, 5, 0, 7); c.arc(x + 11, y + 5, 6, 0, 7); c.fill(); c.fillStyle = '#d8ecff'; c.fillRect(x, y + 9, T, 3); }
+  else if (ch === 'o') { const s = Math.abs(Math.sin(t / 200 + tx)); c.fillStyle = '#ffd23f'; c.fillRect(x + 8 - 4 * s, y + 3, 8 * s + 1, 10); }
+  else if (ch === 'F') { c.fillStyle = '#ddd'; c.fillRect(x + 7, y, 2, T); if (!w.g[ty - 1] || w.g[ty - 1][tx] !== 'F') { c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(x + 8, y, 4, 0, 7); c.fill(); c.fillStyle = '#ff8a1f'; c.beginPath(); c.moveTo(x + 7, y + 4); c.lineTo(x - 8, y + 10); c.lineTo(x + 7, y + 16); c.fill(); } }
+  else if (ch === 'L') { c.fillStyle = Math.floor(t / 150 + tx) % 2 ? '#ff5a1a' : '#ff8a1a'; c.fillRect(x, y + 3, T, T - 3); }
+}
+function drawFox(c, x, y, t) {
+  if (p.inv > 0 && Math.floor(t / 60) % 2) return;
+  const big = power > 0, h = big ? 24 : 14, f = p.face, run = p.ground && Math.abs(p.vx) > 5 ? Math.floor(p.anim / 9) % 2 : 0;
+  c.save(); c.translate(x + 6, 0); c.scale(f, 1); c.translate(-6, 0);
+  // tail
+  const wag = fly > 0 ? Math.sin(t / 40) * 4 : spinT > 0 ? Math.sin(t / 25) * 8 : Math.sin(t / 200) * 2;
+  c.fillStyle = power === 2 ? '#ffd23f' : '#ff8a1f'; c.fillRect(-7, y + h - 12 + wag, 8, 5); c.fillStyle = '#fff'; c.fillRect(-9, y + h - 12 + wag, 3, 5);
+  // legs
+  c.fillStyle = '#5a2a10'; c.fillRect(2 + run * 2, y + h - 4, 3, 4); c.fillRect(7 - run * 2, y + h - 4, 3, 4);
+  // body
+  c.fillStyle = '#ff8a1f'; c.fillRect(1, y + (big ? 9 : 5), 10, big ? 11 : 6); c.fillStyle = '#fff4e0'; c.fillRect(5, y + (big ? 11 : 6), 5, big ? 7 : 4);
+  if (big) { c.fillStyle = '#2a6fdb'; c.fillRect(1, y + 15, 10, 4); }
+  // head
+  c.fillStyle = '#ff8a1f'; c.fillRect(1, y + (big ? 0 : -3), 10, 9); c.fillRect(1, y + (big ? -3 : -6), 3, 3); c.fillRect(8, y + (big ? -3 : -6), 3, 3);
+  c.fillStyle = '#fff4e0'; c.fillRect(7, y + (big ? 4 : 1), 6, 4); c.fillStyle = '#111'; c.fillRect(12, y + (big ? 4 : 1), 1, 1); c.fillRect(7, y + (big ? 2 : -1), 1, 2);
+  c.restore();
+}
+function drawEnt(c, e, x, y, t) {
+  if (e.kind === 'shroom') { const k = Math.floor(t / 150) % 2; c.fillStyle = '#c0306a'; c.beginPath(); c.ellipse(x + 6, y + 5, 8, 6, 0, Math.PI, 0); c.fill(); c.fillRect(x - 2, y + 4, 16, 2); c.fillStyle = '#fff'; c.fillRect(x + 2, y + 1, 2, 2); c.fillRect(x + 8, y + 2, 2, 2); c.fillStyle = '#f0d6b0'; c.fillRect(x + 2, y + 6, 8, 4); c.fillStyle = '#000'; c.fillRect(x + 4, y + 7, 1, 2); c.fillRect(x + 7, y + 7, 1, 2); c.fillStyle = '#5a2a10'; c.fillRect(x + (k ? 0 : 1), y + 10, 4, 2); c.fillRect(x + (k ? 8 : 7), y + 10, 4, 2); }
+  else if (e.kind === 'spiky') { c.fillStyle = '#3a3a5a'; c.beginPath(); c.arc(x + 6, y + 7, 6, 0, 7); c.fill(); c.fillStyle = '#e8e8f0'; for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + t / 300; c.fillRect(x + 6 + Math.cos(a) * 7 - 1, y + 7 + Math.sin(a) * 7 - 1, 3, 3); } c.fillStyle = '#ff5a36'; c.fillRect(x + 3, y + 5, 2, 2); c.fillRect(x + 8, y + 5, 2, 2); }
+  else if (e.kind === 'birdy') { const f = Math.floor(t / 100) % 2; c.fillStyle = '#46a8ff'; c.fillRect(x, y + 2, 12, 7); c.fillStyle = '#fff'; c.fillRect(x + 3, y - (f ? 3 : -2), 6, 3); c.fillStyle = '#ffd23f'; c.fillRect(x - 3, y + 4, 3, 2); c.fillStyle = '#000'; c.fillRect(x + 2, y + 3, 1, 1); }
+}
+function drawMap(c, t) { c.scale(VW / 320, VH / 240);
+  c.fillStyle = '#7ad07a'; c.fillRect(0, 0, VW, VH);
+  c.fillStyle = '#5ab0e8'; c.beginPath(); c.ellipse(270, 200, 80, 40, 0, 0, 7); c.fill(); c.fillStyle = '#9ad8ff'; c.fillRect(230, 195, 30, 2);
+  c.fillStyle = '#5aa05a'; for (let i = 0; i < 10; i++) { const x = (i * 37) % 300 + 10, y = 20 + (i * 53) % 60; c.beginPath(); c.arc(x, y, 8, 0, 7); c.fill(); }
+  c.strokeStyle = '#f2e3c6'; c.lineWidth = 6; c.beginPath(); NODES.forEach((n, i) => i ? c.lineTo(n.x, n.y) : c.moveTo(n.x, n.y)); c.stroke();
+  NODES.forEach((n, i) => {
+    const done = i < cleared, open = i <= cleared, castle = i === NODES.length - 1;
+    c.fillStyle = done ? '#ffd23f' : open ? '#ff8a1f' : '#9a9a9a';
+    if (castle) { c.fillRect(n.x - 10, n.y - 14, 20, 16); c.fillRect(n.x - 12, n.y - 18, 5, 6); c.fillRect(n.x + 7, n.y - 18, 5, 6); c.fillStyle = '#3a2a2a'; c.fillRect(n.x - 3, n.y - 6, 6, 8); }
+    else { c.beginPath(); c.arc(n.x, n.y, 10, 0, 7); c.fill(); K.text(c, String(i + 1), n.x, n.y + 1, 9, '#3a1a00'); }
+  });
+  const n = NODES[node]; drawFoxAt(c, n.x - 6, n.y - 26 + Math.sin(t / 200) * 2);
+  K.text(c, 'WORLD MAP', VW / 2, 16, 12, '#2a4a1a');
+  K.text(c, node === NODES.length - 1 ? 'SKY CASTLE' : 'LEVEL ' + (node + 1), VW / 2, VH - 30, 12, '#fff');
+  K.text(c, 'PRESS JUMP OR TAP TWICE TO ENTER', VW / 2, VH - 14, 7, '#fff');
+  if (msgT > 0) K.text(c, msg, VW / 2, 40, 14, '#fff');
+}
+function drawFoxAt(c, x, y) { c.fillStyle = '#ff8a1f'; c.fillRect(x + 1, y + 5, 10, 6); c.fillRect(x + 1, y - 3, 10, 9); c.fillRect(x + 1, y - 6, 3, 3); c.fillRect(x + 8, y - 6, 3, 3); c.fillStyle = '#fff4e0'; c.fillRect(x + 7, y + 1, 6, 4); c.fillStyle = '#111'; c.fillRect(x + 7, y - 1, 1, 2); c.fillStyle = '#5a2a10'; c.fillRect(x + 2, y + 11, 3, 3); c.fillRect(x + 7, y + 11, 3, 3); }
+function draw(c, t) {
+  if (state === 'title' || !mode) { c.fillStyle = '#8fd8ff'; c.fillRect(0, 0, VW, VH); return; }
+  if (mode === 'map') return drawMap(c, t);
+  const pal = PAL[li]; artBg(c, t, li);
+  P.eachVisible(w, cam, VW, VH, (ch, x, y, tx, ty) => drawTile(c, ch, x, y, tx, ty, t));
+  for (const it of items) { const x = Math.round(it.x - cam.x), y = Math.round(it.y - cam.y); if (it.kind === 'berry') { c.fillStyle = '#c0306a'; c.beginPath(); c.arc(x + 6, y + 7, 6, 0, 7); c.fill(); c.fillStyle = '#3fa34d'; c.fillRect(x + 5, y - 1, 3, 3); } else { c.fillStyle = '#3fd06a'; c.beginPath(); c.ellipse(x + 6, y + 6, 7, 4, Math.sin(it.ph || 0) * 0.5, 0, 7); c.fill(); c.fillStyle = '#1a7a3a'; c.fillRect(x + 1, y + 6, 10, 1); } }
+  for (const e of ents) if (e.x > cam.x - 30 && e.x < cam.x + VW + 30) drawEnt(c, e, Math.round(e.x - cam.x), Math.round(e.y - cam.y), t);
+  for (const f of fx) { const x = Math.round(f.x - cam.x), y = Math.round(f.y - cam.y); if (f.t === 'coin') { c.fillStyle = '#ffd23f'; c.fillRect(x + 2, y, 4, 9); } else if (f.t === 'pts') K.text(c, f.txt, x + 6, y, 7, '#fff'); else if (f.t === 'poof') { c.fillStyle = 'rgba(255,255,255,' + f.l * 3 + ')'; c.beginPath(); c.arc(x, y, (0.3 - f.l) * 40, 0, 7); c.fill(); } }
+  drawFox(c, Math.round(p.x - cam.x), Math.round(p.y - cam.y), t);
+  // run meter
+  c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(8, VH - 14, 66, 8);
+  for (let i = 0; i < 6; i++) { c.fillStyle = pmeter * 6 > i ? (pmeter >= 1 ? (Math.floor(t / 80) % 2 ? '#fff' : '#ffd23f') : '#ff8a1f') : '#555'; c.fillRect(10 + i * 9, VH - 12, 7, 4); }
+  K.text(c, fly > 0 ? 'FLY!' : 'P', 86, VH - 10, 8, pmeter >= 1 ? '#ffd23f' : '#fff');
+  if (msgT > 0) K.text(c, msg, VW / 2, 60, 16, '#fff');
+}
+title();
+const ART = [{ pal: A.PAL.earth, sky: { top: '#2a7ae0', mid: '#8ad0ff', bottom: '#e8f8ff', sun: '#fff6c0', sunY: 50 }, layers: [{ factor: 0.12, base: 150, amp: 45, col: '#7ab8a8', edge: 'rgba(0,0,0,.18)', seed: 2, fog: 'rgba(220,240,255,.35)' }, { factor: 0.28, base: 185, amp: 40, col: '#4a9a5a', edge: 'rgba(0,0,0,.3)', seed: 5 }, { t: 'trees', factor: 0.45, base: 212, col: '#2a7a3a', hi: '#4aa04a', kind: 'round', spacing: 28, ground: true }], amb: "dust", vig: .2 }, { pal: A.PAL.earth, sky: { top: '#3a2a6a', mid: '#ff8a5a', bottom: '#ffd88a', sun: '#ffe8a0', sunY: 80, sunR: 18 }, layers: [{ factor: 0.12, base: 160, amp: 60, col: '#a05a5a', bands: ['rgba(255,200,150,.25)', 'rgba(120,40,40,.25)'], mesa: true, edge: 'rgba(0,0,0,.25)', seed: 1, fog: 'rgba(255,220,180,.2)' }, { factor: 0.3, base: 195, amp: 50, col: '#7a3a3a', bands: ['rgba(255,160,100,.3)', 'rgba(60,20,20,.3)'], mesa: true, edge: 'rgba(0,0,0,.45)', seed: 4 }, { t: 'trees', factor: 0.5, base: 215, col: '#4a2a2a', kind: 'palm', spacing: 46 }], amb: "leaf", vig: .25 }, { pal: A.PAL.snow, sky: { top: "#3a7ad8", mid: "#a8d0ff", bottom: "#f0f8ff", sun: "#ffffff", sunY: 40 }, layers: [{ factor: 0.12, base: 150, amp: 70, col: "#c8d8f0", edge: "rgba(60,80,120,.35)", seed: 2 }, { factor: 0.28, base: 190, amp: 50, col: "#8aa8d0", edge: "rgba(40,60,100,.4)", seed: 6 }, { t: "trees", factor: 0.45, base: 212, col: "#2a4a5a", hi: "#ffffff", kind: "pine", spacing: 20, ground: true }], amb: "snow", vig: .2 }, { pal: A.PAL.jungle, sky: { top: '#1a5a7a', mid: '#5ab0a0', bottom: '#d0f0c0', sun: '#fff8c0', sunY: 40 }, layers: [{ factor: 0.12, base: 150, amp: 50, col: '#2a6a5a', edge: 'rgba(0,0,0,.2)', seed: 3, fog: 'rgba(200,255,220,.3)' }, { t: 'trees', factor: 0.3, base: 190, col: '#1a5a3a', hi: '#2a7a4a', kind: 'round', spacing: 22, size: 1.4, ground: true }, { t: 'trees', factor: 0.5, base: 212, col: '#0e3a22', kind: 'palm', spacing: 40, size: 1.2 }], amb: "leaf", vig: .3 }, { pal: Object.assign({}, A.PAL.stone, { base: "#7a6aa8", hi: "#a898d0", lo: "#4a3a7a", mortar: "#22183a", grass: "#c8b8ff", grassHi: "#f0e8ff", grassLo: "#8a7ad0" }), sky: { top: "#2a2a7a", mid: "#6a6ad8", bottom: "#d8b8ff", stars: true, sun: "#fff0ff", sunY: 50 }, layers: [{ factor: 0.15, base: 160, amp: 60, col: "#4a3a8a", edge: "rgba(0,0,0,.25)", seed: 4, fog: "rgba(255,200,255,.2)" }, { factor: 0.3, base: 195, amp: 45, col: "#2a2a6a", edge: "rgba(0,0,0,.35)", seed: 8 }], amb: "dust", vig: .3 }, { pal: A.PAL.castle, sky: { top: '#060208', mid: '#2a0a0a', bottom: '#7a1a0a', clouds: false }, layers: [{ factor: 0.15, base: 170, amp: 50, col: '#2a0a0a', mesa: true, edge: 'rgba(255,90,30,.35)', seed: 9 }, { factor: 0.3, base: 205, amp: 40, col: '#180606', mesa: true, edge: 'rgba(255,90,30,.4)', seed: 2 }], amb: "ember", vig: .45, glow: "255,80,20" }];
+
+function artBg(c, t, i) { const L = ART[i] || ART[0]; A.sky(c, VW, VH, L.sky, t); c.save(); c.translate(0, Math.round(-cam.y * 0.9)); (L.layers || []).forEach(o => o.t === 'trees' ? A.trees(c, cam.x, o) : A.ridge(c, cam.x, o)); c.restore(); if (L.glow) A.glow(c, VW / 2, VH, 220, L.glow, 0.25); }
+function artTile(c, ch, x, y, tx, ty, i, set, pal) { const sol = (a, b) => a < 0 || a >= w.cols || b >= w.rows || (b >= 0 && set.indexOf(w.g[b][a]) >= 0); A.tile(c, ch + i, x, y, A.edges(sol, tx, ty), tx, ty, pal); }
+drawFox = A.ink(drawFox);
+drawEnt = A.ink(drawEnt);
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); if (w) { const L = ART[li] || ART[0]; A.ambient(c, VW, VH, t, L.amb, 16); A.vignette(c, VW, VH, L.vig == null ? 0.3 : L.vig); } }; }
+K.run(update, draw);
+</script>
+</body>
+</html>

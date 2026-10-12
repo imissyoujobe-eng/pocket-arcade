@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Knight Fright</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/plat.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+// Knight Fright: a knight in shining (soon missing) armor storms a haunted graveyard to rescue the princess. One hit takes your armor, the next takes you.
+K.theme({ bg: '#0a0a12', ink: '#eef0ff', accent: '#7ad0ff', accentInk: '#001a2a' });
+const VW = 256, VH = 192, T = 16;
+K.screen(VW, VH);
+K.hud(['score', 'weapon', 'lives']);
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'THROW' }, { id: 'a', label: 'JUMP' }] });
+
+const E = '................', G = '################';
+// t tombstone (solid), r raven, d red demon, p spitting plant, A armor pot, l lance, k dagger, o torch, x axe, X exit gate, K demon king
+const CH = {
+  start: [E, E, E, E, E, E, E, E, E, E, E, E, '.S..............', G, G],
+  yard:  [E, E, E, E, E, E, E, E, E, E, '........==......', '...r........r...', '...t....k...t...', G, G],
+  hill:  [E, E, E, E, E, E, E, '..........r.....', '.........tt.....', '.......######...', '......########..', '.....##########.', '....###########.', G, G],
+  pond:  [E, E, E, E, E, E, E, E, E, E, E, '...===.===.===..', '.p..............', '###..........###', '###..........###'],
+  crypt: [E, E, E, E, E, E, '.......d........', E, E, '...........o....', '..====....====..', '...r............', '...t...A.......t', G, G],
+  wood:  [E, E, E, E, E, E, E, E, E, '.........x......', '........===.....', '....p.......r...', '............t...', G, G],
+  gate:  [E, E, E, E, E, E, E, E, E, E, '..........X.....', '..........X.....', E, G, G],
+  king:  ['................................', '................................', '................................', '................................', '................................', '................................', '................................', '................................', '................................', '................................', '........................K.......', '................................', '................................', '################################', '################################'],
+};
+const STAGES = [
+  { n: 'The Graveyard', sky: ['#0a0a2a', '#3a2a5a'], g: '#3a2a2a', top: '#3a6a2a', chunks: ['start', 'yard', 'hill', 'pond', 'yard', 'crypt', 'wood', 'gate'] },
+  { n: 'Ghost Town', sky: ['#1a0a1a', '#5a2a3a'], g: '#3a3030', top: '#6a5a4a', chunks: ['start', 'crypt', 'yard', 'pond', 'wood', 'hill', 'crypt', 'gate'] },
+  { n: 'Demon Castle', sky: ['#200000', '#600a0a'], g: '#2a1a1a', top: '#7a2a2a', chunks: ['start', 'crypt', 'pond', 'hill', 'crypt', 'wood', 'king'] },
+];
+const WEAP = { l: { n: 'LANCE', spd: 240, max: 2 }, k: { n: 'DAGGER', spd: 340, max: 3 }, o: { n: 'TORCH', spd: 150, max: 2, arc: 1 }, x: { n: 'AXE', spd: 170, max: 2, arc: 2 } };
+let state = 'title', si, w, p, cam, foes, items, shots, eshots, fx, score, lives, armor, weap, deadT, timeLeft, zombieT, msg, msgT, king, best = K.best('knightfright');
+function newGame() { si = 0; score = 0; lives = 4; weap = 'l'; load(); state = 'play'; }
+function title() { K.card({ title: 'KNIGHT FRIGHT', text: 'THROW your weapon at the zombies, ravens and demons. One hit knocks off your armor, a second hit and you are done for. Pots marked A bring armor back. Swap weapons by walking over them: lance, dagger (fast), torch (arcs and burns), axe (lobs). Reach the gate before time runs out and face the Demon King! Keyboard: Z jump, X throw.', best: best ? 'BEST ' + best : '', button: 'Charge', onStart: newGame }); }
+function load() {
+  const S = STAGES[si]; w = P.world(P.join(S.chunks.map(k => CH[k]))); P.SOLID = '#t'; P.ONEWAY = '='; P.HURT = '';
+  foes = []; items = []; shots = []; eshots = []; fx = []; cam = { x: 0, y: 0 }; king = null; timeLeft = 150; zombieT = 2; msg = 'STAGE ' + (si + 1) + ': ' + S.n.toUpperCase(); msgT = 2;
+  for (let y = 0; y < w.rows; y++) for (let x = 0; x < w.cols; x++) { const ch = w.g[y][x], X = x * T, Y = y * T;
+    if (ch === 'S') w.start = { x: X, y: Y };
+    else if (ch === 'r') foes.push({ k: 'raven', x: X + 2, y: Y + 6, w: 12, h: 8, hp: 1, alive: true, perch: true });
+    else if (ch === 'd') foes.push({ k: 'demon', x: X, y: Y, w: 16, h: 16, hp: 4 + si, alive: true, ph: 0, cd: 2, home: { x: X, y: Y } });
+    else if (ch === 'p') foes.push({ k: 'plant', x: X + 2, y: Y + 2, w: 12, h: 14, hp: 2, alive: true, cd: K.rnd(1, 3) });
+    else if ('Alkox'.includes(ch)) items.push({ k: ch, x: X + 2, y: Y + 2, w: 12, h: 12 });
+    else if (ch === 'K') { king = { k: 'king', x: X, y: Y - 30, w: 30, h: 48, hp: 30, max: 30, alive: true, cd: 2, ph: 0, inv: 0 }; foes.push(king); }
+    else continue; w.g[y][x] = '.'; }
+  respawn(true);
+}
+function respawn(first) { p = P.player(first ? w.start.x : Math.max(w.start.x, cam.x + 30), first ? w.start.y : 20, { w: 11, h: 20, run: 72, sprint: 72, autoRun: false, jump: 320, air: 0.5 }); p.inv = first ? 0 : 2; armor = true; deadT = 0; }
+function hurt() { if (p.inv > 0 || deadT > 0) return;
+  if (armor) { armor = false; p.inv = 1.4; p.vy = -180; p.vx = -p.face * 90; K.beep(800, 0.1, { to: 200 }); for (let i = 0; i < 10; i++) fx.push({ x: p.x + 5, y: p.y + 8, vx: K.rnd(-80, 80), vy: K.rnd(-140, -40), t: 0.7, c: '#bcd' }); }
+  else { deadT = 1.8; lives--; K.beep(300, 0.8, { to: 40, type: 'sawtooth' }); } }
+function hitFoe(f, d) { if (f.k === 'king') { if (f.inv > 0) return; f.inv = 0.25; } f.hp -= d; K.beep(260, 0.05);
+  if (f.hp <= 0) { f.alive = false; score += { zombie: 100, raven: 150, demon: 1000, plant: 200, king: 10000 }[f.k]; K.noise(0.15, 0.3); for (let i = 0; i < 10; i++) fx.push({ x: f.x + f.w / 2, y: f.y + 6, vx: K.rnd(-60, 60), vy: K.rnd(-90, 0), t: 0.5, c: '#ff7a3a' });
+    if (Math.random() < 0.12 && f.k !== 'king') items.push({ k: Math.random() < 0.5 ? 'A' : 'lkox'[K.ri(0, 3)], x: f.x, y: f.y - 4, w: 12, h: 12, vy: -100, fall: 1 }); } }
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  if (deadT > 0) { deadT -= dt; fx.forEach(e => { e.t -= dt; e.x += e.vx * dt; e.y += e.vy * dt; e.vy += 300 * dt; }); fx = fx.filter(e => e.t > 0);
+    if (deadT <= 0) { if (lives <= 0) { state = 'over'; best = K.saveBest('knightfright', score); K.card({ title: 'GAME OVER', text: 'The princess still waits. You reached stage ' + (si + 1) + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Continue?', onStart: newGame }); return; } respawn(false); timeLeft = Math.max(timeLeft, 60); } return; }
+  timeLeft -= dt; if (timeLeft <= 0) { armor = false; p.inv = 0; hurt(); timeLeft = 90; }
+  P.control(w, p, dt, { run: false });
+  if (p.fell) { p.fell = false; armor = false; p.inv = 0; hurt(); return; }
+  const Wp = WEAP[weap];
+  if (K.hit('b') && shots.length < Wp.max) { shots.push({ x: p.x + p.w / 2, y: p.y + 7, vx: p.face * Wp.spd, vy: Wp.arc === 1 ? -120 : Wp.arc === 2 ? -230 : 0, k: weap, t: 1.4 }); K.beep(600, 0.05, { to: 300, type: 'triangle' }); }
+  shots.forEach(s => { s.t -= dt; if (WEAP[s.k].arc) s.vy += 500 * dt; s.x += s.vx * dt; s.y += s.vy * dt;
+    if (P.isSolid(P.tile(w, s.x, s.y))) { if (s.k === 'o' && !s.burn) { s.burn = 1.2; s.vx = 0; s.vy = 0; s.y = Math.floor(s.y / T) * T - 4; s.t = 1.2; } else if (!s.burn) s.t = 0; }
+    for (const f of foes) if (f.alive && s.x > f.x - 3 && s.x < f.x + f.w + 3 && s.y > f.y - 3 && s.y < f.y + f.h + 3) { hitFoe(f, s.k === 'x' ? 2 : 1); if (!s.burn) { s.t = 0; break; } } });
+  shots = shots.filter(s => s.t > 0 && Math.abs(s.x - p.x) < 340);
+  items.forEach(it => { if (it.fall) { it.vy += 400 * dt; it.y += it.vy * dt; if (P.isSolid(P.tile(w, it.x + 6, it.y + 12))) { it.fall = 0; it.y = Math.floor((it.y + 12) / T) * T - 12; } }
+    if (!it.got && P.overlap(p, it)) { it.got = true; K.tune([660, 880], 0.06); if (it.k === 'A') { armor = true; msg = 'ARMOR!'; } else { weap = it.k; msg = WEAP[it.k].n; } msgT = 1; score += 200; } });
+  items = items.filter(it => !it.got);
+  // zombies claw out of the ground near the knight
+  zombieT -= dt; if (zombieT <= 0 && foes.filter(f => f.k === 'zombie').length < 3 + si && !king) { zombieT = K.rnd(1.2, 2.6) - si * 0.2; const zx = p.x + K.rnd(-120, 140); const gy = 12 * T; if (P.isSolid(P.tile(w, zx, gy + T + 2)) && !P.isSolid(P.tile(w, zx, gy + 2))) foes.push({ k: 'zombie', x: zx, y: gy + 4, w: 12, h: 20, vx: 0, vy: 0, hp: 1, alive: true, rise: 0.9, life: 9 }); }
+  foes.forEach(f => { if (!f.alive) return; if (f.x < cam.x - 100 || f.x > cam.x + VW + 100) { if (f.k === 'zombie') f.alive = false; return; }
+    if (f.k === 'zombie') { if (f.rise > 0) { f.rise -= dt; return; } f.life -= dt; if (f.life <= 0) { f.alive = false; return; } f.vx = Math.sign(p.x - f.x) * (26 + si * 6); f.vy = Math.min(300, f.vy + 800 * dt); P.move(w, f, dt); if (f.hitWall) { f.vy = -200; } }
+    if (f.k === 'raven') { if (f.perch) { if (Math.abs(p.x - f.x) < 90) { f.perch = false; f.vx = Math.sign(p.x - f.x) * 70; f.ph = 0; K.beep(1200, 0.08, { to: 900 }); } } else { f.ph += dt * 4; f.x += f.vx * dt; f.y += Math.sin(f.ph) * 50 * dt + (p.y - f.y) * dt * 0.5; } }
+    if (f.k === 'demon') { f.ph += dt; f.cd -= dt; if (f.dive) { f.x += f.dive.vx * dt; f.y += f.dive.vy * dt; f.dive.t -= dt; if (f.dive.t <= 0) f.dive = null; } else { f.x += (p.x + Math.sin(f.ph) * 60 - f.x) * dt * 0.8; f.y += (p.y - 70 + Math.cos(f.ph * 1.7) * 20 - f.y) * dt; if (f.cd <= 0) { f.cd = K.rnd(1.5, 2.5); const a = Math.atan2(p.y - f.y, p.x - f.x); if (Math.random() < 0.5) f.dive = { vx: Math.cos(a) * 170, vy: Math.sin(a) * 170, t: 0.7 }; else eshots.push({ x: f.x + 8, y: f.y + 8, vx: Math.cos(a) * 110, vy: Math.sin(a) * 110 }); } } }
+    if (f.k === 'plant') { f.cd -= dt; if (f.cd <= 0 && Math.abs(p.x - f.x) < 180) { f.cd = K.rnd(2, 3); const a = Math.atan2(p.y - f.y, p.x - f.x); eshots.push({ x: f.x + 6, y: f.y + 2, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90 }); } }
+    if (f.k === 'king') { if (f.inv > 0) f.inv -= dt; f.ph += dt; f.y = 9 * T - 20 + Math.sin(f.ph * 1.5) * 30; f.x += Math.sin(f.ph * 0.6) * 40 * dt; f.cd -= dt;
+      if (f.cd <= 0) { f.cd = f.hp < 15 ? 0.9 : 1.5; for (let i = -1; i <= 1; i++) { const a = Math.atan2(p.y - f.y - 10, p.x - f.x - 15) + i * 0.25; eshots.push({ x: f.x + 15, y: f.y + 16, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, big: 1 }); } K.beep(150, 0.3, { to: 300, type: 'sawtooth' }); } }
+    if (P.overlap(p, f) && !(f.k === 'zombie' && f.rise > 0)) hurt(); });
+  foes = foes.filter(f => f.alive);
+  eshots.forEach(s => { s.x += s.vx * dt; s.y += s.vy * dt; if (s.x > p.x && s.x < p.x + p.w && s.y > p.y && s.y < p.y + p.h) { s.dead = true; hurt(); } }); eshots = eshots.filter(s => !s.dead && Math.abs(s.x - p.x) < 340 && s.y < w.py && s.y > -40);
+  fx.forEach(e => { e.t -= dt; e.x += e.vx * dt; e.y += e.vy * dt; e.vy += 300 * dt; }); fx = fx.filter(e => e.t > 0);
+  const done = P.touches(w, p, 'X') || (king && !king.alive);
+  if (done) { score += 2000 + Math.floor(timeLeft) * 20; K.tune([523, 659, 784, 1046], 0.12); si++;
+    if (si >= STAGES.length) { state = 'over'; best = K.saveBest('knightfright', score); K.card({ title: 'PRINCESS SAVED!', text: 'The Demon King is defeated! Final score ' + score + '.', best: 'BEST ' + best, button: 'Again', onStart: newGame }); return; }
+    load(); return; }
+  cam = P.cam(w, p, cam, VW, VH);
+  K.set('score', score + '  ⏱' + Math.ceil(timeLeft)); K.set('weapon', WEAP[weap].n); K.set('lives', '♥'.repeat(Math.max(0, lives)));
+}
+function knight(c, x, y, face, t, moving) {
+  const step = moving ? Math.sin(t / 70) * 2 : 0;
+  if (armor) { c.fillStyle = '#9aa8c0'; c.fillRect(x + 1 + step * 0.5, y + 13, 4, 7); c.fillRect(x + 6 - step * 0.5, y + 13, 4, 7); c.fillStyle = '#c8d4e8'; c.fillRect(x, y + 5, 11, 9); c.fillRect(x + 2, y - 2, 8, 8); c.fillStyle = '#223'; c.fillRect(x + (face > 0 ? 6 : 2), y + 1, 3, 2); c.fillStyle = '#ff3a3a'; c.fillRect(x + 4, y - 5, 3, 3); }
+  else { c.fillStyle = '#f0c8a0'; c.fillRect(x + 1 + step * 0.5, y + 13, 3, 7); c.fillRect(x + 7 - step * 0.5, y + 13, 3, 7); c.fillRect(x + 1, y + 4, 9, 7); c.fillStyle = '#fff'; c.fillRect(x, y + 10, 11, 4); c.fillStyle = '#ff6a8a'; c.fillRect(x + 2, y + 11, 2, 2); c.fillRect(x + 7, y + 11, 2, 2); c.fillStyle = '#f0c8a0'; c.fillRect(x + 2, y - 2, 8, 7); c.fillStyle = '#6a4a2a'; c.fillRect(x + 2, y - 3, 8, 2); }
+}
+function draw(c, t) {
+  const S = STAGES[si] || STAGES[0], cx = Math.round(cam.x), cy = Math.round(cam.y);
+  const L = ART[si] || ART[0]; A.sky(c, VW, VH, L.sky, t);
+  c.save(); c.translate(0, Math.round(-cy * 0.9)); L.layers.forEach(o => o.t === 'trees' ? A.trees(c, cx, o) : o.t === 'graves' ? graves(c, cx, o) : A.ridge(c, cx, o)); c.restore();
+  c.fillStyle = 'rgba(160,200,180,.10)'; for (let i = 0; i < 3; i++) c.fillRect(0, 120 + i * 18 + Math.sin(t / 900 + i) * 4 - cy * 0.5, VW, 8);
+  if (!w) return;
+  P.eachVisible(w, cam, VW, VH, (ch, x, y, tx, ty) => {
+    if (ch === '#') artTile(c, '#', x, y, tx, ty, si, '#', L.pal);
+    else if (ch === 't') tomb(c, x, y, tx);
+    else if (ch === '=') A.ledge(c, x, y, T, A.PAL.wood);
+    else if (ch === 'X') { c.fillStyle = '#5a5a6a'; c.fillRect(x, y, T, T); c.fillStyle = '#2a2a3a'; for (let i = 2; i < T; i += 4) c.fillRect(x + i, y, 2, T); }
+  });
+  items.forEach(it => { const x = it.x - cx, y = it.y - cy; if (it.k === 'A') { c.fillStyle = '#c8d4e8'; c.beginPath(); c.arc(x + 6, y + 7, 6, 0, 7); c.fill(); K.text(c, 'A', x + 6, y + 7, 7, '#223'); } else { c.fillStyle = '#ffd23a'; c.fillRect(x, y, 12, 12); K.text(c, { l: 'L', k: 'D', o: 'T', x: 'X' }[it.k], x + 6, y + 6, 7, '#222'); } });
+  foes.forEach(f => { const x = Math.round(f.x) - cx, y = Math.round(f.y) - cy; if (x < -40 || x > VW + 40) return;
+    if (f.k === 'zombie') { const r = f.rise > 0 ? f.rise / 0.9 : 0; c.save(); c.beginPath(); c.rect(x - 4, y - 30, 24, 20 + 30 - r * 20 - 4 + 4); c.clip(); const yy = y + r * 18; c.fillStyle = '#5a7a6a'; c.fillRect(x + 2, yy, 8, 8); c.fillStyle = '#3a4a5a'; c.fillRect(x + 1, yy + 7, 10, 8); c.fillRect(x + 2, yy + 15, 3, 5); c.fillRect(x + 7, yy + 15, 3, 5); c.fillStyle = '#5a7a6a'; c.fillRect(x + (f.vx > 0 ? 10 : -4), yy + 8, 6, 2); c.fillStyle = '#ff3'; c.fillRect(x + 4, yy + 3, 1, 1); c.fillRect(x + 7, yy + 3, 1, 1); c.restore(); if (r > 0) { c.fillStyle = '#5a4a3a'; c.fillRect(x - 2, y + 14, 16, 3); } }
+    else if (f.k === 'raven') { c.fillStyle = '#2a2a3a'; const fl = f.perch ? 0 : Math.sin(t / 40) * 4; c.fillRect(x + 3, y + 1, 7, 5); c.fillStyle = '#ff5a3a'; c.fillRect(x + (f.vx > 0 ? 10 : 1), y + 2, 2, 1); c.fillStyle = '#2a2a3a'; c.beginPath(); c.moveTo(x + 4, y + 3); c.lineTo(x - 2, y + fl); c.lineTo(x + 8, y + 4); c.lineTo(x + 14, y + fl); c.fill(); }
+    else if (f.k === 'demon') { c.fillStyle = '#d02a2a'; c.fillRect(x + 4, y + 4, 8, 10); c.fillRect(x + 5, y, 6, 5); c.fillStyle = '#ffe'; c.fillRect(x + 5, y - 2, 1, 2); c.fillRect(x + 10, y - 2, 1, 2); const fl = Math.sin(t / 60) * 4; c.fillStyle = '#7a1a1a'; c.beginPath(); c.moveTo(x + 4, y + 5); c.lineTo(x - 6, y + fl); c.lineTo(x + 4, y + 11); c.moveTo(x + 12, y + 5); c.lineTo(x + 22, y + fl); c.lineTo(x + 12, y + 11); c.fill(); c.fillStyle = '#ff3'; c.fillRect(x + 6, y + 2, 1, 1); c.fillRect(x + 9, y + 2, 1, 1); }
+    else if (f.k === 'plant') { c.fillStyle = '#3a8a3a'; c.fillRect(x + 5, y + 6, 2, 8); c.fillStyle = '#c03a8a'; c.beginPath(); c.arc(x + 6, y + 4, 5, 0, 7); c.fill(); c.fillStyle = '#222'; c.beginPath(); c.arc(x + 6, y + 4, 2, 0, 7); c.fill(); }
+    else if (f.k === 'king') { if (f.inv > 0 && Math.floor(t / 50) % 2) return; c.fillStyle = '#8a0a2a'; c.fillRect(x + 4, y + 12, 22, 26); c.fillStyle = '#4a0a1a'; c.beginPath(); c.moveTo(x + 4, y + 14); c.lineTo(x - 18, y + Math.sin(t / 100) * 8); c.lineTo(x + 4, y + 32); c.moveTo(x + 26, y + 14); c.lineTo(x + 48, y + Math.sin(t / 100) * 8); c.lineTo(x + 26, y + 32); c.fill(); c.fillStyle = '#c02a3a'; c.fillRect(x + 8, y, 14, 13); c.fillStyle = '#ffd23a'; c.fillRect(x + 7, y - 4, 16, 4); c.fillRect(x + 8, y - 8, 3, 4); c.fillRect(x + 14, y - 8, 3, 4); c.fillRect(x + 19, y - 8, 3, 4); c.fillStyle = '#ff3'; c.fillRect(x + 11, y + 4, 3, 2); c.fillRect(x + 17, y + 4, 3, 2);
+      c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(VW - 110, 8, 102, 7); c.fillStyle = '#ff3a5a'; c.fillRect(VW - 109, 9, 100 * f.hp / f.max, 5); K.text(c, 'DEMON KING', VW - 58, 22, 7, '#fff'); } });
+  if (deadT > 0) { const x = Math.round(p.x) - cx, y = Math.round(p.y) - cy; c.fillStyle = '#ddd'; c.fillRect(x, y + 14, 12, 4); c.beginPath(); c.arc(x + 4, y + 13, 3, 0, 7); c.fill(); }
+  else if (!(p.inv > 0 && Math.floor(t / 80) % 2) && state !== 'title') knight(c, Math.round(p.x) - cx, Math.round(p.y) - cy, p.face, t, p.vx);
+  shots.forEach(s => { const x = s.x - cx, y = s.y - cy; if (s.k === 'l') { c.fillStyle = '#dde'; c.fillRect(x - 8, y - 1, 16, 2); c.fillRect(s.vx > 0 ? x + 6 : x - 10, y - 2, 4, 4); } else if (s.k === 'k') { c.fillStyle = '#fff'; c.fillRect(x - 5, y - 1, 10, 2); } else if (s.k === 'o') { c.fillStyle = Math.floor(t / 50) % 2 ? '#ff8a2a' : '#ffd23a'; c.beginPath(); c.arc(x, y, s.burn ? 6 : 4, 0, 7); c.fill(); } else { c.save(); c.translate(x, y); c.rotate(t / 50); c.fillStyle = '#ccd'; c.fillRect(-5, -1, 10, 2); c.fillRect(2, -4, 4, 8); c.restore(); } });
+  eshots.forEach(s => { c.fillStyle = s.big ? '#ff3a8a' : '#c0ff3a'; c.beginPath(); c.arc(s.x - cx, s.y - cy, s.big ? 4 : 3, 0, 7); c.fill(); });
+  fx.forEach(e => { c.fillStyle = e.c; c.fillRect(e.x - cx, e.y - cy, 2, 2); });
+  if (msgT > 0) K.text(c, msg, VW / 2, 40, 12, '#fff');
+}
+const ART = [
+  { pal: Object.assign({}, A.PAL.earth, { base: '#4a3a34', hi: '#6a564a', lo: '#2e2420', grass: '#3a6a3a', grassHi: '#5a8a4a', grassLo: '#24442a' }), sky: { top: '#050818', mid: '#1a2a4a', bottom: '#4a3a5a', stars: true, sun: '#f0f0d0', moon: true, sunX: 60, sunY: 40, sunR: 15, sunGlow: '200,220,255', cloud: 'rgba(160,170,200,.35)' }, layers: [{ factor: 0.12, base: 150, amp: 40, col: '#1a1e34', edge: 'rgba(160,180,255,.18)', seed: 3 }, { t: 'trees', factor: 0.3, base: 190, col: '#10121e', kind: 'pine', spacing: 30, size: 1.4 }, { t: 'graves', factor: 0.5, base: 205, col: '#2a2a38' }] },
+  { pal: Object.assign({}, A.PAL.earth, { base: '#4a3a3a', hi: '#6a5454', lo: '#2e2222', grass: '#5a5a3a', grassHi: '#7a7a4a', grassLo: '#3a3a22' }), sky: { top: '#0a0510', mid: '#3a1a2a', bottom: '#8a3a3a', sun: '#ffd0a0', sunY: 80, sunR: 18, cloud: 'rgba(200,140,140,.3)' }, layers: [{ factor: 0.15, base: 165, amp: 30, col: '#24121a', mesa: true, edge: 'rgba(0,0,0,.3)', seed: 8 }, { t: 'graves', factor: 0.4, base: 200, col: '#1a0c12', houses: true }] },
+  { pal: A.PAL.castle, sky: { top: '#050000', mid: '#2a0505', bottom: '#6a0a0a', clouds: false, sun: '#ff5a3a', sunY: 50, sunR: 20, sunGlow: '255,60,40' }, layers: [{ factor: 0.15, base: 170, amp: 50, col: '#1a0404', mesa: true, edge: 'rgba(255,60,30,.35)', seed: 2 }, { t: 'graves', factor: 0.35, base: 205, col: '#0e0202', houses: true }] },
+];
+function graves(c, camX, o) { const off = camX * o.factor; for (let i = Math.floor(off / 40) - 1; i < Math.floor((off + VW) / 40) + 2; i++) { const x = i * 40 - off + A.hash(i, 1) * 20; c.fillStyle = o.col; if (o.houses && A.hash(i, 2) < 0.5) { const h = 30 + A.hash(i, 3) * 25; c.fillRect(x, o.base - h, 26, h + 300); c.beginPath(); c.moveTo(x - 3, o.base - h); c.lineTo(x + 13, o.base - h - 14); c.lineTo(x + 29, o.base - h); c.fill(); c.fillStyle = 'rgba(255,200,90,.5)'; if (A.hash(i, 4) < 0.6) c.fillRect(x + 9, o.base - h + 8, 4, 5); } else { c.fillRect(x, o.base - 12, 9, 300); c.beginPath(); c.arc(x + 4.5, o.base - 12, 4.5, Math.PI, 0); c.fill(); c.fillRect(x + 13, o.base - 16, 2, 16); c.fillRect(x + 10, o.base - 12, 8, 2); } } c.fillStyle = o.col; c.fillRect(0, o.base, VW, 300); }
+function tomb(c, x, y, tx) { A.shadow(c, x + 8, y + 16, 8); c.fillStyle = A.INK; c.fillRect(x + 1.4, y + 2.4, 13.2, 13.6); c.beginPath(); c.arc(x + 8, y + 3, 6.6, Math.PI, 0); c.fill(); const g = c.createLinearGradient(x, 0, x + 16, 0); g.addColorStop(0, '#a8a8b8'); g.addColorStop(1, '#5a5a6a'); c.fillStyle = g; c.fillRect(x + 2, y + 3, 12, 13); c.beginPath(); c.arc(x + 8, y + 3, 6, Math.PI, 0); c.fill(); c.fillStyle = '#4a4a5a'; c.fillRect(x + 7, y + 4, 2, 8); c.fillRect(x + 5, y + 6, 6, 2); c.fillStyle = '#4a7a3a'; c.fillRect(x + 2, y + 14, 4, 2); c.fillRect(x + 10, y + 15, 3, 1); }
+function artTile(c, ch, x, y, tx, ty, i, set, pal) { const sol = (a, b) => a < 0 || a >= w.cols || b >= w.rows || (b >= 0 && set.indexOf(w.g[b][a]) >= 0); A.tile(c, ch + i, x, y, A.edges(sol, tx, ty), tx, ty, pal); }
+knight = A.ink(knight);
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); if (w) { A.ambient(c, VW, VH, t, si === 2 ? 'ember' : 'dust', 14); A.vignette(c, VW, VH, 0.5); } }; }
+newGame(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>
