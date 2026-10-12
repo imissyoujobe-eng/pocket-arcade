@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Kings Row: checkers against the computer. Captures are forced, multi-jumps chain, reach the far row to be crowned.
 K.theme({ bg: '#1b1410', ink: '#fff5e6', accent: '#e63946', accentInk: '#fff' });
@@ -113,9 +114,7 @@ function update(dt) {
   }
 }
 function draw(c, t) {
-  c.fillStyle = '#1b1410'; c.fillRect(0, 0, W, H);
-  c.fillStyle = '#5a3a22'; c.fillRect(BX - 6, BY - 6, S * 8 + 12, S * 8 + 12);
-  for (let r = 0; r < 8; r++) for (let col = 0; col < 8; col++) { c.fillStyle = (r + col) % 2 ? '#3d6b4a' : '#f0e2c4'; c.fillRect(BX + col * S, BY + r * S, S, S); }
+  c.drawImage(boardArt(), 0, 0, W, H);
   if (!board) return;
   if (lastMove) { c.fillStyle = 'rgba(255,210,63,.25)'; for (const i of lastMove.path) c.fillRect(BX + (i & 7) * S, BY + (i >> 3) * S, S, S); }
   if (sel >= 0) { c.strokeStyle = '#ffd23f'; c.lineWidth = 3; c.strokeRect(BX + (sel & 7) * S + 1.5, BY + (sel >> 3) * S + 1.5, S - 3, S - 3); }
@@ -133,13 +132,41 @@ function draw(c, t) {
   }
   K.text(c, status || '', W / 2, 18, 12, turn === 1 ? '#ffd23f' : '#fff');
 }
+let _board = null;
+function boardArt() {
+  if (_board) return _board;
+  const R = 3, cv = document.createElement('canvas'); cv.width = W * R; cv.height = H * R; const c = cv.getContext('2d'); c.scale(R, R);
+  // walnut table with grain
+  c.fillStyle = '#2a1a10'; c.fillRect(0, 0, W, H);
+  for (let i = 0; i < 140; i++) { c.strokeStyle = i % 3 ? 'rgba(80,50,30,.35)' : 'rgba(10,5,2,.35)'; c.lineWidth = 0.6 + A.hash(i, 1); c.beginPath(); const y = A.hash(i, 2) * H; c.moveTo(0, y); for (let x = 0; x <= W; x += 16) c.lineTo(x, y + Math.sin(x / 40 + i) * 3); c.stroke(); }
+  const lg = c.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, W); lg.addColorStop(0, 'rgba(255,200,140,.12)'); lg.addColorStop(1, 'rgba(0,0,0,.4)'); c.fillStyle = lg; c.fillRect(0, 0, W, H);
+  // frame: shadow, bevelled mahogany with grain and gold inlay
+  c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(BX - 5, BY - 3, S * 8 + 14, S * 8 + 14);
+  const fg = c.createLinearGradient(0, BY - 7, 0, BY + S * 8 + 7); fg.addColorStop(0, '#8a5a32'); fg.addColorStop(0.5, '#6a3e20'); fg.addColorStop(1, '#4a2a14'); c.fillStyle = fg; c.fillRect(BX - 7, BY - 7, S * 8 + 14, S * 8 + 14);
+  for (let i = 0; i < 40; i++) { c.fillStyle = 'rgba(30,15,5,.3)'; c.fillRect(BX - 7, BY - 7 + A.hash(i, 3) * (S * 8 + 14), S * 8 + 14, 0.5); }
+  c.fillStyle = 'rgba(255,220,160,.35)'; c.fillRect(BX - 7, BY - 7, S * 8 + 14, 1); c.fillRect(BX - 7, BY - 7, 1, S * 8 + 14);
+  c.strokeStyle = '#d8b050'; c.lineWidth = 1; c.strokeRect(BX - 2.5, BY - 2.5, S * 8 + 5, S * 8 + 5);
+  // squares: cream marble and green felt-like wood, each with its own texture
+  for (let r = 0; r < 8; r++) for (let col = 0; col < 8; col++) { const x = BX + col * S, y = BY + r * S, dark = (r + col) % 2;
+    const sg = c.createLinearGradient(x, y, x + S, y + S); sg.addColorStop(0, dark ? '#4a7a56' : '#f6ead0'); sg.addColorStop(1, dark ? '#2e5a3c' : '#e2d0aa'); c.fillStyle = sg; c.fillRect(x, y, S, S);
+    for (let k = 0; k < (dark ? 30 : 6); k++) { if (dark) { c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(x + A.hash(k, r * 8 + col) * S, y + A.hash(k + 50, r * 8 + col) * S, 1, 1); } else { c.strokeStyle = 'rgba(160,130,90,.25)'; c.lineWidth = 0.5; c.beginPath(); const sy = y + A.hash(k, r * 8 + col) * S; c.moveTo(x, sy); c.quadraticCurveTo(x + S / 2, sy + (A.hash(k, 9) - 0.5) * 16, x + S, sy + (A.hash(k, 7) - 0.5) * 10); c.stroke(); } }
+    c.fillStyle = 'rgba(255,255,255,' + (dark ? 0.08 : 0.3) + ')'; c.fillRect(x, y, S, 1); c.fillStyle = 'rgba(0,0,0,.15)'; c.fillRect(x, y + S - 1, S, 1); }
+  c.strokeStyle = A.INK; c.lineWidth = 1; c.strokeRect(BX, BY, S * 8, S * 8);
+  return (_board = cv);
+}
 function piece(c, x, y, p) {
   const red = p > 0;
-  c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.arc(x + 1.5, y + 2.5, 14, 0, 7); c.fill();
-  c.fillStyle = red ? '#9e1b28' : '#111'; c.beginPath(); c.arc(x, y + 2, 14, 0, 7); c.fill();
-  c.fillStyle = red ? '#e63946' : '#33333a'; c.beginPath(); c.arc(x, y, 14, 0, 7); c.fill();
-  c.strokeStyle = red ? '#ff7a85' : '#55555f'; c.lineWidth = 1.5; c.beginPath(); c.arc(x, y, 10, 0, 7); c.stroke();
-  if (Math.abs(p) === 2) { c.fillStyle = '#ffd23f'; c.beginPath(); c.moveTo(x - 7, y + 4); c.lineTo(x - 7, y - 4); c.lineTo(x - 3, y); c.lineTo(x, y - 6); c.lineTo(x + 3, y); c.lineTo(x + 7, y - 4); c.lineTo(x + 7, y + 4); c.fill(); }
+  const base = red ? '#d8283a' : '#3a3a44', side = red ? '#7a0e1a' : '#0e0e12';
+  c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.ellipse(x + 2, y + 5, 15, 13, 0, 0, 7); c.fill();
+  c.fillStyle = side; c.beginPath(); c.arc(x, y + 3, 14.5, 0, 7); c.fill();
+  c.strokeStyle = 'rgba(255,255,255,.12)'; c.lineWidth = 0.6; for (let k = -12; k <= 12; k += 3) { c.beginPath(); c.moveTo(x + k, y + 1); c.lineTo(x + k, y + 3 + Math.sqrt(Math.max(0, 196 - k * k)) * 0.2); c.stroke(); }
+  const g = c.createRadialGradient(x - 5, y - 6, 1, x, y, 15); g.addColorStop(0, A.shade(base, 0.5)); g.addColorStop(0.55, base); g.addColorStop(1, A.shade(base, -0.4));
+  c.fillStyle = g; c.beginPath(); c.arc(x, y, 14, 0, 7); c.fill(); c.strokeStyle = A.INK; c.lineWidth = 0.8; c.stroke();
+  for (const [rr, a] of [[10.5, 0.45], [6.5, 0.3]]) { c.strokeStyle = 'rgba(0,0,0,' + a + ')'; c.lineWidth = 1.4; c.beginPath(); c.arc(x, y + 0.6, rr, 0, 7); c.stroke(); c.strokeStyle = red ? 'rgba(255,150,160,.6)' : 'rgba(150,150,170,.5)'; c.lineWidth = 0.8; c.beginPath(); c.arc(x, y, rr, 0, 7); c.stroke(); }
+  c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(x - 6, y - 7, 4, 2, -0.6, 0, 7); c.fill();
+  if (Math.abs(p) === 2) { A.glow(c, x, y, 18, '255,210,63', 0.35); c.fillStyle = A.INK; c.beginPath(); c.moveTo(x - 8, y + 5); c.lineTo(x - 8, y - 5); c.lineTo(x - 3.5, y - 0.5); c.lineTo(x, y - 7.5); c.lineTo(x + 3.5, y - 0.5); c.lineTo(x + 8, y - 5); c.lineTo(x + 8, y + 5); c.fill();
+    const cg = c.createLinearGradient(0, y - 7, 0, y + 4); cg.addColorStop(0, '#fff2a0'); cg.addColorStop(0.5, '#ffd23f'); cg.addColorStop(1, '#b07a10'); c.fillStyle = cg; c.beginPath(); c.moveTo(x - 7, y + 4); c.lineTo(x - 7, y - 4); c.lineTo(x - 3, y); c.lineTo(x, y - 6); c.lineTo(x + 3, y); c.lineTo(x + 7, y - 4); c.lineTo(x + 7, y + 4); c.fill();
+    c.fillStyle = '#e63946'; c.fillRect(x - 1, y + 0.5, 2, 2); c.fillStyle = '#46a8ff'; c.fillRect(x - 5, y + 1, 1.6, 1.6); c.fillRect(x + 3.4, y + 1, 1.6, 1.6); }
 }
 title();
 K.run(update, draw);

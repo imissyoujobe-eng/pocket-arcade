@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Fortress Flight: an isometric run through a floating fortress. Watch your altitude and shadow, thread the walls, and blow up fuel tanks to stay in the air.
 K.theme({ bg: '#05070f', ink: '#e8f0ff', accent: '#4ad8ff', accentInk: '#001a24' });
@@ -63,24 +64,32 @@ function update(dt) {
 }
 function poly(c, pts, col) { c.fillStyle = col; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)); c.fill(); }
 function draw(c, t) {
-  c.fillStyle = '#05070f'; c.fillRect(0, 0, W, H);
-  for (let i = 0; i < 50; i++) { c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect((i * 97 - z * 0.3) % W + (i * 97 - z * 0.3 < 0 ? W : 0), (i * 53) % H, 1, 1); }
-  if (!inSpace) { const a = iso(-60, z - 40, 0), b = iso(60, z - 40, 0), cc = iso(60, z + 400, 0), d = iso(-60, z + 400, 0); poly(c, [a, b, cc, d], '#3a4058'); c.strokeStyle = '#4a5270'; for (let zz = Math.floor(z / 40) * 40; zz < z + 400; zz += 40) { const p = iso(-60, zz, 0), q = iso(60, zz, 0); c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); } }
+  const sg = c.createLinearGradient(0, 0, W, H); sg.addColorStop(0, '#05030f'); sg.addColorStop(1, '#10183a'); c.fillStyle = sg; c.fillRect(0, 0, W, H);
+  A.glow(c, 240, 50, 120, '120,60,200', 0.18); A.glow(c, 60, 200, 100, '40,120,220', 0.15);
+  for (let i = 0; i < 70; i++) { const x = ((i * 97 - z * (0.2 + (i % 3) * 0.15)) % W + W) % W; c.fillStyle = 'rgba(255,255,255,' + (0.3 + (i % 4) * 0.18) + ')'; c.fillRect(x, (i * 53) % H, i % 7 ? 1 : 1.6, i % 7 ? 1 : 1.6); }
+  if (!inSpace) {
+    // fortress deck: metal plates with seams, rivets and lit trim
+    for (let zz = Math.floor((z - 40) / 20) * 20; zz < z + 400; zz += 20) for (let xx = -60; xx < 60; xx += 20) { const a = iso(xx, zz, 0), b = iso(xx + 20, zz, 0), cc = iso(xx + 20, zz + 20, 0), d = iso(xx, zz + 20, 0), k = (Math.abs(zz / 20 | 0) + (xx / 20 | 0)) % 2; poly(c, [a, b, cc, d], k ? '#3a4260' : '#353c58'); c.strokeStyle = 'rgba(0,0,0,.45)'; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.lineTo(cc.x, cc.y); c.stroke(); c.strokeStyle = 'rgba(255,255,255,.06)'; c.beginPath(); c.moveTo(a.x, a.y + 0.5); c.lineTo(d.x, d.y + 0.5); c.stroke(); const m = iso(xx + 3, zz + 3, 0); c.fillStyle = 'rgba(160,180,220,.35)'; c.fillRect(m.x, m.y, 1, 1); }
+    const e1 = iso(-60, z - 40, 0), e2 = iso(-60, z + 400, 0), e3 = iso(60, z - 40, 0), e4 = iso(60, z + 400, 0);
+    c.strokeStyle = A.INK; c.lineWidth = 3; c.beginPath(); c.moveTo(e1.x, e1.y); c.lineTo(e2.x, e2.y); c.moveTo(e3.x, e3.y); c.lineTo(e4.x, e4.y); c.stroke(); c.lineWidth = 1;
+    c.fillStyle = '#20263a'; c.beginPath(); c.moveTo(e3.x, e3.y); c.lineTo(e4.x, e4.y); c.lineTo(e4.x, e4.y + 14); c.lineTo(e3.x, e3.y + 14); c.fill();
+    for (let zz = Math.floor(z / 40) * 40; zz < z + 400; zz += 40) { const p = iso(60, zz, 0); c.fillStyle = Math.floor(t / 300 + zz / 40) % 2 ? '#4ad8ff' : '#1a5a7a'; c.fillRect(p.x - 1, p.y + 3, 3, 3); A.glow(c, p.x, p.y + 4, 8, '74,216,255', 0.2); }
+  }
   const list = things.slice().sort((a, b) => b.z - a.z);
   const myZ = z + 40;
   let meDrawn = false;
-  const drawMe = () => { if (state !== 'play' || (invul > 0 && Math.floor(t / 90) % 2)) return; const sh = iso(me.x, myZ, 0); c.fillStyle = 'rgba(0,0,0,.5)'; c.beginPath(); c.ellipse(sh.x, sh.y, 9, 4, 0, 0, 7); c.fill(); const p = iso(me.x, myZ, me.alt); c.fillStyle = '#4ad8ff'; c.beginPath(); c.moveTo(p.x + 12, p.y - 6); c.lineTo(p.x - 10, p.y - 2); c.lineTo(p.x - 4, p.y + 6); c.fill(); c.fillStyle = '#e8f8ff'; c.fillRect(p.x - 2, p.y - 3, 6, 3); };
+  const drawMe = () => { if (state !== 'play' || (invul > 0 && Math.floor(t / 90) % 2)) return; const sh = iso(me.x, myZ, 0); c.fillStyle = 'rgba(0,0,0,.5)'; c.beginPath(); c.ellipse(sh.x, sh.y, 11, 5, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(74,216,255,.25)'; c.beginPath(); c.moveTo(sh.x, sh.y); const p = iso(me.x, myZ, me.alt); c.lineTo(p.x, p.y); c.stroke(); A.glow(c, p.x - 10, p.y + 2, 12, '255,150,60', 0.6); c.fillStyle = A.INK; c.beginPath(); c.moveTo(p.x + 14, p.y - 7); c.lineTo(p.x - 12, p.y - 3); c.lineTo(p.x - 5, p.y + 8); c.fill(); const pg = c.createLinearGradient(0, p.y - 7, 0, p.y + 7); pg.addColorStop(0, '#aaf0ff'); pg.addColorStop(1, '#2a8ab8'); c.fillStyle = pg; c.beginPath(); c.moveTo(p.x + 12, p.y - 6); c.lineTo(p.x - 10, p.y - 2); c.lineTo(p.x - 4, p.y + 6); c.fill(); c.fillStyle = '#e8f8ff'; c.fillRect(p.x - 2, p.y - 3, 6, 3); c.fillStyle = '#ffd23a'; c.fillRect(p.x - 11, p.y - 3, 2, 3); };
   list.forEach(th => {
     if (!meDrawn && th.z < myZ) { drawMe(); meDrawn = true; }
     if (th.k === 'wall') {
       for (let x = -60; x < 60; x += 10) for (let al = 0; al < 70; al += 10) {
         if (Math.abs(x + 5 - th.gapX) < 16 && Math.abs(al + 5 - th.gapAlt) < 14) continue;
-        const p = iso(x, th.z, al + 10); c.fillStyle = (x / 10 + al / 10) % 2 ? '#7a84a8' : '#6a7498'; c.fillRect(p.x, p.y, 9, 10);
+        const p = iso(x, th.z, al + 10), col = (x / 10 + al / 10) % 2 ? '#8a94b8' : '#7a84a8'; c.fillStyle = A.INK; c.fillRect(p.x - 0.5, p.y - 0.5, 10, 11); c.fillStyle = col; c.fillRect(p.x, p.y, 9, 10); c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(p.x, p.y, 9, 1.5); c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(p.x + 7, p.y, 2, 10); if (((x + al) / 10) % 3 === 0) { c.fillStyle = 'rgba(255,200,80,.6)'; c.fillRect(p.x + 3, p.y + 4, 2, 2); }
       }
     } else if (th.k === 'field') { const p = iso(-60, th.z, th.alt), q = iso(60, th.z, th.alt); c.strokeStyle = Math.floor(t / 80) % 2 ? '#ff4ad8' : '#ffe04a'; c.lineWidth = 2; c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(q.x, q.y); c.stroke(); c.lineWidth = 1; const a = iso(-60, th.z, 0), b = iso(60, th.z, 0); c.fillStyle = '#888'; c.fillRect(a.x - 2, p.y, 4, a.y - p.y); c.fillRect(b.x - 2, q.y, 4, b.y - q.y); }
     else { const p = iso(th.x, th.z, th.alt || 0);
-      if (th.k === 'turret') { c.fillStyle = '#9a3a3a'; c.fillRect(p.x - 7, p.y - 10, 14, 10); c.fillStyle = '#222'; c.fillRect(p.x - 2, p.y - 14, 4, 5); }
-      if (th.k === 'tank') { c.fillStyle = '#d0a040'; c.beginPath(); c.ellipse(p.x, p.y - 7, 8, 9, 0, 0, 7); c.fill(); c.fillStyle = '#222'; c.font = '7px sans-serif'; c.textAlign = 'center'; c.fillText('F', p.x, p.y - 4); }
+      if (th.k === 'turret') { c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(p.x + 2, p.y + 1, 9, 4, 0, 0, 7); c.fill(); A.part(c, p.x - 7, p.y - 10, 14, 10, '#a83a3a'); c.fillStyle = '#6a1a1a'; c.fillRect(p.x + 3, p.y - 10, 4, 10); A.ball(c, p.x, p.y - 11, 4, '#c84a4a'); A.part(c, p.x - 1.5, p.y - 18, 3, 7, '#333'); }
+      if (th.k === 'tank') { c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(p.x + 2, p.y + 1, 9, 4, 0, 0, 7); c.fill(); c.fillStyle = A.INK; c.beginPath(); c.ellipse(p.x, p.y - 7, 8.8, 9.8, 0, 0, 7); c.fill(); const tg = c.createLinearGradient(p.x - 8, 0, p.x + 8, 0); tg.addColorStop(0, '#f0c860'); tg.addColorStop(1, '#a07020'); c.fillStyle = tg; c.beginPath(); c.ellipse(p.x, p.y - 7, 8, 9, 0, 0, 7); c.fill(); c.fillStyle = '#e63946'; c.fillRect(p.x - 8, p.y - 9, 16, 3); K.text(c, 'F', p.x, p.y - 3, 7, '#fff'); }
       if (th.k === 'shell') { c.fillStyle = '#ffec6a'; c.fillRect(p.x - 2, p.y - 2, 4, 4); }
       if (th.k === 'ship') { const s = iso(th.x, th.z, 0); c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(s.x - 5, s.y - 1, 10, 3); c.fillStyle = '#ff7a4a'; c.beginPath(); c.moveTo(p.x - 10, p.y); c.lineTo(p.x + 6, p.y - 6); c.lineTo(p.x + 6, p.y + 4); c.fill(); }
     }

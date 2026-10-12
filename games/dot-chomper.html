@@ -86,6 +86,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   </div>
 </div>
 
+<script src="../lib/art.js"></script>
 <script>
 window.addEventListener('error', function (e) { var b = document.getElementById('banner'); if (b) { b.hidden = false; b.style.fontSize = '14px'; b.textContent = 'Error: ' + e.message; } });
 (function () {
@@ -380,38 +381,44 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   }
 
   // ---------- drawing ----------
+  let mazeCv = null, mazeKey = '';
+  function buildMaze(p, white) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2), c2 = document.createElement('canvas'); c2.width = W * dpr; c2.height = H * dpr; const c = c2.getContext('2d'); c.scale(dpr, dpr);
+    // background: deep gradient with a faint star field and the maze floor tiles
+    const bg = c.createRadialGradient(W / 2, H / 2, 20, W / 2, H / 2, Math.max(W, H) * .7); bg.addColorStop(0, A.shade(p.bg, .12)); bg.addColorStop(1, A.shade(p.bg, -.4)); c.fillStyle = bg; c.fillRect(0, 0, W, H);
+    for (let i = 0; i < 90; i++) { c.fillStyle = 'rgba(255,255,255,' + (.1 + A.hash(i, 3) * .4) + ')'; c.fillRect(A.hash(i, 1) * W, A.hash(i, 2) * H, 1.2, 1.2); }
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { if (isWall(x, y) || tileAt(x, y) === 'X') continue; const L = ox + x * T, Tp = oy + y * T; c.fillStyle = (x + y) % 2 ? 'rgba(255,255,255,.025)' : 'rgba(0,0,0,.12)'; c.fillRect(L, Tp, T, T); }
+    // walls: drop shadow, bevelled body, glowing rim on open edges
+    c.fillStyle = 'rgba(0,0,0,.45)'; for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (isWall(x, y)) c.fillRect(ox + x * T + T * .12, oy + y * T + T * .16, T, T);
+    const base = white ? '#c8c8ff' : p.wall;
+    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { if (!isWall(x, y)) continue; const L = ox + x * T, Tp = oy + y * T;
+      const g = c.createLinearGradient(L, Tp, L + T, Tp + T); g.addColorStop(0, A.shade(base, .18)); g.addColorStop(1, A.shade(base, -.22)); c.fillStyle = g; c.fillRect(L, Tp, T + .5, T + .5);
+      if (A.hash(x, y, 7) < .35) { c.fillStyle = 'rgba(255,255,255,.05)'; c.fillRect(L + T * .2, Tp + T * .2, T * .25, T * .25); } }
+    const rim = white ? '#ffffff' : p.edge;
+    c.lineCap = 'round';
+    const edges = (fn) => { c.beginPath(); for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) { if (!isWall(x, y)) continue; const L = ox + x * T, Tp = oy + y * T, i = T * .12;
+      const oT = !isWall(x, y - 1) && tileAt(x, y - 1) !== 'X', oB = !isWall(x, y + 1) && tileAt(x, y + 1) !== 'X', oL = !isWall(x - 1, y) && tileAt(x - 1, y) !== 'X', oR = !isWall(x + 1, y) && tileAt(x + 1, y) !== 'X';
+      fn(L, Tp, i, oT, oB, oL, oR); } c.stroke(); };
+    c.strokeStyle = 'rgba(0,0,0,.5)'; c.lineWidth = Math.max(3, T * .22); edges((L, Tp, i, oT, oB, oL, oR) => { if (oT) { c.moveTo(L, Tp + i); c.lineTo(L + T, Tp + i); } if (oB) { c.moveTo(L, Tp + T - i); c.lineTo(L + T, Tp + T - i); } if (oL) { c.moveTo(L + i, Tp); c.lineTo(L + i, Tp + T); } if (oR) { c.moveTo(L + T - i, Tp); c.lineTo(L + T - i, Tp + T); } });
+    c.save(); c.shadowColor = rim; c.shadowBlur = T * .5; c.strokeStyle = rim; c.lineWidth = Math.max(1.5, T * .1);
+    edges((L, Tp, i, oT, oB, oL, oR) => { if (oT) { c.moveTo(L, Tp + i); c.lineTo(L + T, Tp + i); } if (oB) { c.moveTo(L, Tp + T - i); c.lineTo(L + T, Tp + T - i); } if (oL) { c.moveTo(L + i, Tp); c.lineTo(L + i, Tp + T); } if (oR) { c.moveTo(L + T - i, Tp); c.lineTo(L + T - i, Tp + T); } }); c.restore();
+    c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = Math.max(.8, T * .035); edges((L, Tp, i, oT, oB, oL, oR) => { if (oT) { c.moveTo(L, Tp + i); c.lineTo(L + T, Tp + i); } if (oL) { c.moveTo(L + i, Tp); c.lineTo(L + i, Tp + T); } });
+    // ghost-house gate
+    c.fillStyle = '#ff8fd0'; c.fillRect(ox + 9 * T, oy + 8 * T + T * .42, T, T * .16); c.fillStyle = '#fff'; c.fillRect(ox + 9 * T, oy + 8 * T + T * .42, T, T * .05);
+    return c2;
+  }
   function drawMaze() {
     const p = pal(), white = phase === 'clear' && Math.floor(flash * 6) % 2;
-    ctx.fillStyle = p.bg; ctx.fillRect(0, 0, W, H);
-    const r = T * .28;
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      if (!isWall(x, y)) continue;
-      const L = ox + x * T, Tp = oy + y * T;
-      ctx.fillStyle = white ? '#e8e8ff' : p.wall; ctx.fillRect(L, Tp, T + .5, T + .5);
-    }
-    ctx.strokeStyle = white ? '#ffffff' : p.edge; ctx.lineWidth = Math.max(1.5, T * .1); ctx.lineCap = 'round';
-    ctx.beginPath();
-    for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
-      if (!isWall(x, y)) continue;
-      const L = ox + x * T, Tp = oy + y * T, i = T * .12;
-      const openT = !isWall(x, y - 1) && tileAt(x, y - 1) !== 'X', openB = !isWall(x, y + 1) && tileAt(x, y + 1) !== 'X';
-      const openL = !isWall(x - 1, y) && tileAt(x - 1, y) !== 'X', openR = !isWall(x + 1, y) && tileAt(x + 1, y) !== 'X';
-      if (openT) { ctx.moveTo(L, Tp + i); ctx.lineTo(L + T, Tp + i); }
-      if (openB) { ctx.moveTo(L, Tp + T - i); ctx.lineTo(L + T, Tp + T - i); }
-      if (openL) { ctx.moveTo(L + i, Tp); ctx.lineTo(L + i, Tp + T); }
-      if (openR) { ctx.moveTo(L + T - i, Tp); ctx.lineTo(L + T - i, Tp + T); }
-    }
-    ctx.stroke();
-    // gate
-    ctx.fillStyle = '#ff8fd0'; ctx.fillRect(ox + 9 * T, oy + 8 * T + T * .42, T, T * .16);
-    // dots
+    const key = W + 'x' + H + '|' + T + '|' + level + '|' + (white ? 1 : 0);
+    if (mazeKey !== key) { mazeCv = buildMaze(p, white); mazeKey = key; }
+    ctx.drawImage(mazeCv, 0, 0, W, H);
+    // dots: little glowing pearls; power stars pulse with a halo
     const now = performance.now();
     for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
       const t = grid[y][x];
-      if (t === '.') { ctx.fillStyle = p.dot; ctx.fillRect(X(x) - T * .09, Y(y) - T * .09, T * .18, T * .18); }
-      else if (t === 'o') star(X(x), Y(y), T * (.34 + .06 * Math.sin(now / 150)), '#ffd23f');
+      if (t === '.') { const r = T * .1; ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(X(x) + r * .4, Y(y) + r * .5, r, 0, 7); ctx.fill(); ctx.fillStyle = p.dot; ctx.beginPath(); ctx.arc(X(x), Y(y), r, 0, 7); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillRect(X(x) - r * .5, Y(y) - r * .5, r * .5, r * .5); }
+      else if (t === 'o') { const R = T * (.36 + .06 * Math.sin(now / 150)); A.glow(ctx, X(x), Y(y), T * 1.1, '255,210,63', .45); star(X(x), Y(y), R + T * .05, '#8a5a00'); star(X(x), Y(y), R, '#ffd23f'); star(X(x) - R * .1, Y(y) - R * .12, R * .45, '#fff6c0'); }
     }
-    void r;
   }
   function star(cx, cy, R, col) {
     ctx.fillStyle = col; ctx.beginPath();
@@ -428,7 +435,8 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
     ctx.restore();
   }
   function drawChomper() {
-    const x = X(P.x), y = Y(P.y), R = T * .46;
+    const x = X(P.x), y = Y(P.y), R = T * .52;
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + R * .95, R * .7, R * .2, 0, 0, 7); ctx.fill();
     let scale = 1, spin = 0;
     if (phase === 'dying') { const k = 1 - Math.max(0, phaseT) / 1.8; scale = Math.max(0, 1 - k * 1.1); spin = k * 12; }
     if (scale <= 0) return;
@@ -442,7 +450,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
     ctx.beginPath(); ctx.ellipse(-R * .35 + step, R * .82, R * .28, R * .16, 0, 0, 7); ctx.ellipse(R * .3 - step, R * .82, R * .28, R * .16, 0, 0, 7); ctx.fill();
     // body
     const g = ctx.createRadialGradient(-R * .3, -R * .35, R * .1, 0, 0, R * 1.1); g.addColorStop(0, '#d2b0ff'); g.addColorStop(.5, '#9b5de5'); g.addColorStop(1, '#5b2a99');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * .92, 0, 7); ctx.fill();
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R * .92, 0, 7); ctx.fill(); ctx.strokeStyle = '#14081e'; ctx.lineWidth = Math.max(1.2, T * .07); ctx.stroke();
     // mouth on the front side, opens top-to-bottom
     const mh = R * (.12 + .42 * open);
     ctx.fillStyle = '#2a0d44'; ctx.beginPath(); ctx.ellipse(R * .42, R * .22, R * .42, mh, 0, 0, 7); ctx.fill();
@@ -455,12 +463,13 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
     ctx.restore();
   }
   function drawGloop(e, now) {
-    const x = X(e.x), y = Y(e.y), R = T * .45;
+    const x = X(e.x), y = Y(e.y), R = T * .5;
+    if (e.state !== 'eyes') { ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(x, y + R * .95, R * .7, R * .18, 0, 0, 7); ctx.fill(); A.glow(ctx, x, y, R * 2.2, e.fright ? '90,107,255' : '255,255,255', .12); }
     ctx.save(); ctx.translate(x, y);
     if (e.state !== 'eyes') {
       let col = e.color;
       if (e.fright) col = frightT < 2 && Math.floor(now / 180) % 2 ? '#f2f2ff' : '#5a6bff';
-      ctx.fillStyle = col;
+      { const gg = ctx.createRadialGradient(-R * .35, -R * .45, R * .1, 0, 0, R * 1.2); gg.addColorStop(0, A.shade(col, .45)); gg.addColorStop(.55, col); gg.addColorStop(1, A.shade(col, -.35)); ctx.fillStyle = gg; }
       const w = Math.sin(now / 120 + e.bob) * R * .08;
       ctx.beginPath();
       ctx.moveTo(-R * .9, R * .6);
@@ -470,6 +479,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       ctx.quadraticCurveTo(0, R * (1 - w / R), -R * .3, R * .7);
       ctx.quadraticCurveTo(-R * .6, R * (.95 - w / R), -R * .9, R * .6);
       ctx.fill();
+      ctx.strokeStyle = '#120a20'; ctx.lineWidth = Math.max(1.2, T * .07); ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.ellipse(-R * .4, -R * .55, R * .22, R * .13, -.6, 0, 7); ctx.fill();
       // antenna
       ctx.strokeStyle = col; ctx.lineWidth = T * .06; ctx.beginPath(); ctx.moveTo(0, -R * .95); ctx.quadraticCurveTo(R * .2, -R * 1.3, R * .1, -R * 1.45); ctx.stroke();
@@ -511,4 +521,5 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
 })();
 </script>
 
+<script src="../lib/joy.js" data-axes="4" data-hide="#left,#right,#up,#down"></script>
 </body></html>

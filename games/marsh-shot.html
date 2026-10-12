@@ -295,6 +295,14 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       ctx.drawImage(mistCv, x, y - 20, w, 50);
     }
     ctx.globalAlpha = 1;
+    // wooden dock posts with rope and two floating decoys
+    for (const [px, ph] of [[W * .06, 70], [W * .16, 52], [W * .26, 40]]) { const top = H - ph - 14; ctx.fillStyle = '#1e140c'; ctx.fillRect(px - 6, top - 1, 12, ph + 2); const pg = ctx.createLinearGradient(px - 5, 0, px + 5, 0); pg.addColorStop(0, '#8a6440'); pg.addColorStop(1, '#4a3420'); ctx.fillStyle = pg; ctx.fillRect(px - 5, top, 10, ph); ctx.fillStyle = 'rgba(0,0,0,.25)'; for (let k = 6; k < ph; k += 9) ctx.fillRect(px - 5, top + k, 10, 1); ctx.fillStyle = '#a07a50'; ctx.beginPath(); ctx.ellipse(px, top, 5, 2, 0, 0, 7); ctx.fill(); }
+    ctx.strokeStyle = '#c8b080'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(W * .06, H - 80); ctx.quadraticCurveTo(W * .11, H - 60, W * .16, H - 62); ctx.quadraticCurveTo(W * .21, H - 48, W * .26, H - 50); ctx.stroke();
+    for (const [dx, dy, dc] of [[.62, .55, '#2fbf6f'], [.8, .7, '#4f8bea']]) { const x = W * dx, y = ground + (H - ground) * dy + Math.sin(clock * 1.4 + dx * 9) * 1.5;
+      ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.beginPath(); ctx.ellipse(x, y + 4, 16, 3, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#6e5c47'; ctx.beginPath(); ctx.ellipse(x, y, 15, 6, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = '#4a3a2a'; ctx.beginPath(); ctx.moveTo(x - 14, y - 2); ctx.lineTo(x - 20, y - 6); ctx.lineTo(x - 13, y); ctx.fill();
+      ctx.fillStyle = dc; ctx.beginPath(); ctx.arc(x + 11, y - 8, 5, 0, 7); ctx.fill(); ctx.fillStyle = '#ffd35a'; ctx.beginPath(); ctx.moveTo(x + 15, y - 9); ctx.lineTo(x + 21, y - 7); ctx.lineTo(x + 15, y - 6); ctx.fill(); ctx.fillStyle = '#111'; ctx.fillRect(x + 12, y - 10, 1.5, 1.5);
+      ctx.strokeStyle = 'rgba(255,230,200,.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.ellipse(x, y + 1, 20 + Math.sin(clock * 2 + dx) * 2, 2.5, 0, 0, 7); ctx.stroke(); }
     // back reeds, then front reeds
     reeds.forEach(r => { if (!r.front) drawReed(r, 1); });
     reeds.forEach(r => { if (r.front) drawReed(r, 1.3); });
@@ -333,7 +341,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       ctx.beginPath(); ctx.ellipse(d.x, ground + 14 + (1 - k) * 20, d.size * (.6 + k * .4), 4, 0, 0, Math.PI * 2); ctx.fill();
     }
     ctx.save(); ctx.translate(d.x, d.y);
-    const s = d.size / 30, dir = d.vx < 0 ? -1 : 1;
+    const s = d.size * 1.3 / 30, dir = d.vx < 0 ? -1 : 1;
     ctx.scale(dir * s, s);
     if (d.state === 'fall') ctx.rotate(d.spin);
     else ctx.rotate(Math.max(-.35, Math.min(.35, d.vy / d.speed * .35)) * dir);
@@ -345,7 +353,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
     ctx.beginPath(); ctx.moveTo(-4, -4); ctx.quadraticCurveTo(-2, -6 - 18 * flap, 6, -6 - 22 * flap); ctx.lineTo(10, -3); ctx.closePath(); ctx.fill();
     // body
     ctx.fillStyle = lg(-12, 12, c.body[0], c.body[1]);
-    ctx.beginPath(); ctx.ellipse(0, 0, 22, 12, -0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 0, 22, 12, -0.1, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(20,12,8,.7)'; ctx.lineWidth = 1.2; ctx.stroke();
     // chest
     ctx.fillStyle = 'rgba(120,60,40,.55)'; ctx.beginPath(); ctx.ellipse(12, 2, 9, 8, .2, 0, Math.PI * 2); ctx.fill();
     // breast feather scallops
@@ -598,4 +606,5 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
 })();
 </script>
 
+<script src="../lib/joy.js" data-axes="4" data-mode="aim" data-target="canvas" data-buttons='[{"label":"FIRE","key":"aimfire"}]'></script>
 </body></html>

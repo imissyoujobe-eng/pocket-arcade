@@ -90,6 +90,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
   </div>
 </div>
 
+<script src="../lib/art.js"></script>
 <script>
 window.addEventListener('error', function (e) { var b = document.getElementById('banner'); if (b) { b.hidden = false; b.style.fontSize = '14px'; b.textContent = 'Error: ' + e.message; } });
 (function () {
@@ -319,29 +320,75 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
     hud();
   }
 
+  // toy-brick blocks: bevelled faces, a raised stud, cached per color and size
+  const brickCache = {};
+  function brickSprite(col, s) {
+    const k = col + '|' + s; if (brickCache[k]) return brickCache[k];
+    const c2 = document.createElement('canvas'), R = 2; c2.width = c2.height = Math.ceil(s * R); const c = c2.getContext('2d'); c.scale(R, R);
+    const r = s * .16;
+    c.fillStyle = 'rgba(10,15,30,.9)'; c.beginPath(); c.roundRect(.5, .5, s - 1, s - 1, r); c.fill();
+    const g = c.createLinearGradient(0, 0, s, s); g.addColorStop(0, A.shade(col, .35)); g.addColorStop(.5, col); g.addColorStop(1, A.shade(col, -.35));
+    c.fillStyle = g; c.beginPath(); c.roundRect(1.5, 1.5, s - 3, s - 3, r * .8); c.fill();
+    // bevel: light top/left, dark bottom/right
+    c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.moveTo(2, s - 3); c.lineTo(2, 2); c.lineTo(s - 3, 2); c.lineTo(s - 3 - s * .12, 2 + s * .12); c.lineTo(2 + s * .12, 2 + s * .12); c.lineTo(2 + s * .12, s - 3 - s * .12); c.closePath(); c.fill();
+    c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath(); c.moveTo(s - 2, 2); c.lineTo(s - 2, s - 2); c.lineTo(2, s - 2); c.lineTo(2 + s * .12, s - 2 - s * .12); c.lineTo(s - 2 - s * .12, s - 2 - s * .12); c.lineTo(s - 2 - s * .12, 2 + s * .12); c.closePath(); c.fill();
+    // stud
+    const cx = s / 2, cy = s / 2, sr = s * .2;
+    c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(cx + s * .03, cy + s * .05, sr, sr * .9, 0, 0, 7); c.fill();
+    const sg = c.createRadialGradient(cx - sr * .4, cy - sr * .4, sr * .1, cx, cy, sr); sg.addColorStop(0, A.shade(col, .55)); sg.addColorStop(1, A.shade(col, -.15));
+    c.fillStyle = sg; c.beginPath(); c.arc(cx, cy, sr, 0, 7); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = Math.max(.6, s * .03); c.beginPath(); c.arc(cx, cy, sr * .7, Math.PI * 1.1, Math.PI * 1.7); c.stroke();
+    // a small sparkle
+    c.fillStyle = 'rgba(255,255,255,.8)'; c.fillRect(s * .2, s * .2, s * .08, s * .08);
+    return brickCache[k] = c2;
+  }
   function block(x, y, s, col, alpha) {
     ctx.globalAlpha = alpha == null ? 1 : alpha;
-    const r = s * .22;
-    ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x + 1, y + 1, s - 2, s - 2, r) : ctx.rect(x + 1, y + 1, s - 2, s - 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x + s * .16, y + s * .12, s * .5, s * .2, s * .1) : ctx.rect(x + s * .16, y + s * .12, s * .5, s * .2); ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fillRect(x + s * .12, y + s * .78, s * .76, s * .1);
+    ctx.drawImage(brickSprite(col, Math.round(s)), x, y, s, s);
     ctx.globalAlpha = 1;
   }
   function bombBlock(x, y, s, now) {
-    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(x + s / 2, y + s * .56, s * .4, 0, 7); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.arc(x + s * .38, y + s * .44, s * .1, 0, 7); ctx.fill();
-    ctx.strokeStyle = '#c9a45c'; ctx.lineWidth = s * .08; ctx.beginPath(); ctx.moveTo(x + s * .6, y + s * .22); ctx.quadraticCurveTo(x + s * .75, y + s * .05, x + s * .85, y + s * .1); ctx.stroke();
-    ctx.fillStyle = Math.floor(now / 90) % 2 ? '#ffd23f' : '#ff7a1a'; ctx.beginPath(); ctx.arc(x + s * .86, y + s * .1, s * .09, 0, 7); ctx.fill();
+    A.glow(ctx, x + s / 2, y + s * .56, s * .9, '255,120,40', .25 + .15 * Math.sin(now / 90));
+    A.ball(ctx, x + s / 2, y + s * .58, s * .38, '#3a3a4c');
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.ellipse(x + s * .37, y + s * .45, s * .1, s * .06, -.6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#ffd23f'; ctx.fillRect(x + s * .32, y + s * .58, s * .36, s * .08);
+    ctx.fillStyle = '#888'; ctx.fillRect(x + s * .5, y + s * .16, s * .14, s * .1);
+    ctx.strokeStyle = '#c9a45c'; ctx.lineWidth = s * .07; ctx.beginPath(); ctx.moveTo(x + s * .57, y + s * .17); ctx.quadraticCurveTo(x + s * .72, y + s * .02, x + s * .84, y + s * .1); ctx.stroke();
+    A.glow(ctx, x + s * .86, y + s * .1, s * .3, '255,210,63', .6);
+    ctx.fillStyle = Math.floor(now / 90) % 2 ? '#fff6a0' : '#ff7a1a'; ctx.beginPath(); ctx.arc(x + s * .86, y + s * .1, s * .09, 0, 7); ctx.fill();
+  }
+  let bgCv = null, bgFor = '';
+  function buildBg() {
+    const c2 = document.createElement('canvas'), dpr = Math.min(window.devicePixelRatio || 1, 2); c2.width = W * dpr; c2.height = H * dpr; const c = c2.getContext('2d'); c.scale(dpr, dpr);
+    // dusk construction site: sky, skyline, a tower crane
+    const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0e1630'); g.addColorStop(.6, '#2a3a6a'); g.addColorStop(1, '#e08a5a'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+    for (let i = 0; i < 50; i++) { c.fillStyle = 'rgba(255,255,255,' + (.2 + A.hash(i, 1) * .5) + ')'; c.fillRect(A.hash(i, 2) * W, A.hash(i, 3) * H * .4, 1.2, 1.2); }
+    A.skyline(c, 0, { W, factor: 0, base: H, amp: H * .35, col: '#1a2240', win: 'rgba(255,210,120,.4)' });
+    c.strokeStyle = '#d8a020'; c.lineWidth = 2; const cx = W - 8, top = Math.max(8, by - 40); c.beginPath(); c.moveTo(cx, H); c.lineTo(cx, top); c.moveTo(cx - W * .5, top + 6); c.lineTo(cx + W * .12, top + 6); c.stroke();
+    c.lineWidth = 1; for (let y = top; y < H; y += 10) { c.beginPath(); c.moveTo(cx - 4, y); c.lineTo(cx + 4, y + 10); c.stroke(); }
+    c.beginPath(); for (let x = cx - W * .5; x < cx; x += 10) { c.moveTo(x, top + 6); c.lineTo(x + 5, top); c.lineTo(x + 10, top + 6); } c.stroke();
+    c.fillStyle = '#d8a020'; c.fillRect(cx + W * .06, top + 2, 14, 10); c.strokeStyle = 'rgba(255,255,255,.4)'; c.beginPath(); c.moveTo(cx - W * .32, top + 6); c.lineTo(cx - W * .32, top + 60); c.stroke(); c.fillStyle = '#c03030'; c.fillRect(cx - W * .32 - 6, top + 60, 12, 8);
+    // steel frame around the well with rivets
+    const fx = bx - 10, fy = by - 10, fw = C * COLS + 20, fh = C * ROWS + 20;
+    c.fillStyle = '#05080f'; c.fillRect(fx - 1, fy - 1, fw + 2, fh + 2);
+    const fg = c.createLinearGradient(fx, 0, fx + fw, 0); fg.addColorStop(0, '#5a6a8a'); fg.addColorStop(.5, '#8a9aba'); fg.addColorStop(1, '#4a5a7a'); c.fillStyle = fg; c.fillRect(fx, fy, fw, fh);
+    c.fillStyle = '#0a1122'; c.fillRect(bx - 4, by - 4, C * COLS + 8, C * ROWS + 8);
+    for (let y = fy + 6; y < fy + fh; y += 18) for (const xx of [fx + 3, fx + fw - 3]) { c.fillStyle = '#2a3450'; c.beginPath(); c.arc(xx, y, 2, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect(xx - 1, y - 1, 1, 1); }
+    for (let x = fx + 6; x < fx + fw; x += 18) for (const yy of [fy + 3, fy + fh - 3]) { c.fillStyle = '#2a3450'; c.beginPath(); c.arc(x, yy, 2, 0, 7); c.fill(); }
+    // hazard tape at the top of the well
+    for (let x = 0; x < C * COLS; x += 10) { c.fillStyle = (x / 10) % 2 ? '#ffd23f' : '#1a1a1a'; c.beginPath(); c.moveTo(bx + x, by - 4); c.lineTo(bx + x + 10, by - 4); c.lineTo(bx + x + 6, by + 2); c.lineTo(bx + x - 4, by + 2); c.fill(); }
+    // blueprint grid inside the well
+    c.strokeStyle = 'rgba(80,140,255,.1)'; c.lineWidth = 1; for (let x = 0; x <= COLS; x++) { c.beginPath(); c.moveTo(bx + x * C, by); c.lineTo(bx + x * C, by + C * ROWS); c.stroke(); } for (let y = 0; y <= ROWS; y++) { c.beginPath(); c.moveTo(bx, by + y * C); c.lineTo(bx + C * COLS, by + y * C); c.stroke(); }
+    // next-piece panel plate
+    const boxW = W - px - 12, bs = Math.min(C * .8, boxW / 3.4), pw = Math.min(boxW, bs * 3.6);
+    c.fillStyle = '#05080f'; c.fillRect(px - 3, by + 17, pw + 6, bs * 3.6 + 6); c.fillStyle = fg; c.fillRect(px - 2, by + 18, pw + 4, bs * 3.6 + 4); c.fillStyle = '#0a1122'; c.fillRect(px, by + 20, pw, bs * 3.6);
+    bgCv = c2; bgFor = W + 'x' + H;
   }
   function draw(now) {
-    ctx.fillStyle = '#101a2e'; ctx.fillRect(0, 0, W, H);
+    if (bgFor !== W + 'x' + H) buildBg();
+    ctx.drawImage(bgCv, 0, 0, W, H);
     ctx.save();
     if (shake > 0) ctx.translate((Math.random() - .5) * 8 * shake / .35, (Math.random() - .5) * 8 * shake / .35);
-    // well
-    ctx.fillStyle = '#0a1122'; ctx.fillRect(bx - 4, by - 4, C * COLS + 8, C * ROWS + 8);
-    ctx.strokeStyle = '#3a4d7a'; ctx.lineWidth = 3; ctx.strokeRect(bx - 4, by - 4, C * COLS + 8, C * ROWS + 8);
-    ctx.fillStyle = 'rgba(255,255,255,.035)';
-    for (let x = 0; x < COLS; x++) for (let y = 0; y < ROWS; y++) if ((x + y) % 2) ctx.fillRect(bx + x * C, by + y * C, C, C);
     ctx.save(); ctx.beginPath(); ctx.rect(bx, by, C * COLS, C * ROWS); ctx.clip();
     if (grid) {
       // drop beams under the falling piece
@@ -367,7 +414,6 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
     // side panel
     ctx.fillStyle = '#eef3ff'; ctx.globalAlpha = .7; ctx.font = '700 11px Nunito, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.fillText('NEXT', px, by + 12); ctx.globalAlpha = 1;
     const boxW = W - px - 12, bs = Math.min(C * .8, boxW / 3.4);
-    ctx.fillStyle = '#0a1122'; ctx.fillRect(px, by + 20, Math.min(boxW, bs * 3.6), bs * 3.6);
     if (next) {
       const w = width(next.cells), h = height(next.cells), ox = px + (Math.min(boxW, bs * 3.6) - w * bs) / 2, oy = by + 20 + (bs * 3.6 - h * bs) / 2;
       next.cells.forEach(([cx, cy]) => { if (next.bomb) bombBlock(ox + cx * bs, oy + cy * bs, bs, now); else block(ox + cx * bs, oy + cy * bs, bs, COLORS[next.col]); });
@@ -393,4 +439,5 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
 })();
 </script>
 
+<script src="../lib/joy.js" data-axes="4" data-hide="#left,#right"></script>
 </body></html>

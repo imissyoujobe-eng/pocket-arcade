@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sundown Showdown</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
+<script>
+// Sundown Showdown: an Old West gunfight. Two gunslingers, a cactus and a wagon between them. Angle your shots, bounce them off the canyon walls, first to 10 wins.
+K.theme({ bg: '#2a1408', ink: '#fff2d8', accent: '#ffb02a', accentInk: '#2a1400' });
+const W = 320, H = 220, TOP = 22, BOT = H - 14;
+K.screen(W, H);
+K.hud(['you', 'round', 'cpu']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'FIRE' }] });
+let state = 'title', me, cpu, shots, props, scoreMe, scoreCpu, round, msg, msgT, diff, best = K.best('sundown'), pauseT, parts;
+function title() { K.card({ title: 'SUNDOWN SHOWDOWN', text: 'Move your gunslinger with the joystick. FIRE shoots. Hold up or down while you fire to shoot at an angle: angled bullets bounce off the canyon walls, so you can hit him around the cactus and wagon. First to 10 hits wins the town!', best: best ? 'MOST WINS IN A ROW ' + best : '', button: 'Draw!', onStart: start }); }
+let streak = 0;
+function start() { scoreMe = 0; scoreCpu = 0; round = 1; diff = Math.min(1, 0.6 + streak * 0.1); newRound(); state = 'play'; }
+function newRound() {
+  me = { x: 30, y: H / 2, face: 1, cd: 0, hit: 0, col: '#4a8aff' }; cpu = { x: W - 30, y: H / 2, face: -1, cd: 1, hit: 0, col: '#e04a3a', ty: H / 2, think: 0 };
+  shots = []; parts = []; pauseT = 1.2; msg = round === 1 ? 'DRAW!' : 'ROUND ' + round; msgT = 1.2;
+  props = [{ k: 'cactus', x: 160, y: K.rnd(70, 150), w: 14, h: 34, hp: 4 }]; if (round % 2 === 0) props.push({ k: 'wagon', x: 160, y: props[0].y > 110 ? 50 : 160, w: 40, h: 22, hp: 6 });
+  if (round > 4) props.push({ k: 'cactus', x: K.rnd(110, 210), y: K.rnd(40, 180), w: 12, h: 28, hp: 3 });
+}
+function fire(g, dy) { if (g.cd > 0 || shots.some(s => s.owner === g)) return; g.cd = 0.35; shots.push({ owner: g, x: g.x + g.face * 12, y: g.y - 6, vx: g.face * 210, vy: dy * 120, bounces: 0 }); K.noise(0.12, 0.3); K.beep(900, 0.05, { to: 200 }); }
+function hitBox(s, p) { return s.x > p.x - p.w / 2 && s.x < p.x + p.w / 2 && s.y > p.y - p.h / 2 && s.y < p.y + p.h / 2; }
+function score(winner) {
+  const loser = winner === me ? cpu : me; loser.hit = 1.2; K.beep(200, 0.5, { to: 60, type: 'sawtooth' }); for (let i = 0; i < 14; i++) parts.push({ x: loser.x, y: loser.y - 6, vx: K.rnd(-60, 60), vy: K.rnd(-90, 0), t: 0.6, c: '#c8a070' });
+  if (winner === me) scoreMe++; else scoreCpu++;
+  msg = winner === me ? 'GOT HIM!' : 'YOU\'RE HIT!'; msgT = 1.3; pauseT = 1.4; shots = [];
+  if (scoreMe >= 10 || scoreCpu >= 10) setTimeout(() => {
+    const won = scoreMe >= 10; streak = won ? streak + 1 : 0; best = K.saveBest('sundown', streak); state = 'over';
+    K.card({ title: won ? 'FASTEST GUN IN TOWN' : 'RUN OUT OF TOWN', text: (won ? 'You won ' : 'You lost ') + scoreMe + ' to ' + scoreCpu + '.' + (won ? ' The next outlaw will be faster.' : ''), best: 'WINS IN A ROW: ' + streak, button: won ? 'Next Outlaw' : 'Try Again', onStart: start });
+  }, 1200);
+  else { round++; setTimeout(() => { if (state === 'play') newRound(); }, 1300); }
+}
+function moveG(g, dx, dy, dt, minX, maxX) {
+  const nx = K.clamp(g.x + dx * 70 * dt, minX, maxX), ny = K.clamp(g.y + dy * 70 * dt, TOP + 14, BOT - 4);
+  const blocked = props.some(p => Math.abs(nx - p.x) < p.w / 2 + 6 && Math.abs(ny - 6 - p.y) < p.h / 2 + 10);
+  if (!blocked) { g.x = nx; g.y = ny; } g.walk = (g.walk || 0) + (dx || dy ? dt : 0);
+}
+function update(dt) {
+  if (state !== 'play') return;
+  if (msgT > 0) msgT -= dt;
+  parts.forEach(p => { p.t -= dt; p.vy += 200 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
+  if (pauseT > 0) { pauseT -= dt; return; }
+  me.cd -= dt; cpu.cd -= dt;
+  const dx = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0), dy = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
+  moveG(me, dx, dy, dt, 14, 120);
+  if (K.hit('a')) fire(me, dy);
+  // CPU: line up with you (or with a bank shot), dodge bullets, shoot
+  cpu.think -= dt;
+  if (cpu.think <= 0) { cpu.think = K.rnd(0.25, 0.7) / (0.5 + diff); const clear = !props.some(p => Math.abs(p.y - me.y) < p.h / 2 + 4); cpu.ty = clear ? me.y : (me.y < H / 2 ? me.y + 50 : me.y - 50); }
+  const danger = shots.find(s => s.owner === me && s.vx > 0 && Math.abs(s.y - (cpu.y - 6)) < 16 && s.x < cpu.x);
+  let cdy = danger && Math.random() < diff ? (cpu.y > H / 2 ? -1 : 1) : Math.abs(cpu.ty - cpu.y) > 4 ? Math.sign(cpu.ty - cpu.y) : 0;
+  moveG(cpu, 0, cdy, dt * (0.7 + diff * 0.5), 200, W - 14);
+  if (cpu.cd <= 0 && Math.random() < dt * (1 + diff * 2.5)) { const dyAim = Math.abs(me.y - cpu.y) < 12 ? 0 : Math.sign(me.y - cpu.y); fire(cpu, dyAim); }
+  // bullets
+  shots.forEach(s => { s.x += s.vx * dt; s.y += s.vy * dt;
+    if (s.y < TOP + 2 || s.y > BOT) { s.vy = -s.vy; s.y = K.clamp(s.y, TOP + 2, BOT); s.bounces++; K.beep(1400, 0.03, { vol: 0.03 }); if (s.bounces > 3) s.dead = true; }
+    props.forEach(p => { if (!s.dead && hitBox(s, p)) { s.dead = true; p.hp--; for (let i = 0; i < 5; i++) parts.push({ x: s.x, y: s.y, vx: K.rnd(-40, 40), vy: K.rnd(-60, 0), t: 0.4, c: p.k === 'cactus' ? '#4a9a3a' : '#8a5a2a' }); K.noise(0.05, 0.15); } });
+    const tgt = s.owner === me ? cpu : me;
+    if (!s.dead && Math.abs(s.x - tgt.x) < 7 && s.y > tgt.y - 18 && s.y < tgt.y + 2) { s.dead = true; score(s.owner); }
+    if (s.x < -10 || s.x > W + 10) s.dead = true; });
+  props = props.filter(p => p.hp > 0); shots = shots.filter(s => !s.dead);
+  K.set('you', 'YOU ' + scoreMe); K.set('round', 'FIRST TO 10'); K.set('cpu', 'OUTLAW ' + scoreCpu);
+}
+function slinger(c, g, t) { c.save(); c.translate(g.x, g.y); c.scale(1.35, 1.35); c.translate(-g.x, -g.y); A.shadow(c, g.x, g.y + 1, 7); slinger0(c, g, t); c.restore(); }
+function slinger0(c, g, t) {
+  const x = Math.round(g.x), y = Math.round(g.y), f = g.face;
+  if (g.hit > 0) { c.fillStyle = g.col; c.fillRect(x - 10, y - 4, 16, 6); c.fillStyle = '#e0b088'; c.fillRect(x + 6 * -f - 2, y - 5, 5, 5); c.fillStyle = '#5a3a1a'; c.fillRect(x - 14, y - 2, 6, 3); return; }
+  const step = Math.sin((g.walk || 0) * 14) * 2;
+  c.fillStyle = '#3a2a1a'; c.fillRect(x - 4 + step * 0.5, y - 8, 3, 8); c.fillRect(x + 1 - step * 0.5, y - 8, 3, 8);
+  c.fillStyle = g.col; c.fillRect(x - 5, y - 18, 10, 11); c.fillStyle = '#7a4a1a'; c.fillRect(x - 5, y - 9, 10, 2);
+  c.fillStyle = '#e0b088'; c.fillRect(x - 3, y - 24, 7, 6);
+  c.fillStyle = '#5a3a1a'; c.fillRect(x - 7, y - 25, 14, 2); c.fillRect(x - 4, y - 29, 8, 4);
+  c.fillStyle = '#e0b088'; c.fillRect(x + f * 5 - (f < 0 ? 4 : 0), y - 15, 5, 3); c.fillStyle = '#333'; c.fillRect(x + f * 9 - (f < 0 ? 6 : 0), y - 16, 6, 2);
+}
+function draw(c, t) {
+  const g = c.createLinearGradient(0, TOP, 0, BOT); g.addColorStop(0, '#e8b070'); g.addColorStop(1, '#b8803e'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  for (let k = 0; k < 160; k++) { c.fillStyle = k % 3 ? 'rgba(120,70,30,.3)' : 'rgba(255,235,190,.35)'; c.fillRect(A.hash(k, 1) * W, TOP + A.hash(k, 2) * (BOT - TOP), 1 + (k % 3), 1); }
+  for (let k = 0; k < 7; k++) { const x = A.hash(k, 5) * W, y = TOP + 12 + A.hash(k, 6) * (BOT - TOP - 24); c.fillStyle = 'rgba(0,0,0,.2)'; c.beginPath(); c.ellipse(x + 2, y + 2, 4, 1.5, 0, 0, 7); c.fill(); A.ball(c, x, y, 2.5, '#9a7a5a'); }
+  for (let k = 0; k < 5; k++) { const x = A.hash(k, 9) * W, y = TOP + 20 + A.hash(k, 10) * (BOT - TOP - 40); c.strokeStyle = '#8a7a3a'; c.lineWidth = 1; for (let a = 0; a < 6; a++) { c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * 5, y - Math.abs(Math.sin(a)) * 5); c.stroke(); } }
+  [[0, TOP, 1], [BOT, H - BOT, -1]].forEach(([y0, h, d]) => { const rg = c.createLinearGradient(0, y0, 0, y0 + h); rg.addColorStop(0, d > 0 ? '#6a2a1a' : '#a8582a'); rg.addColorStop(1, d > 0 ? '#a8582a' : '#6a2a1a'); c.fillStyle = rg; c.fillRect(0, y0, W, h); c.fillStyle = 'rgba(255,200,140,.18)'; for (let k = 0; k < h; k += 4) c.fillRect(0, y0 + k, W, 1); c.fillStyle = A.INK; c.fillRect(0, d > 0 ? TOP - 1 : BOT - 1, W, 2); });
+  for (let x = 0; x < W; x += 18) { c.fillStyle = '#5a2414'; c.beginPath(); c.moveTo(x, TOP); c.lineTo(x + 9, TOP + 4 + A.hash(x, 1) * 3); c.lineTo(x + 18, TOP); c.fill(); c.beginPath(); c.moveTo(x + 5, BOT); c.lineTo(x + 13, BOT - 3 - A.hash(x, 2) * 3); c.lineTo(x + 22, BOT); c.fill(); }
+  A.glow(c, 160, TOP + 4, 80, '255,200,120', 0.25);
+  if (!props) return;
+  props.forEach(p => { if (p.k === 'cactus') { c.fillStyle = '#3a8a3a'; c.fillRect(p.x - p.w / 2 + 3, p.y - p.h / 2, p.w - 6, p.h); c.fillRect(p.x - p.w / 2 - 3, p.y - 6, 6, 4); c.fillRect(p.x - p.w / 2 - 3, p.y - 14, 3, 10); c.fillRect(p.x + p.w / 2 - 3, p.y - 10, 6, 4); c.fillRect(p.x + p.w / 2, p.y - 18, 3, 10); c.fillStyle = '#5aba4a'; c.fillRect(p.x - 1, p.y - p.h / 2 + 2, 2, p.h - 4); }
+    else { c.fillStyle = '#8a5a2a'; c.fillRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h - 6); c.fillStyle = '#eee'; c.beginPath(); c.arc(p.x, p.y - p.h / 2, p.w / 2, Math.PI, 0); c.fill(); c.fillStyle = '#3a2a1a'; c.beginPath(); c.arc(p.x - 12, p.y + p.h / 2 - 4, 5, 0, 7); c.arc(p.x + 12, p.y + p.h / 2 - 4, 5, 0, 7); c.fill(); }
+    if (p.hp <= 2) { c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(p.x - 3, p.y - 3, 4, 4); } });
+  if (state !== 'title') { slinger(c, me, t); slinger(c, cpu, t); }
+  c.fillStyle = '#222'; shots.forEach(s => c.fillRect(s.x - 2, s.y - 1, 4, 2));
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+  if (msgT > 0 && state === 'play') K.text(c, msg, W / 2, H / 2 - 30, 18, '#fff');
+}
+slinger = A.ink(slinger);
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.35); }; }
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>

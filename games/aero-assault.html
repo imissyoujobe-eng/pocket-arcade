@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Aero Assault: a vertical scrolling shooter. Guns for the air, bombs for the ground targets under your crosshair.
 K.theme({ bg: '#0c1a12', ink: '#eafff0', accent: '#5dffa0', accentInk: '#002410' });
@@ -62,19 +63,51 @@ function update(dt) {
   if (invul > 0) invul -= dt;
   K.set('score', score); K.set('zone', 'ZONE ' + zone); K.set('lives', '✈'.repeat(Math.max(0, lives)));
 }
+const ZG = [{ base: '#4e9a36', hi: '#6aba4e', lo: '#367a26' }, { base: '#b8a060', hi: '#d0b878', lo: '#8a7440' }, { base: '#7a8a9a', hi: '#9aaaba', lo: '#5a6a7a' }];
+function rcx(wy) { return W / 2 + 60 * Math.sin(wy * 0.03) + 18 * Math.sin(wy * 0.11); }
+function rhw(wy) { return 20 + 7 * Math.sin(wy * 0.07 + 1); }
+function plane(c, x, y, col, s, up) {
+  c.save(); c.translate(x, y); c.scale(s, up ? s : -s);
+  c.fillStyle = 'rgba(0,0,20,.25)'; c.beginPath(); c.moveTo(8, 6 + 12); c.lineTo(-2, 22); c.lineTo(18, 22); c.fill();
+  c.fillStyle = A.INK; c.beginPath(); c.moveTo(0, -12); c.lineTo(3, -4); c.lineTo(12, 3); c.lineTo(12, 6); c.lineTo(3, 5); c.lineTo(4, 10); c.lineTo(-4, 10); c.lineTo(-3, 5); c.lineTo(-12, 6); c.lineTo(-12, 3); c.lineTo(-3, -4); c.closePath(); c.fill();
+  const g = c.createLinearGradient(-11, 0, 11, 0); g.addColorStop(0, A.shade(col, -0.3)); g.addColorStop(0.45, A.shade(col, 0.35)); g.addColorStop(1, A.shade(col, -0.35)); c.fillStyle = g;
+  c.beginPath(); c.moveTo(0, -11); c.lineTo(2.3, -3.5); c.lineTo(11, 3.3); c.lineTo(11, 5); c.lineTo(2.3, 4.3); c.lineTo(3.2, 9); c.lineTo(-3.2, 9); c.lineTo(-2.3, 4.3); c.lineTo(-11, 5); c.lineTo(-11, 3.3); c.lineTo(-2.3, -3.5); c.closePath(); c.fill();
+  c.fillStyle = '#4ac8ff'; c.beginPath(); c.ellipse(0, -4, 1.4, 3, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.8)'; c.fillRect(-0.5, -6, 1, 1.5);
+  c.restore();
+}
 function draw(c, t) {
-  c.fillStyle = '#2c5a2a'; c.fillRect(0, 0, W, H);
-  const o = scroll % 80;
-  for (let y = -80 + o; y < H; y += 80) { const r = Math.floor((scroll - o - y) / 80); c.fillStyle = '#244a22'; c.fillRect((r * 37 % 5) * 40, y + 10, 70, 40); c.fillStyle = '#3a6a8a'; c.fillRect(((r * 53 % 7) * 30 + 150) % W, y + 40, 50, 20); c.fillStyle = '#7a6a4a'; c.fillRect(110 + Math.sin(r) * 30, y, 14, 80); }
-  ground.forEach(g => { c.fillStyle = g.k === 'tank' ? '#5a5a3a' : '#666'; c.fillRect(g.x - 8, g.y - 8, 16, 16); c.fillStyle = '#222'; c.beginPath(); c.arc(g.x, g.y, 4, 0, 7); c.fill(); c.strokeStyle = '#222'; c.lineWidth = 2; c.beginPath(); c.moveTo(g.x, g.y); const a = Math.atan2(me.y - g.y, me.x - g.x); c.lineTo(g.x + Math.cos(a) * 9, g.y + Math.sin(a) * 9); c.stroke(); });
-  if (boss) { c.fillStyle = '#555'; c.fillRect(boss.x - 34, boss.y - 22, 68, 44); c.fillStyle = '#333'; c.fillRect(boss.x - 26, boss.y - 14, 52, 28); c.fillStyle = Math.floor(t / 150) % 2 ? '#ff4040' : '#ffb040'; c.beginPath(); c.arc(boss.x, boss.y, 8, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(boss.x - 30, boss.y - 30, 60 * boss.hp / (4 + zone), 3); }
-  bombs.forEach(b => { c.fillStyle = '#222'; c.beginPath(); c.arc(b.x, b.y, 3 - b.t * 1.5, 0, 7); c.fill(); });
-  if (state === 'play') { c.strokeStyle = 'rgba(255,255,90,.8)'; c.lineWidth = 1; c.strokeRect(me.x - 7, me.y - 77, 14, 14); c.beginPath(); c.moveTo(me.x, me.y - 80); c.lineTo(me.x, me.y - 60); c.moveTo(me.x - 10, me.y - 70); c.lineTo(me.x + 10, me.y - 70); c.stroke(); }
-  air.forEach(a => { c.fillStyle = ['#c0d8ff', '#ff9ad0', '#ffd25a'][a.k]; c.beginPath(); c.moveTo(a.x, a.y + 8); c.lineTo(a.x - 9, a.y - 6); c.lineTo(a.x, a.y - 2); c.lineTo(a.x + 9, a.y - 6); c.fill(); });
-  c.fillStyle = '#fff'; shots.forEach(s => c.fillRect(s.x - 1, s.y - 4, 2, 6));
-  c.fillStyle = '#ff5a5a'; ebul.forEach(b => { c.beginPath(); c.arc(b.x, b.y, 2.5, 0, 7); c.fill(); });
-  if (state === 'play' && !(invul > 0 && Math.floor(t / 90) % 2)) { c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(me.x + 10, me.y + 16, 9, 4, 0, 0, 7); c.fill(); c.fillStyle = '#e8f0ff'; c.beginPath(); c.moveTo(me.x, me.y - 11); c.lineTo(me.x + 11, me.y + 7); c.lineTo(me.x, me.y + 3); c.lineTo(me.x - 11, me.y + 7); c.fill(); c.fillStyle = '#5dffa0'; c.fillRect(me.x - 1.5, me.y - 6, 3, 6); }
-  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+  const pal = ZG[(zone - 1) % 3];
+  const t0 = Math.ceil((-16 - scroll) / 16), t1 = Math.floor((H - scroll) / 16);
+  for (let ty = t0; ty <= t1; ty++) for (let tx = 0; tx < W / 16; tx++) A.grassTD(c, tx * 16, ty * 16 + scroll, tx, ty, pal);
+  // farm fields and little villages
+  for (let ty = t0 - 4; ty <= t1; ty++) { if (((ty % 11) + 11) % 11) continue; const y = ty * 16 + scroll, side = (((ty / 11) | 0) % 2 + 2) % 2, cx = rcx(Math.floor(-ty * 2)), x0 = side ? cx + 40 : 8, fw = side ? W - cx - 50 : cx - 50; if (fw < 30) continue;
+    c.fillStyle = A.INK; c.fillRect(x0 - 1, y - 1, fw + 2, 50); c.fillStyle = ty % 3 ? '#c8a84a' : '#8a6a3a'; c.fillRect(x0, y, fw, 48); c.fillStyle = 'rgba(0,0,0,.2)'; for (let k = 3; k < 48; k += 5) c.fillRect(x0, y + k, fw, 1.5);
+    const hx = x0 + fw * 0.6, hy = y + 54; c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(hx + 3, hy + 3, 18, 14); c.fillStyle = A.INK; c.fillRect(hx - 0.5, hy - 0.5, 19, 15); c.fillStyle = '#c84a3a'; c.fillRect(hx, hy, 18, 7); c.fillStyle = '#8a2a1a'; c.fillRect(hx, hy + 7, 18, 7); }
+  // river with sandy banks
+  c.beginPath(); for (let y = -8; y <= H + 8; y += 6) { const wy = Math.floor((y - scroll) / 2); c.lineTo(rcx(-wy) - rhw(-wy) - 5, y); } for (let y = H + 8; y >= -8; y -= 6) { const wy = Math.floor((y - scroll) / 2); c.lineTo(rcx(-wy) + rhw(-wy) + 5, y); } c.closePath(); c.fillStyle = '#e0c890'; c.fill(); c.strokeStyle = A.INK; c.lineWidth = 1; c.stroke();
+  c.beginPath(); for (let y = -8; y <= H + 8; y += 6) { const wy = Math.floor((y - scroll) / 2); c.lineTo(rcx(-wy) - rhw(-wy), y); } for (let y = H + 8; y >= -8; y -= 6) { const wy = Math.floor((y - scroll) / 2); c.lineTo(rcx(-wy) + rhw(-wy), y); } c.closePath();
+  const wg = c.createLinearGradient(0, 0, W, 0); wg.addColorStop(0, '#2a6ac0'); wg.addColorStop(0.5, '#1e50a0'); wg.addColorStop(1, '#2a6ac0'); c.fillStyle = wg; c.fill(); c.save(); c.clip(); for (let k = 0; k < 30; k++) { c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(A.hash(k, 1) * W, ((A.hash(k, 2) * H + scroll * 1.3 + t / 30) % (H + 20)) - 10, 6, 1); } c.restore(); c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 1.5; c.stroke();
+  // trees on the land
+  for (let ty = t0; ty <= t1; ty++) for (let k = 0; k < 3; k++) { if (A.hash(ty, k + 1) > 0.5) continue; const x = A.hash(ty, k + 7) * W, y = ty * 16 + scroll + A.hash(ty, k + 3) * 10, wy = Math.floor((y - scroll) / 2); if (Math.abs(x - rcx(-wy)) < rhw(-wy) + 14) continue; A.treeTD(c, x - 8, y - 8, ty, k); }
+  // ground targets
+  ground.forEach(g => { const a = Math.atan2(me.y - g.y, me.x - g.x);
+    c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(g.x - 7, g.y - 5, 18, 16);
+    if (g.k === 'tank') { A.part(c, g.x - 9, g.y - 8, 4, 16, '#3a3a2a'); A.part(c, g.x + 5, g.y - 8, 4, 16, '#3a3a2a'); A.part(c, g.x - 6, g.y - 7, 12, 14, '#6a6a3a'); c.fillStyle = 'rgba(0,0,0,.3)'; for (let k = -7; k < 8; k += 3) { c.fillRect(g.x - 9, g.y + k, 4, 1); c.fillRect(g.x + 5, g.y + k, 4, 1); } }
+    else { A.part(c, g.x - 8, g.y - 8, 16, 16, '#7a7a84'); c.fillStyle = '#5a5a64'; c.fillRect(g.x - 6, g.y - 6, 12, 12); }
+    A.ball(c, g.x, g.y, 4.5, g.k === 'tank' ? '#7a7a42' : '#8a8a94'); c.strokeStyle = A.INK; c.lineWidth = 3.4; c.beginPath(); c.moveTo(g.x, g.y); c.lineTo(g.x + Math.cos(a) * 11, g.y + Math.sin(a) * 11); c.stroke(); c.strokeStyle = '#4a4a4a'; c.lineWidth = 2; c.stroke(); c.lineWidth = 1; });
+  if (boss) { const bx = boss.x, by = boss.y; c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(bx - 32, by - 18, 72, 48);
+    A.part(c, bx - 36, by - 24, 72, 48, '#6a6a74'); c.fillStyle = '#4a4a54'; c.fillRect(bx - 30, by - 18, 60, 36); for (let k = -30; k < 30; k += 10) { A.part(c, bx + k + 1, by - 27, 7, 4, '#7a7a84'); A.part(c, bx + k + 1, by + 23, 7, 4, '#7a7a84'); }
+    [[-24, -12], [24, -12], [-24, 12], [24, 12]].forEach(([ox, oy]) => { A.ball(c, bx + ox, by + oy, 4, '#8a8a94'); });
+    const core = Math.floor(t / 150) % 2 ? '#ff4040' : '#ffb040'; A.glow(c, bx, by, 26, '255,90,40', 0.5); A.ball(c, bx, by, 9, core);
+    c.fillStyle = A.INK; c.fillRect(bx - 31, by - 35, 62, 5); c.fillStyle = '#ff5a5a'; c.fillRect(bx - 30, by - 34, 60 * boss.hp / (4 + zone), 3); }
+  bombs.forEach(b => { const r = 3.5 - b.t * 1.8; c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.arc(b.x + 4 * (1 - b.t), b.y + 6 * (1 - b.t), r, 0, 7); c.fill(); A.ball(c, b.x, b.y, Math.max(1, r), '#3a3a3a'); });
+  if (state === 'play') { c.strokeStyle = A.INK; c.lineWidth = 3; c.strokeRect(me.x - 7, me.y - 77, 14, 14); c.strokeStyle = 'rgba(255,255,90,.95)'; c.lineWidth = 1.4; c.strokeRect(me.x - 7, me.y - 77, 14, 14); c.beginPath(); c.moveTo(me.x, me.y - 82); c.lineTo(me.x, me.y - 58); c.moveTo(me.x - 12, me.y - 70); c.lineTo(me.x + 12, me.y - 70); c.stroke(); c.lineWidth = 1; }
+  air.forEach(a => plane(c, a.x, a.y, ['#a8c0e8', '#e87ab0', '#e8b83a'][a.k], 0.95, false));
+  shots.forEach(s => { A.glow(c, s.x, s.y, 6, '255,250,180', 0.5); c.fillStyle = '#fffbd0'; c.fillRect(s.x - 1, s.y - 5, 2, 7); });
+  ebul.forEach(b => { A.glow(c, b.x, b.y, 7, '255,80,80', 0.5); A.ball(c, b.x, b.y, 2.6, '#ff5a5a'); });
+  if (state === 'play' && !(invul > 0 && Math.floor(t / 90) % 2)) { A.glow(c, me.x, me.y + 12, 12, '255,160,60', 0.5); plane(c, me.x, me.y, '#e8f0ff', 1.25, true); c.fillStyle = '#5dffa0'; c.fillRect(me.x - 1, me.y - 2, 2, 5); }
+  parts.forEach(p => { c.fillStyle = p.c; c.beginPath(); c.arc(p.x, p.y, 1.8, 0, 7); c.fill(); });
+  A.vignette(c, W, H, 0.3);
 }
 start(); state = 'title'; title(); K.run(update, draw);
 </script>

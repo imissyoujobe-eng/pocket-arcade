@@ -29,6 +29,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <div id="overlay"><h1>Volt Maze</h1><p id="msg">Blast the robots and escape room after room. The walls are electrified, and the Seeker comes for anyone who lingers.</p><p class="how">Left side: drag to walk. Right side: tap to fire, or hold to stand still and aim with the stick. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
+<script src="../lib/art.js"></script>
 <script>
 const GAME_ID='volt-maze';
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
@@ -150,22 +151,38 @@ function update(dt){
   if(Math.random()<dt*20)parts.push({x:seeker.x,y:seeker.y,vx:rnd(-30,30),vy:rnd(-30,30),l:.4,L:.4,c:'#ff3df2',s:3});
   if(pl.inv<=0&&m<16){killPlayer('CAUGHT BY THE SEEKER');return}}
 }
-function drawRobot(r){const bob=Math.sin(r.t*6)*1.2;ctx.save();ctx.translate(r.x,r.y+bob);
- ctx.fillStyle=robotCol;rr(-8,-11,16,12,3);ctx.fill();ctx.fillStyle='#0a0f1e';ctx.fillRect(-6,-8,12,4);
- const ex=clamp((pl.x-r.x)/40,-1,1)*3;ctx.fillStyle='#ff2b2b';ctx.fillRect(-2+ex,-8,4,4);
- ctx.fillStyle=robotCol;ctx.fillRect(-6,2,12,6);ctx.fillRect(-10,-6,2,9);ctx.fillRect(8,-6,2,9);
- const leg=Math.sin(r.t*10)*2;ctx.fillRect(-5,8,3,5+leg);ctx.fillRect(2,8,3,5-leg);ctx.fillStyle='#0a0f1e';ctx.fillRect(-1,-15,2,4);ctx.restore()}
+function drawRobot(r){const bob=Math.sin(r.t*6)*1.2;ctx.fillStyle='rgba(0,0,0,.4)';ctx.beginPath();ctx.ellipse(r.x,r.y+14,9,2.6,0,0,TAU);ctx.fill();ctx.save();ctx.translate(r.x,r.y+bob);ctx.scale(1.2,1.2);
+ const leg=Math.sin(r.t*10)*2;A.part(ctx,-5,8,3,5+leg,A.shade(robotCol,-.3));A.part(ctx,2,8,3,5-leg,A.shade(robotCol,-.3));ctx.fillStyle='#222';ctx.fillRect(-6,12.5+leg,5,1.6);ctx.fillRect(1,12.5-leg,5,1.6);
+ A.part(ctx,-10,-6,2.4,9,A.shade(robotCol,-.15));A.part(ctx,7.6,-6,2.4,9,A.shade(robotCol,-.15));
+ A.part(ctx,-6,2,12,6,robotCol);ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(-4,4,8,1);ctx.fillRect(-4,6,8,1);
+ ctx.fillStyle='#05070e';rr(-8.8,-11.8,17.6,13.6,3.4);ctx.fill();{const g=ctx.createLinearGradient(0,-11,0,1);g.addColorStop(0,A.shade(robotCol,.5));g.addColorStop(.5,robotCol);g.addColorStop(1,A.shade(robotCol,-.4));ctx.fillStyle=g;}rr(-8,-11,16,12,3);ctx.fill();
+ ctx.fillStyle='#0a0f1e';rr(-6.4,-8.4,12.8,4.8,2);ctx.fill();const ex=clamp((pl.x-r.x)/40,-1,1)*3;A.glow(ctx,ex,-6,8,'255,40,40',.7);ctx.fillStyle='#ff2b2b';ctx.fillRect(-2+ex,-8,4,4);ctx.fillStyle='#ffb0b0';ctx.fillRect(-1.4+ex,-7.4,1.4,1.4);
+ ctx.fillStyle='rgba(255,255,255,.3)';ctx.fillRect(-7,-10.4,14,1);ctx.fillStyle='#333';ctx.fillRect(-.8,-15,1.6,4);A.ball(ctx,0,-15.5,1.5,(Math.floor(r.t*4)%2)?'#ff3d52':'#ffd23f');
+ for(const bx of[-7,6]){ctx.fillStyle='#05070e';ctx.beginPath();ctx.arc(bx+.5,-2,.8,0,TAU);ctx.fill()}ctx.restore()}
+let _vfloor=null;
+function vfloor(){if(_vfloor)return _vfloor;const cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');c.fillStyle='#070a14';c.fillRect(0,0,W,H);
+ for(let y=Y0;y<Y1;y+=20)for(let x=X0;x<X1;x+=20){const h=A.hash(x,y);const g=c.createLinearGradient(x,y,x+20,y+20);g.addColorStop(0,h<.3?'#1a2034':'#141a2c');g.addColorStop(1,'#0c1020');c.fillStyle=g;c.fillRect(x+.5,y+.5,19,19);c.fillStyle='rgba(120,150,220,.12)';c.fillRect(x+.5,y+.5,19,.8);c.fillStyle='rgba(0,0,0,.4)';c.fillRect(x+.5,y+19,19,.8);
+  c.fillStyle='rgba(140,160,200,.25)';for(const [dx,dy] of[[2.5,2.5],[17.5,2.5],[2.5,17.5],[17.5,17.5]]){c.beginPath();c.arc(x+dx,y+dy,.8,0,7);c.fill()}
+  if(h>.85){c.strokeStyle='rgba(0,0,0,.4)';c.lineWidth=.6;for(let k=0;k<4;k++){c.beginPath();c.moveTo(x+4,y+5+k*3);c.lineTo(x+16,y+5+k*3);c.stroke()}}
+  if(h<.08){c.fillStyle='rgba(60,40,20,.35)';c.beginPath();c.ellipse(x+10,y+10,7,4,h*30,0,7);c.fill()}}
+ return(_vfloor=cv)}
+function drawWall(w,pulse){const vert=w.h>w.w;ctx.fillStyle='#02040a';ctx.fillRect(w.x-1,w.y-1,w.w+2,w.h+2);
+ const g=vert?ctx.createLinearGradient(w.x,0,w.x+w.w,0):ctx.createLinearGradient(0,w.y,0,w.y+w.h);g.addColorStop(0,'#9ab8ff');g.addColorStop(.35,'#3a7bff');g.addColorStop(1,'#14306a');ctx.fillStyle=g;ctx.fillRect(w.x,w.y,w.w,w.h);
+ ctx.save();ctx.beginPath();ctx.rect(w.x,w.y,w.w,w.h);ctx.clip();ctx.fillStyle='rgba(255,210,63,.55)';const L=vert?w.h:w.w;for(let k=-10;k<L+10;k+=10){ctx.beginPath();if(vert){ctx.moveTo(w.x,w.y+k);ctx.lineTo(w.x+w.w,w.y+k-4);ctx.lineTo(w.x+w.w,w.y+k);ctx.lineTo(w.x,w.y+k+4)}else{ctx.moveTo(w.x+k,w.y+w.h);ctx.lineTo(w.x+k+4,w.y);ctx.lineTo(w.x+k+8,w.y);ctx.lineTo(w.x+k+4,w.y+w.h)}ctx.fill()}ctx.restore();
+ ctx.strokeStyle='rgba(200,230,255,'+(.25+pulse*.5)+')';ctx.lineWidth=1;ctx.beginPath();if(vert){ctx.moveTo(w.x+w.w/2,w.y);for(let y=w.y;y<=w.y+w.h;y+=4)ctx.lineTo(w.x+w.w/2+(Math.random()-.5)*w.w*.8,y)}else{ctx.moveTo(w.x,w.y+w.h/2);for(let x=w.x;x<=w.x+w.w;x+=4)ctx.lineTo(x,w.y+w.h/2+(Math.random()-.5)*w.h*.8)}ctx.stroke()}
 function drawPlayer(){if(deadT>0)return;if(pl.inv>0&&Math.floor(T*12)%2)return;ctx.save();ctx.translate(pl.x,pl.y);const w=Math.sin(pl.walk)*4;
- ctx.strokeStyle='#7cffb2';ctx.fillStyle='#7cffb2';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.beginPath();ctx.arc(0,-9,3.6,0,TAU);ctx.fill();
- ctx.beginPath();ctx.moveTo(0,-5);ctx.lineTo(0,4);ctx.moveTo(0,4);ctx.lineTo(-3,10+w*.4);ctx.moveTo(0,4);ctx.lineTo(3,10-w*.4);
- ctx.moveTo(0,-3);ctx.lineTo(pl.fx*7,-3+pl.fy*7);ctx.moveTo(0,-3);ctx.lineTo(-pl.fx*3-2,1);ctx.stroke();ctx.restore()}
-function draw(){ctx.fillStyle='#04060d';ctx.fillRect(0,0,W,H);
- ctx.strokeStyle='rgba(56,120,255,.07)';ctx.lineWidth=1;for(let x=X0;x<X1;x+=20){ctx.beginPath();ctx.moveTo(x,Y0);ctx.lineTo(x,Y1);ctx.stroke()}for(let y=Y0;y<Y1;y+=20){ctx.beginPath();ctx.moveTo(X0,y);ctx.lineTo(X1,y);ctx.stroke()}
- const pulse=.6+Math.sin(T*6)*.2;ctx.shadowColor='#3a7bff';ctx.shadowBlur=12*pulse;ctx.fillStyle='#3a7bff';for(const w of walls)ctx.fillRect(w.x,w.y,w.w,w.h);ctx.shadowBlur=0;
+ ctx.scale(1.3,1.3);ctx.fillStyle='rgba(0,0,0,.4)';ctx.beginPath();ctx.ellipse(0,11,6,1.8,0,0,TAU);ctx.fill();A.glow(ctx,0,0,16,'124,255,178',.18);
+ const lm=(x1,y1,x2,y2,wd,col)=>{ctx.lineCap='round';ctx.strokeStyle='#02060a';ctx.lineWidth=wd+1.6;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.strokeStyle=col;ctx.lineWidth=wd;ctx.stroke()};
+ lm(0,4,-3,10+w*.4,2.6,'#2a5a4a');lm(0,4,3,10-w*.4,2.6,'#3a7a5a');lm(0,-3,-pl.fx*3-2,1,2.2,'#4fc890');
+ ctx.fillStyle='#02060a';rr(-3.6,-6,7.2,11,2);ctx.fill();{const g=ctx.createLinearGradient(-3,0,3,0);g.addColorStop(0,'#a8ffd8');g.addColorStop(1,'#2a9a6a');ctx.fillStyle=g;}rr(-2.8,-5.2,5.6,9.6,1.6);ctx.fill();ctx.fillStyle='#ffd23f';ctx.fillRect(-2.8,1.6,5.6,1.2);
+ lm(0,-3,pl.fx*7,-3+pl.fy*7,2.2,'#7cffb2');ctx.fillStyle='#ccd';ctx.beginPath();ctx.arc(pl.fx*8,-3+pl.fy*8,1.6,0,TAU);ctx.fill();
+ A.ball(ctx,0,-9,3.8,'#7cffb2');ctx.fillStyle='#0a1a2a';ctx.fillRect(-2.6+pl.fx*1.2,-10.4,5.2,2.2);ctx.fillStyle='#9fe8ff';ctx.fillRect(-2+pl.fx*1.2,-10,2,1);ctx.restore()}
+function draw(){ctx.drawImage(vfloor(),0,0);
+ const pulse=.6+Math.sin(T*6)*.2;ctx.shadowColor='#3a7bff';ctx.shadowBlur=14*pulse;ctx.fillStyle='#3a7bff';for(const w of walls)ctx.fillRect(w.x,w.y,w.w,w.h);ctx.shadowBlur=0;for(const w of walls)drawWall(w,pulse);
  ctx.fillStyle='#bcd3ff';for(const w of walls){if(Math.random()<.04){const sx=w.x+Math.random()*w.w,sy=w.y+Math.random()*w.h;ctx.fillRect(sx-1,sy-1,3,3)}}
  for(const r of robots)if(!r.dead)drawRobot(r);
  ctx.fillStyle='#fff';for(const b of bul){ctx.shadowColor='#7cffb2';ctx.shadowBlur=8;ctx.fillRect(b.x-2,b.y-2,4,4)}ctx.shadowBlur=0;
- ctx.fillStyle='#ff5a5a';for(const b of rbul)ctx.fillRect(b.x-2,b.y-2,4,4);
+ for(const b of rbul){A.glow(ctx,b.x,b.y,8,'255,90,90',.7);ctx.fillStyle='#fff';ctx.fillRect(b.x-1.5,b.y-1.5,3,3)}
  drawPlayer();
  if(seeker){const s=9+Math.sin(seeker.t*12)*2;ctx.save();ctx.translate(seeker.x,seeker.y);ctx.rotate(seeker.t*5);ctx.fillStyle='#ff3df2';ctx.shadowColor='#ff3df2';ctx.shadowBlur=16;ctx.beginPath();for(let i=0;i<10;i++){const a=i/10*TAU,rad=i%2?s*.45:s;ctx.lineTo(Math.cos(a)*rad,Math.sin(a)*rad)}ctx.fill();ctx.restore();ctx.shadowBlur=0}
  const alive=robots.filter(r=>!r.dead).length;ctx.fillStyle='#8f9bbd';ctx.font='11px Rubik, sans-serif';ctx.textAlign='left';ctx.fillText('ROBOTS LEFT '+alive,X0,H-22);ctx.textAlign='right';
@@ -174,4 +191,5 @@ function draw(){ctx.fillStyle='#04060d';ctx.fillRect(0,0,W,H);
 reset();requestAnimationFrame(frame);
 </script>
 
+<script src="../lib/joy.js" data-axes="4" data-buttons='[{"label": "FIRE", "key": " "}]'></script>
 </body></html>

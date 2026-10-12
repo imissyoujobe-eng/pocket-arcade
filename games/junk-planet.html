@@ -410,6 +410,25 @@ body { margin: 0; background: var(--space); color: var(--fg); font-family: var(-
   const holeMat = M(0x5a4200, { metalness: .5 }), holeGeo = new THREE.CylinderGeometry(.13, .13, .18, 12);
   const crateTex = canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#8a3fe0'; c.fillRect(0, 0, w, h); c.fillStyle = '#b06aff'; for (let i = 0; i < 6; i++) c.fillRect(0, i * 22, w, 6); c.fillStyle = '#ffcf3f'; c.fillRect(54, 0, 20, h); c.fillRect(0, 54, w, 20); c.fillStyle = '#fff'; c.font = 'bold 74px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.strokeStyle = '#3a0a6a'; c.lineWidth = 8; c.strokeText('?', 64, 68); c.fillText('?', 64, 68); });
   const crateMat = new THREE.MeshStandardMaterial({ map: crateTex, roughness: .5 }), crateGeo = new THREE.BoxGeometry(1.1, 1.1, 1.1);
+  // tile textures: light-toned so each island theme's color tints them
+  const capTex = canvasTex(128, 128, (c, w, h) => {
+    c.fillStyle = '#f0f0f0'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 1400; i++) { const v = 200 + Math.random() * 55 | 0; c.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; c.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
+    c.lineCap = 'round'; for (let i = 0; i < 260; i++) { const x = Math.random() * w, y = Math.random() * h, l = 3 + Math.random() * 6, a = -Math.PI / 2 + (Math.random() - .5) * .9, v = Math.random() < .5 ? 175 : 255; c.strokeStyle = 'rgba(' + v + ',' + v + ',' + v + ',.8)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke(); }
+    for (let i = 0; i < 5; i++) { c.fillStyle = 'rgba(140,140,140,.35)'; c.beginPath(); c.ellipse(Math.random() * w, Math.random() * h, 4 + Math.random() * 4, 3, 0, 0, 7); c.fill(); }
+    // bevelled tile edge
+    c.fillStyle = 'rgba(255,255,255,.55)'; c.fillRect(0, 0, w, 4); c.fillRect(0, 0, 4, h); c.fillStyle = 'rgba(90,90,90,.45)'; c.fillRect(0, h - 4, w, 4); c.fillRect(w - 4, 0, 4, h);
+  });
+  capTex.anisotropy = 4;
+  const dirtTex = canvasTex(64, 128, (c, w, h) => {
+    c.fillStyle = '#e8e8e8'; c.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 14) { c.fillStyle = 'rgba(110,110,110,' + (.15 + Math.random() * .2) + ')'; c.fillRect(0, y + Math.random() * 4, w, 3 + Math.random() * 3); }
+    for (let i = 0; i < 40; i++) { const v = 120 + Math.random() * 100 | 0; c.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; c.beginPath(); c.ellipse(Math.random() * w, Math.random() * h, 2 + Math.random() * 3, 1.5 + Math.random() * 2, 0, 0, 7); c.fill(); }
+    c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(0, 0, w, 6); c.strokeStyle = 'rgba(80,80,80,.5)'; c.lineWidth = 1.5; for (let i = 0; i < 4; i++) { const x = Math.random() * w; c.beginPath(); c.moveTo(x, 6); c.quadraticCurveTo(x + 6, 30, x - 2, 50 + Math.random() * 30); c.stroke(); }
+  });
+  const flowerCols = [0xff4fa3, 0xffcf3f, 0xffffff, 0x3fe0ff];
+  const woodCrateTex = canvasTex(128, 128, (c, w, h) => { c.fillStyle = '#b07a42'; c.fillRect(0, 0, w, h); for (let i = 0; i < 5; i++) { c.fillStyle = i % 2 ? '#a06a36' : '#bc8650'; c.fillRect(0, i * 26, w, 25); c.fillStyle = 'rgba(60,30,10,.4)'; c.fillRect(0, i * 26 + 25, w, 1.5); } c.strokeStyle = 'rgba(80,40,10,.3)'; for (let i = 0; i < 30; i++) { const y = Math.random() * h; c.beginPath(); c.moveTo(0, y); c.bezierCurveTo(40, y + 3, 80, y - 3, w, y + 1); c.stroke(); } c.fillStyle = '#5a3418'; c.fillRect(0, 0, w, 10); c.fillRect(0, h - 10, w, 10); c.fillRect(0, 0, 10, h); c.fillRect(w - 10, 0, 10, h); c.save(); c.translate(w / 2, h / 2); c.rotate(Math.PI / 4); c.fillRect(-90, -6, 180, 12); c.restore(); c.fillStyle = '#ffcf3f'; c.beginPath(); c.arc(w / 2, h / 2, 22, 0, 7); c.fill(); c.fillStyle = '#3a0a6a'; c.font = 'bold 36px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('?', w / 2, h / 2 + 2); for (const [x, y] of [[5, 5], [w - 5, 5], [5, h - 5], [w - 5, h - 5]]) { c.fillStyle = '#c8c8d0'; c.beginPath(); c.arc(x, y, 3, 0, 7); c.fill(); } });
+  crateMat.map = woodCrateTex; crateMat.needsUpdate = true;
 
   function junkProp(theme) {
     const g = new THREE.Group(), r = rnd();
@@ -476,7 +495,7 @@ body { margin: 0; background: var(--space); color: var(--fg); font-family: var(-
     levelGroup = new THREE.Group(); scene.add(levelGroup);
     const th = THEMES[(L - 1) % THEMES.length];
     const nLand = land.reduce((a, b) => a + b, 0);
-    const caps = new THREE.InstancedMesh(capGeo, M(0xffffff, { roughness: .8 }), nLand), dirts = new THREE.InstancedMesh(dirtGeo, M(th.dirt, { roughness: 1 }), nLand), spikes = new THREE.InstancedMesh(spikeGeo, M(th.rock, { roughness: 1, flatShading: true }), nLand);
+    const caps = new THREE.InstancedMesh(capGeo, M(0xffffff, { roughness: .8, map: capTex }), nLand), dirts = new THREE.InstancedMesh(dirtGeo, M(th.dirt, { roughness: 1, map: dirtTex }), nLand), spikes = new THREE.InstancedMesh(spikeGeo, M(th.rock, { roughness: 1, flatShading: true }), nLand);
     caps.receiveShadow = true; dirts.receiveShadow = true;
     const dmy = new THREE.Object3D(), col = new THREE.Color(); let k = 0;
     for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) if (isLand(i, j)) {
@@ -488,7 +507,8 @@ body { margin: 0; background: var(--space); color: var(--fg); font-family: var(-
       dmy.position.set(wx(i), -1.94 - depth / 2, wx(j)); dmy.scale.set(1, depth, 1); dmy.rotation.y = rnd() * 3; dmy.updateMatrix(); spikes.setMatrixAt(k, dmy.matrix);
       k++;
       if (blocked[idx(i, j)]) { const p = junkProp(th); p.position.set(wx(i), 0, wx(j)); levelGroup.add(p); }
-      else if (!edge && rnd() < .12) { const tuft = new THREE.Mesh(new THREE.ConeGeometry(.08, .35, 4), M(new THREE.Color(th.top[0]).offsetHSL(0, 0, -.15).getHex())); tuft.position.set(wx(i) + (rnd() - .5) * 1.4, .17, wx(j) + (rnd() - .5) * 1.4); levelGroup.add(tuft); }
+      else if (!edge && rnd() < .14) { const fl = new THREE.Group(), st = new THREE.Mesh(new THREE.CylinderGeometry(.025, .025, .4, 4), M(0x3a8a2a)); st.position.y = .2; fl.add(st); const fc = pick(flowerCols); for (let q = 0; q < 5; q++) ball(fl, .07, M(fc), Math.cos(q * 1.26) * .09, .42, Math.sin(q * 1.26) * .09); ball(fl, .05, M(0xffcf3f), 0, .44, 0); fl.position.set(wx(i) + (rnd() - .5) * 1.4, .17, wx(j) + (rnd() - .5) * 1.4); levelGroup.add(fl); }
+      if (!blocked[idx(i, j)] && !edge && rnd() < .3) { const tuft = new THREE.Mesh(new THREE.ConeGeometry(.08, .35, 4), M(new THREE.Color(th.top[0]).offsetHSL(0, 0, -.15).getHex())); tuft.position.set(wx(i) + (rnd() - .5) * 1.4, .17, wx(j) + (rnd() - .5) * 1.4); levelGroup.add(tuft); }
     }
     caps.instanceColor.needsUpdate = true;
     levelGroup.add(caps, dirts, spikes);
@@ -910,4 +930,5 @@ body { margin: 0; background: var(--space); color: var(--fg); font-family: var(-
 })();
 </script>
 
+<script src="../lib/joy.js" data-axes="4" data-buttons='[{"label": "JUMP", "key": " "}, {"label": "SPECIAL", "key": "k"}]'></script>
 </body></html>

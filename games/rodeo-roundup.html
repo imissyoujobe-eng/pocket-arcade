@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Rodeo Roundup: the herd is stampeding. Ride between the lanes and lasso every steer before it gets past you.
 K.theme({ bg: '#2a1a0e', ink: '#fff4e0', accent: '#ffb02e', accentInk: '#2a1600' });
@@ -80,10 +81,15 @@ function drawSteer(c, s, t) {
   if (s.caught) { c.strokeStyle = '#ffd23f'; c.lineWidth = 1; c.beginPath(); c.arc(x - 12, y - 7, 6, 0, 7); c.stroke(); }
 }
 function draw(c, t) {
-  c.fillStyle = '#ffb27a'; c.fillRect(0, 0, W, 76); c.fillStyle = '#ffd98a'; c.beginPath(); c.arc(60, 56, 18, 0, 7); c.fill();
-  c.fillStyle = '#b5482b'; c.beginPath(); c.moveTo(0, 76); for (let x = 0; x <= W; x += 20) c.lineTo(x, 60 - Math.abs(Math.sin((x + (time || 0) * 8) / 60)) * 20); c.lineTo(W, 76); c.fill();
+  const cm = (time || 0) * 30;
+  c.save(); c.beginPath(); c.rect(0, 0, W, 77); c.clip();
+  A.sky(c, W, 77, { top: '#5a4ab8', mid: '#ff9a6a', bottom: '#ffe0a0', sun: '#ffe8a0', sunX: 60, sunY: 50, sunR: 16, cloud: 'rgba(255,220,200,.6)' }, t);
+  A.ridge(c, cm, { factor: 0.2, base: 70, amp: 34, col: '#c0604a', bands: ['rgba(255,210,170,.3)', 'rgba(120,40,30,.25)'], mesa: true, edge: 'rgba(0,0,0,.25)', seed: 2 });
+  A.ridge(c, cm, { factor: 0.5, base: 77, amp: 14, col: '#9a4a32', edge: 'rgba(0,0,0,.35)', seed: 7 });
+  c.restore();
   c.fillStyle = '#d9a35b'; c.fillRect(0, 76, W, H - 76);
-  for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#cf9a52' : '#d9a35b'; c.fillRect(0, LANES[i] - 16, W, 34); }
+  for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#cf9a52' : '#d9a35b'; c.fillRect(0, LANES[i] - 16, W, 34); for (let k = 0; k < 40; k++) { const x = ((A.hash(k, i) * 500 - cm * 2.6) % 500 + 500) % 500 - 30; c.fillStyle = k % 3 ? 'rgba(140,90,40,.35)' : 'rgba(255,230,180,.35)'; c.fillRect(x, LANES[i] - 14 + A.hash(k, i + 5) * 30, 2 + (k % 3), 1.5); } c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(0, LANES[i] + 16, W, 2); }
+  c.fillStyle = A.INK; c.fillRect(0, 76, W, 1.5);
   c.fillStyle = '#b8823e'; for (let x = -(((time || 0) * 80) % 40); x < W; x += 40) for (const ly of LANES) c.fillRect(x, ly + 10, 6, 2);
   // cactus
   c.fillStyle = '#3f8530'; for (let k = 0; k < 3; k++) { const x = ((k * 140 - (time || 0) * 30) % 420 + 420) % 420 - 40; c.fillRect(x, 64, 6, 16); c.fillRect(x - 6, 68, 6, 3); c.fillRect(x - 6, 62, 3, 8); c.fillRect(x + 6, 66, 6, 3); c.fillRect(x + 9, 60, 3, 8); }
@@ -104,6 +110,7 @@ function drawRider(c, t) {
   c.fillStyle = '#2a4a8a'; c.fillRect(x - 1, y - 11, 3, 6);
 }
 title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.3); }; }
 K.run(update, draw);
 </script>
 </body>

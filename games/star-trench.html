@@ -29,6 +29,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <div id="overlay"><h1>Star Trench</h1><p id="msg">Dogfight in deep space, strafe the fortress surface, then fly the trench and hit the core vent.</p><p class="how">Left side: drag to move your sight. Right side: hold to fire. Shoot incoming fireballs before they hit. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
+<script src="../lib/art.js"></script>
 <script>
 const GAME_ID='star-trench';
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
@@ -134,16 +135,16 @@ function fire(){lasers.push({x:cx,y:cy,l:.14});beep(1500,.09,.03,'sawtooth',300)
    else{o.dead=true;const pts=o.k==='tower'?200:150;score+=pts;floatText(p.x,p.y-12,'+'+pts,NEON);burst(p.x,p.y,[NEON,YEL,'#fff'],18,160,.6,3);noise(.25,.08,1400)}hud();return}}
  if(port&&!port.hit){const p=P(0,25,port.z);if(p&&port.z<170&&near(p,Math.max(14,p.s*7))){port.hit=true;const b=5000*level+shields*500;score+=b;flash=1;flashCol='#fff';kick(16);noise(1.5,.2,600);jingle([523,659,784,1047,1319,1568],.11);burst(HX,HY,[YEL,'#fff',NEON,RED],120,420,2,4);showBanner('CORE DESTROYED','+'+b,2.2);hud()}}}
 function drawFighter(o){const p=P(o.x,o.y,o.z);if(!p)return;const s=p.s,b=(o.bank||0)*.5;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(b);ctx.strokeStyle=RED;ctx.lineWidth=Math.max(1,s*.5);ctx.beginPath();
- ctx.moveTo(0,-4*s);ctx.lineTo(13*s,5*s);ctx.lineTo(4*s,3*s);ctx.lineTo(0,7*s);ctx.lineTo(-4*s,3*s);ctx.lineTo(-13*s,5*s);ctx.closePath();ctx.moveTo(0,-4*s);ctx.lineTo(0,7*s);ctx.stroke();
+ ctx.moveTo(0,-4*s);ctx.lineTo(13*s,5*s);ctx.lineTo(4*s,3*s);ctx.lineTo(0,7*s);ctx.lineTo(-4*s,3*s);ctx.lineTo(-13*s,5*s);ctx.closePath();{const g=ctx.createLinearGradient(0,-4*s,0,7*s);g.addColorStop(0,'#8a8ea0');g.addColorStop(.5,'#3a3e4e');g.addColorStop(1,'#1a1c26');ctx.fillStyle=g;ctx.fill();}ctx.moveTo(0,-4*s);ctx.lineTo(0,7*s);ctx.stroke();A.glow(ctx,0,6*s,Math.max(4,s*6),'255,90,60',.6);ctx.fillStyle='#9fe8ff';ctx.beginPath();ctx.ellipse(0,0,1.6*s,2.2*s,0,0,TAU);ctx.fill();ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(-.6*s,-1.4*s,.8*s,.8*s);
  ctx.fillStyle=YEL;ctx.beginPath();ctx.arc(0,1*s,1.6*s,0,TAU);ctx.fill();ctx.restore()}
-function draw(){ctx.fillStyle='#02030a';ctx.fillRect(0,0,W,H);
+function draw(){spaceBg();
  ctx.fillStyle='#fff';for(const s of stars){const p=P(s.x,s.y,s.z);if(!p||p.y>VIEWB)continue;const sz=Math.min(3,p.s*.6);ctx.globalAlpha=Math.min(1,p.s*.8);ctx.fillRect(p.x,p.y,sz,sz)}ctx.globalAlpha=1;
  ctx.save();ctx.beginPath();ctx.rect(0,0,W,VIEWB);ctx.clip();ctx.lineWidth=1.2;
- if(phase===2){ctx.strokeStyle='rgba(90,255,200,.35)';ctx.beginPath();const off=(phaseT*120)%30;for(let z=320-off;z>4;z-=30){line(P(-400,40,z),P(400,40,z))}for(let x=-400;x<=400;x+=50)line(P(x,40,320),P(x,40,4));ctx.stroke();
-  const sorted=[...objs].sort((a,b)=>b.z-a.z);for(const o of sorted){const w=10,top=40-o.h,c=[[-w,-w],[w,-w],[w,w],[-w,w]];ctx.strokeStyle=o.dead?'rgba(90,255,200,.25)':NEON;ctx.beginPath();
+ if(phase===2){surfaceBg();ctx.strokeStyle='rgba(90,255,200,.35)';ctx.beginPath();const off=(phaseT*120)%30;for(let z=320-off;z>4;z-=30){line(P(-400,40,z),P(400,40,z))}for(let x=-400;x<=400;x+=50)line(P(x,40,320),P(x,40,4));ctx.stroke();
+  const sorted=[...objs].sort((a,b)=>b.z-a.z);for(const o of sorted){const w=10,top=40-o.h,c=[[-w,-w],[w,-w],[w,w],[-w,w]];fillTower(o,w,top);ctx.strokeStyle=o.dead?'rgba(90,255,200,.25)':NEON;ctx.beginPath();
    for(let i=0;i<4;i++){const [ax,az]=c[i],[bx,bz]=c[(i+1)%4];line(P(o.x+ax,40,o.z+az),P(o.x+bx,40,o.z+bz));line(P(o.x+ax,top,o.z+az),P(o.x+bx,top,o.z+bz));line(P(o.x+ax,40,o.z+az),P(o.x+ax,top,o.z+az))}ctx.stroke();
    if(!o.dead){ctx.fillStyle=RED;const p=P(o.x,top,o.z);if(p){ctx.beginPath();ctx.arc(p.x,p.y,Math.max(2,p.s*4),0,TAU);ctx.fill()}}}}
- if(phase===3){ctx.strokeStyle='rgba(107,180,255,.55)';ctx.beginPath();const off=trenchZ%25;for(let z=320-off;z>2;z-=25){const a=P(-30,-25,z),b=P(-30,25,z),c=P(30,25,z),d=P(30,-25,z);line(a,b);line(b,c);line(c,d)}
+ if(phase===3){trenchBg();ctx.strokeStyle='rgba(107,180,255,.55)';ctx.beginPath();const off=trenchZ%25;for(let z=320-off;z>2;z-=25){const a=P(-30,-25,z),b=P(-30,25,z),c=P(30,25,z),d=P(30,-25,z);line(a,b);line(b,c);line(c,d)}
   for(const y of[-25,0,25]){line(P(-30,y,320),P(-30,y,2));line(P(30,y,320),P(30,y,2))}line(P(0,25,320),P(0,25,2));ctx.stroke();
   const sorted=[...objs].sort((a,b)=>b.z-a.z);for(const o of sorted){if(o.k==='beam'){const near=o.z<70&&Math.abs(o.y-shipY)<6;ctx.strokeStyle=near?RED:YEL;ctx.lineWidth=near?3:2;ctx.beginPath();line(P(-30,o.y-2,o.z),P(30,o.y-2,o.z));line(P(-30,o.y+2,o.z),P(30,o.y+2,o.z));ctx.stroke();ctx.lineWidth=1.2}
    else if(!o.dead){const p=P(o.x,o.y,o.z);if(p){ctx.strokeStyle=RED;ctx.beginPath();ctx.rect(p.x-p.s*4,p.y-p.s*4,p.s*8,p.s*8);ctx.stroke();ctx.fillStyle=RED;ctx.beginPath();ctx.arc(p.x,p.y,p.s*2,0,TAU);ctx.fill()}}}
@@ -154,12 +155,46 @@ function draw(){ctx.fillStyle='#02030a';ctx.fillRect(0,0,W,H);
  for(const l of lasers){ctx.globalAlpha=l.l/.14;ctx.strokeStyle=NEON;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(20,VIEWB);ctx.lineTo(l.x,l.y);ctx.moveTo(W-20,VIEWB);ctx.lineTo(l.x,l.y);ctx.stroke()}ctx.globalAlpha=1;
  // cockpit frame + sight
  ctx.strokeStyle=NEON;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx-18,cy);ctx.lineTo(cx-6,cy);ctx.moveTo(cx+6,cy);ctx.lineTo(cx+18,cy);ctx.moveTo(cx,cy-18);ctx.lineTo(cx,cy-6);ctx.moveTo(cx,cy+6);ctx.lineTo(cx,cy+18);ctx.stroke();ctx.beginPath();ctx.arc(cx,cy,12,0,TAU);ctx.stroke();
- ctx.fillStyle='#070b18';ctx.fillRect(0,VIEWB,W,H-VIEWB);ctx.strokeStyle='#1d2b55';ctx.beginPath();ctx.moveTo(0,VIEWB);ctx.lineTo(W,VIEWB);ctx.stroke();
+ cockpit();ctx.strokeStyle='#1d2b55';ctx.beginPath();ctx.moveTo(0,VIEWB);ctx.lineTo(W,VIEWB);ctx.stroke();
  ctx.font='11px Rubik, sans-serif';ctx.textAlign='left';ctx.fillStyle='#8f9bbd';ctx.fillText('SHIELDS',16,VIEWB+22);for(let i=0;i<12;i++){ctx.fillStyle=i<shields?(shields<3?RED:NEON):'#1a2440';ctx.fillRect(16+i*13,VIEWB+30,10,12)}
  ctx.textAlign='right';ctx.fillStyle='#8f9bbd';const prog=phase===1?'FIGHTERS '+kills+'/10':phase===2?'SURFACE '+Math.max(0,Math.ceil(22-phaseT))+'s':port?'VENT IN RANGE':'TRENCH '+Math.min(99,Math.floor(trenchZ/(15+level*2)))+'%';ctx.fillText(prog,W-16,VIEWB+22);ctx.fillText('WAVE '+level,W-16,VIEWB+40);
  if(phase===3){ctx.fillStyle='#8f9bbd';ctx.textAlign='center';ctx.fillText('Your height in the trench follows the sight',W/2,VIEWB+62)}}
 
+// --- detail art: nebula space, plated fortress surface, greebled trench walls, cockpit console ---
+let _neb=null;
+function spaceBg(){
+ if(!_neb){_neb=document.createElement('canvas');_neb.width=W;_neb.height=H;const c=_neb.getContext('2d');const g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,'#05061a');g.addColorStop(1,'#0a0414');c.fillStyle=g;c.fillRect(0,0,W,H);
+  for(const [x,y,r,col,a] of [[90,120,220,'120,60,200',.35],[320,330,200,'40,140,220',.3],[220,200,140,'255,80,140',.18],[60,420,160,'60,220,180',.15]]){const rg=c.createRadialGradient(x,y,0,x,y,r);rg.addColorStop(0,'rgba('+col+','+a+')');rg.addColorStop(1,'rgba('+col+',0)');c.fillStyle=rg;c.fillRect(0,0,W,H)}
+  for(let i=0;i<500;i++){const h=A.hash(i,1);c.fillStyle='rgba(255,255,255,'+(.1+A.hash(i,2)*.5)+')';c.fillRect(A.hash(i,3)*W,A.hash(i,4)*H,h<.95?1:1.6,h<.95?1:1.6)}
+  // ringed planet
+  const px=320,py=90,pr=44;const pg=c.createRadialGradient(px-16,py-16,4,px,py,pr);pg.addColorStop(0,'#ffcf9a');pg.addColorStop(.5,'#c8603a');pg.addColorStop(1,'#3a1020');c.fillStyle=pg;c.beginPath();c.arc(px,py,pr,0,TAU);c.fill();
+  c.save();c.beginPath();c.arc(px,py,pr,0,TAU);c.clip();for(let i=0;i<9;i++){c.fillStyle='rgba(255,220,180,'+(.08+A.hash(i,5)*.12)+')';c.fillRect(px-pr,py-pr+i*10+A.hash(i,6)*4,pr*2,3+A.hash(i,7)*3)}c.restore();
+  c.strokeStyle='rgba(255,210,170,.55)';c.lineWidth=3;c.beginPath();c.ellipse(px,py,pr*1.7,pr*.32,-.35,0,TAU);c.stroke();c.strokeStyle='rgba(255,230,200,.25)';c.lineWidth=6;c.beginPath();c.ellipse(px,py,pr*1.9,pr*.38,-.35,0,TAU);c.stroke();
+  c.save();c.beginPath();c.arc(px,py,pr,Math.PI+.35,TAU+.35);c.closePath();c.clip();const g2=c.createRadialGradient(px-16,py-16,4,px,py,pr);g2.addColorStop(0,'#ffcf9a');g2.addColorStop(.5,'#c8603a');g2.addColorStop(1,'#3a1020');c.restore();}
+ ctx.drawImage(_neb,0,0);
+}
+function surfaceBg(){const hz=HY+40/320*F;const g=ctx.createLinearGradient(0,hz,0,VIEWB);g.addColorStop(0,'#1a2030');g.addColorStop(1,'#4a5266');ctx.fillStyle=g;ctx.fillRect(0,hz,W,VIEWB-hz);
+ const off=(phaseT*120)%30;for(let z=320-off;z>4;z-=30){for(let x=-400;x<400;x+=50){if(A.hash(Math.round(x),Math.round((z+phaseT*120)/30))>.75){const a=P(x+6,40,z),b=P(x+44,40,z),c2=P(x+44,40,z-24),d=P(x+6,40,z-24);if(a&&b&&c2&&d){ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(c2.x,c2.y);ctx.lineTo(d.x,d.y);ctx.fill()}}}}
+ const hg=ctx.createLinearGradient(0,hz-30,0,hz+30);hg.addColorStop(0,'rgba(90,255,200,0)');hg.addColorStop(.5,'rgba(90,255,200,.25)');hg.addColorStop(1,'rgba(90,255,200,0)');ctx.fillStyle=hg;ctx.fillRect(0,hz-30,W,60)}
+function quad(a,b,c2,d,fill){if(!a||!b||!c2||!d)return;ctx.fillStyle=fill;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(c2.x,c2.y);ctx.lineTo(d.x,d.y);ctx.closePath();ctx.fill()}
+function fillTower(o,w,top){if(o.dead)return;const fz=o.z-w;quad(P(o.x-w,40,fz),P(o.x+w,40,fz),P(o.x+w,top,fz),P(o.x-w,top,fz),'#6a7898');
+ if(o.x>0)quad(P(o.x-w,40,fz),P(o.x-w,40,o.z+w),P(o.x-w,top,o.z+w),P(o.x-w,top,fz),'#3a4460');else quad(P(o.x+w,40,fz),P(o.x+w,40,o.z+w),P(o.x+w,top,o.z+w),P(o.x+w,top,fz),'#3a4460');
+ quad(P(o.x-w,top,fz),P(o.x+w,top,fz),P(o.x+w,top,o.z+w),P(o.x-w,top,o.z+w),'#aab4d0');
+ for(let k=1;k<4;k++){const yy=40-(40-top)*k/4,a=P(o.x-w*.6,yy,fz),b=P(o.x+w*.6,yy,fz);if(a&&b){ctx.fillStyle=k%2?'rgba(255,225,79,.7)':'rgba(90,255,200,.6)';ctx.fillRect(a.x,a.y-1,b.x-a.x,Math.max(1,a.s*.8))}}}
+function trenchBg(){const off=trenchZ%25;
+ const fl=(x,shade)=>{const g=ctx.createLinearGradient(0,P(0,-25,320).y,0,VIEWB);return g};
+ for(const sx of[-30,30]){const a=P(sx,-25,320),b=P(sx,25,320),c2=P(sx,25,2.2),d=P(sx,-25,2.2);const g=ctx.createLinearGradient(a.x,0,d.x,0);g.addColorStop(0,'#1a2030');g.addColorStop(1,sx<0?'#5a6680':'#4a5470');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(c2.x,c2.y);ctx.lineTo(d.x,d.y);ctx.fill()}
+ {const a=P(-30,25,320),b=P(30,25,320),c2=P(30,25,2.2),d=P(-30,25,2.2);const g=ctx.createLinearGradient(0,a.y,0,VIEWB);g.addColorStop(0,'#141824');g.addColorStop(1,'#3a4258');ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.lineTo(c2.x,c2.y);ctx.lineTo(d.x,d.y);ctx.fill()}
+ // greebles: panels, pipes and lights streaming past
+ for(let z=320-off;z>3;z-=25){const k=Math.round((z+trenchZ)/25);for(const sx of[-30,30]){for(let j=0;j<3;j++){const h=A.hash(k,j+(sx>0?7:0));if(h<.45)continue;const y0=-22+j*16,y1=y0+6+h*6,zz=z-4,zz2=z-4-h*14;quad(P(sx,y0,zz),P(sx,y1,zz),P(sx,y1,zz2),P(sx,y0,zz2),h>.85?'rgba(255,90,60,.55)':h>.7?'rgba(10,12,20,.55)':'rgba(140,160,190,.35)')}}
+  const fz=P(0,25,z);if(fz&&A.hash(k,3)>.5){ctx.fillStyle='rgba(107,180,255,.5)';ctx.fillRect(fz.x-fz.s*1.2,fz.y-fz.s*.3,fz.s*2.4,Math.max(1,fz.s*.6))}}
+ const vg=ctx.createRadialGradient(HX,HY,10,HX,HY,90);vg.addColorStop(0,'rgba(0,0,0,.85)');vg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=vg;ctx.fillRect(HX-90,HY-90,180,180)}
+function cockpit(){const g=ctx.createLinearGradient(0,VIEWB,0,H);g.addColorStop(0,'#1a2238');g.addColorStop(1,'#070b18');ctx.fillStyle=g;ctx.fillRect(0,VIEWB,W,H-VIEWB);
+ ctx.fillStyle='#0d1424';ctx.beginPath();ctx.moveTo(0,VIEWB-30);ctx.lineTo(40,VIEWB);ctx.lineTo(0,VIEWB);ctx.fill();ctx.beginPath();ctx.moveTo(W,VIEWB-30);ctx.lineTo(W-40,VIEWB);ctx.lineTo(W,VIEWB);ctx.fill();
+ ctx.fillStyle='rgba(140,170,220,.35)';ctx.fillRect(0,VIEWB,W,1.5);for(let x=8;x<W;x+=48){ctx.fillStyle='#2a3450';ctx.beginPath();ctx.arc(x,VIEWB+6,1.6,0,TAU);ctx.fill();ctx.beginPath();ctx.arc(x,H-6,1.6,0,TAU);ctx.fill()}
+ for(let i=0;i<8;i++){ctx.fillStyle=(Math.sin(T*3+i*1.7)>.2)?['#5affc8','#ffe14f','#ff4f6b','#6bb4ff'][i%4]:'#1a2440';ctx.fillRect(176+i*6,VIEWB+66,4,3)}}
 reset();requestAnimationFrame(frame);
 </script>
 
+<script src="../lib/joy.js" data-axes="4" data-buttons='[{"label": "FIRE", "key": " "}]'></script>
 </body></html>

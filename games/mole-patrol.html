@@ -35,6 +35,7 @@ button:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
     <button id="pumpBtn">PUMP</button>
   </div>
 </div>
+<script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
 const N=13,T=32,SKY=2; // grid 13x13, rows 0-1 sky
@@ -118,45 +119,96 @@ function die(){lives--;hud();beep(200,.5,.1,'sawtooth');hose=null;
     $('overlay').querySelector('p').textContent=`Game over on round ${round} with ${score} points.`;$('best').textContent='BEST '+best;$('go').textContent='Play again';$('overlay').hidden=false;return}
   player={x:6,y:1,px:6,py:1,fx:1,fy:0,t:0};for(const e of enemies){e.ghost=0;e.inflate=0}
 }
+// ---- detail art: cached dirt tiles per soil band, carved tunnels, critters, the mole ----
+const BANDS=[{b:'#c98b4a',h:'#e0a868',l:'#9a6430'},{b:'#a8642e',h:'#c07a42',l:'#7a4520'},{b:'#7d4520',h:'#985a30',l:'#552a12'},{b:'#57301a',h:'#6e4028',l:'#38190a'}];
+const tileCache={};
+function dirtTile(band,v){const k=band+'_'+v;if(tileCache[k])return tileCache[k];const c2=document.createElement('canvas');c2.width=c2.height=T*2;const c=c2.getContext('2d');c.scale(2,2);const B=BANDS[band];
+  c.fillStyle=B.b;c.fillRect(0,0,T,T);
+  for(let i=0;i<40;i++){const h=A.hash(i,v*7+band);c.fillStyle=h<.5?B.l:B.h;c.globalAlpha=.35;c.fillRect(A.hash(i,v+11)*T,A.hash(i,v+12)*T,1+h*2,1+h*1.5)}c.globalAlpha=1;
+  if(A.hash(v,band,1)<.35){// pebble
+    const px=6+A.hash(v,2)*20,py=6+A.hash(v,3)*20,r=2+A.hash(v,4)*3;c.fillStyle='rgba(0,0,0,.35)';c.beginPath();c.ellipse(px+.6,py+.8,r+.6,r*.8+.5,0,0,7);c.fill();c.fillStyle=band>1?'#8a8478':'#b8b0a0';c.beginPath();c.ellipse(px,py,r,r*.8,0,0,7);c.fill();c.fillStyle='rgba(255,255,255,.4)';c.fillRect(px-r*.5,py-r*.5,r*.6,r*.4)}
+  if(A.hash(v,band,2)<.18&&band<2){c.strokeStyle='#d8b890';c.lineWidth=1;c.beginPath();c.moveTo(A.hash(v,5)*T,0);c.quadraticCurveTo(T/2,T/2,A.hash(v,6)*T,T);c.stroke()}// root
+  if(A.hash(v,band,3)<.05&&band>=2){c.strokeStyle='#e8dcc0';c.lineWidth=1.2;c.beginPath();c.arc(16,16,6,0,Math.PI*1.6);c.stroke();c.beginPath();c.arc(16,16,3,0,Math.PI*1.6);c.stroke()}// fossil
+  if(A.hash(v,band,4)<.06&&band===3){c.fillStyle='#6ff0ff';c.beginPath();c.moveTo(10,12);c.lineTo(13,9);c.lineTo(16,12);c.lineTo(13,16);c.fill();c.fillStyle='rgba(255,255,255,.7)';c.fillRect(12,10,1.5,1.5)}// gem
+  return tileCache[k]=c2}
 function draw(t){
-  // sky
-  ctx.fillStyle='#5ec8ff';ctx.fillRect(0,0,416,SKY*T);
-  ctx.fillStyle='#ffe066';ctx.beginPath();ctx.arc(370,28,16,0,7);ctx.fill();
-  ctx.fillStyle='#4caf50';ctx.fillRect(0,SKY*T-6,416,6);
-  const bands=['#c98b4a','#a8642e','#7d4520','#57301a'];
-  for(let y=SKY;y<N;y++)for(let x=0;x<N;x++){
-    const band=bands[Math.min(3,Math.floor((y-SKY)/3))];
-    if(dirt[y][x]){ctx.fillStyle=band;ctx.fillRect(x*T,y*T,T,T);ctx.fillStyle='rgba(0,0,0,.12)';if((x*7+y*3)%4==0)ctx.fillRect(x*T+8,y*T+10,4,3);if((x*5+y*11)%5==0)ctx.fillRect(x*T+20,y*T+22,3,3)}
-    else{ctx.fillStyle='#120b07';ctx.fillRect(x*T,y*T,T,T)}
-  }
-  // tunnels above ground too
-  for(let x=0;x<N;x++)if(!dirt[1][x]&&false){}
+  // sky + surface scenery
+  const sg=ctx.createLinearGradient(0,0,0,SKY*T);sg.addColorStop(0,'#3a9ae8');sg.addColorStop(1,'#bfe8ff');ctx.fillStyle=sg;ctx.fillRect(0,0,416,SKY*T);
+  A.glow(ctx,370,24,40,'255,240,160',.5);ctx.fillStyle='#ffe066';ctx.beginPath();ctx.arc(370,24,13,0,7);ctx.fill();
+  for(let i=0;i<3;i++){const cx=((i*150+t/80)%560)-70,cy=12+i*7;ctx.fillStyle='rgba(255,255,255,.9)';ctx.beginPath();ctx.ellipse(cx,cy,22,6,0,0,7);ctx.ellipse(cx-8,cy-4,10,6,0,0,7);ctx.ellipse(cx+9,cy-5,12,7,0,0,7);ctx.fill()}
+  // distant farm: barn, windmill, fence
+  ctx.fillStyle='#7ab860';ctx.beginPath();ctx.moveTo(0,SKY*T-6);ctx.quadraticCurveTo(100,SKY*T-26,200,SKY*T-8);ctx.quadraticCurveTo(300,SKY*T-22,416,SKY*T-6);ctx.lineTo(416,SKY*T);ctx.lineTo(0,SKY*T);ctx.fill();
+  ctx.fillStyle='#0a0604';ctx.fillRect(39,SKY*T-29,30,23);ctx.fillStyle='#c0392b';ctx.fillRect(40,SKY*T-28,28,22);ctx.fillStyle='#0a0604';ctx.beginPath();ctx.moveTo(37,SKY*T-27);ctx.lineTo(54,SKY*T-41);ctx.lineTo(71,SKY*T-27);ctx.fill();ctx.fillStyle='#8a2a1f';ctx.beginPath();ctx.moveTo(39,SKY*T-28);ctx.lineTo(54,SKY*T-40);ctx.lineTo(69,SKY*T-28);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(49,SKY*T-18,10,12);ctx.strokeStyle='#c0392b';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(49,SKY*T-18);ctx.lineTo(59,SKY*T-6);ctx.moveTo(59,SKY*T-18);ctx.lineTo(49,SKY*T-6);ctx.stroke();
+  ctx.fillStyle='#d8d0c0';ctx.fillRect(300,SKY*T-38,4,32);ctx.save();ctx.translate(302,SKY*T-38);ctx.rotate(t/600);ctx.fillStyle='#f4f0e8';for(let k=0;k<4;k++){ctx.rotate(Math.PI/2);ctx.fillRect(-1.5,0,3,14)}ctx.restore();
+  ctx.strokeStyle='#8a6a40';ctx.lineWidth=1.5;for(let x=90;x<280;x+=14){ctx.beginPath();ctx.moveTo(x,SKY*T-6);ctx.lineTo(x,SKY*T-15);ctx.stroke()}ctx.beginPath();ctx.moveTo(90,SKY*T-12);ctx.lineTo(280,SKY*T-12);ctx.stroke();
+  // grass lip with blades and flowers
+  ctx.fillStyle='#3a8a2a';ctx.fillRect(0,SKY*T-6,416,7);ctx.fillStyle='#6ac04a';ctx.fillRect(0,SKY*T-6,416,2);
+  ctx.strokeStyle='#4caa3a';ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<416;x+=3){ctx.moveTo(x,SKY*T-5);ctx.lineTo(x+(A.hash(x,1)-.5)*3,SKY*T-9-A.hash(x,2)*3)}ctx.stroke();
+  for(let i=0;i<10;i++){const x=A.hash(i,9)*416;ctx.fillStyle=['#ffd23f','#ff7aa8','#fff'][i%3];ctx.beginPath();ctx.arc(x,SKY*T-9,1.8,0,7);ctx.fill()}
+  // underground: tunnels first (deep shadow), then dirt tiles with lit edges
+  for(let y=SKY;y<N;y++)for(let x=0;x<N;x++){const band=Math.min(3,Math.floor((y-SKY)/3));
+    if(dirt[y][x])ctx.drawImage(dirtTile(band,Math.floor(A.hash(x,y,5)*14)),x*T,y*T,T,T);
+    else{const g=ctx.createRadialGradient(x*T+T/2,y*T+T/2,2,x*T+T/2,y*T+T/2,T*.75);g.addColorStop(0,'#2a1a10');g.addColorStop(1,'#0e0805');ctx.fillStyle=g;ctx.fillRect(x*T,y*T,T,T)}}
+  for(let y=SKY;y<N;y++)for(let x=0;x<N;x++){if(dirt[y][x])continue;const X=x*T,Y=y*T;
+    // soft dirt overhang: dark rim where tunnel meets soil, light lip on top edges
+    if(y>SKY&&dirt[y-1][x]){ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(X,Y,T,4);ctx.fillStyle='rgba(255,220,170,.25)';ctx.fillRect(X,Y-1,T,1)}
+    if(y<N-1&&dirt[y+1][x]){ctx.fillStyle='rgba(255,210,150,.18)';ctx.fillRect(X,Y+T-2,T,2)}
+    if(x>0&&dirt[y][x-1]){ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(X,Y,3,T)}
+    if(x<N-1&&dirt[y][x+1]){ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(X+T-3,Y,3,T)}}
+  // depth markers on the left edge
+  ctx.font='8px Rubik, sans-serif';ctx.fillStyle='rgba(255,255,255,.25)';ctx.textAlign='left';for(let b=0;b<4;b++)ctx.fillText((b+1)*10+'m',2,(SKY+b*3)*T+10);
   // hose
   const p=player,ppx=(p.x+(p.px-p.x)*p.t)*T+T/2,ppy=(p.y+(p.py-p.y)*p.t)*T+T/2;
-  if(hose){ctx.strokeStyle='#e8f6ff';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(ppx,ppy);ctx.lineTo(ppx+p.fx*hose.len*T,ppy+p.fy*hose.len*T);ctx.stroke()}
-  // enemies
+  if(hose){const ex2=ppx+p.fx*hose.len*T,ey2=ppy+p.fy*hose.len*T;ctx.lineCap='round';ctx.strokeStyle='#0a1a2a';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(ppx,ppy);ctx.lineTo(ex2,ey2);ctx.stroke();ctx.strokeStyle='#4fc3f7';ctx.lineWidth=4;ctx.stroke();ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(ppx,ppy-1);ctx.lineTo(ex2,ey2-1);ctx.stroke();
+    ctx.fillStyle='#ffd23f';ctx.beginPath();ctx.arc(ex2,ey2,3.5,0,7);ctx.fill();if(hose.target&&pumping){A.glow(ctx,ex2,ey2,14,'120,200,255',.5)}}
+  // critters
   for(const e of enemies){const ex=(e.px+(e.x-e.px)*e.t)*T+T/2,ey=(e.py+(e.y-e.py)*e.t)*T+T/2;
-    if(e.pop){ctx.fillStyle='#fff';for(let i=0;i<8;i++){const a=i*Math.PI/4,r=(.4-e.pop)*60+6;ctx.fillRect(ex+Math.cos(a)*r-2,ey+Math.sin(a)*r-2,4,4)}continue}
-    const s=1+e.inflate*.9;ctx.save();ctx.translate(ex,ey);ctx.scale(s,s);
-    if(e.ghost){ctx.globalAlpha=.55}
-    ctx.fillStyle='#9b5cff';ctx.beginPath();ctx.arc(0,0,12,0,7);ctx.fill();
-    ctx.fillStyle='#ffd23f';ctx.fillRect(-11,-6,22,8);ctx.fillStyle='#222';ctx.fillRect(-8,-5,6,6);ctx.fillRect(2,-5,6,6);
-    ctx.fillStyle='#fff';ctx.fillRect(-6,-4,2,2);ctx.fillRect(4,-4,2,2);
-    ctx.fillStyle='#6a35c9';ctx.fillRect(-9,9,5,4);ctx.fillRect(4,9,5,4);
+    if(e.pop){const k=.4-e.pop;A.glow(ctx,ex,ey,30,'255,255,255',e.pop);for(let i=0;i<10;i++){const a=i*Math.PI/5,r=k*70+6;ctx.fillStyle=i%2?'#9b5cff':'#ffd23f';ctx.beginPath();ctx.arc(ex+Math.cos(a)*r,ey+Math.sin(a)*r,3*(1-k*2),0,7);ctx.fill()}continue}
+    const s=1.15+e.inflate*1,wob=Math.sin(t/120+e.x)*1;ctx.save();ctx.translate(ex,ey);
+    if(e.ghost){// just glowing eyes drifting through the soil
+      ctx.globalAlpha=.75+.25*Math.sin(t/100);A.glow(ctx,0,0,16,'255,210,63',.3);ctx.fillStyle='#ffd23f';ctx.beginPath();ctx.ellipse(-4,0,3,4,0,0,7);ctx.ellipse(4,0,3,4,0,0,7);ctx.fill();ctx.fillStyle='#000';ctx.fillRect(-4.5,-1,2,3);ctx.fillRect(3.5,-1,2,3);ctx.restore();continue}
+    ctx.scale(s*(e.dx<0?-1:1),s);
+    ctx.fillStyle='rgba(0,0,0,.4)';ctx.beginPath();ctx.ellipse(0,12,10,3,0,0,7);ctx.fill();
+    // feet
+    const st=Math.sin(t/80+e.x*3)*2;ctx.fillStyle='#3a1a6a';ctx.beginPath();ctx.ellipse(-6+st,11,4.5,3,0,0,7);ctx.ellipse(6-st,11,4.5,3,0,0,7);ctx.fill();
+    // round body with shading, inflating gets shinier & redder
+    ctx.fillStyle='#1a0a30';ctx.beginPath();ctx.arc(0,wob*.3,13,0,7);ctx.fill();const bg=ctx.createRadialGradient(-4,-5,1,0,0,13);bg.addColorStop(0,e.inflate>.5?'#ffb0d0':'#d0a8ff');bg.addColorStop(.6,e.inflate>.5?'#e04a8a':'#9b5cff');bg.addColorStop(1,'#5a2aa8');ctx.fillStyle=bg;ctx.beginPath();ctx.arc(0,wob*.3,12,0,7);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.5)';ctx.beginPath();ctx.ellipse(-5,-6,3.5,2,-.5,0,7);ctx.fill();
+    // goggles strap + lenses
+    ctx.fillStyle='#2a2a30';ctx.fillRect(-12.5,-5,25,5);ctx.fillStyle='#0a0a10';ctx.beginPath();ctx.arc(-4.5,-3,5,0,7);ctx.arc(5.5,-3,5,0,7);ctx.fill();
+    const gg=ctx.createRadialGradient(-5.5,-4.5,.5,-4.5,-3,4);gg.addColorStop(0,'#fff8c0');gg.addColorStop(1,'#ffb000');ctx.fillStyle=gg;ctx.beginPath();ctx.arc(-4.5,-3,3.8,0,7);ctx.fill();const gg2=ctx.createRadialGradient(4.5,-4.5,.5,5.5,-3,4);gg2.addColorStop(0,'#fff8c0');gg2.addColorStop(1,'#ffb000');ctx.fillStyle=gg2;ctx.beginPath();ctx.arc(5.5,-3,3.8,0,7);ctx.fill();
+    ctx.fillStyle='#000';ctx.beginPath();ctx.arc(-3.5,-3,1.6,0,7);ctx.arc(6.5,-3,1.6,0,7);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(-5.5,-5.5,1.4,1.4);ctx.fillRect(4.5,-5.5,1.4,1.4);
+    // grumpy mouth
+    ctx.strokeStyle='#2a0a40';ctx.lineWidth=1.4;ctx.beginPath();ctx.arc(1,7,3.5,Math.PI*1.15,Math.PI*1.85);ctx.stroke();
     ctx.restore();ctx.globalAlpha=1}
-  // player: little mole in hardhat
-  ctx.save();ctx.translate(ppx,ppy);if(p.fx<0)ctx.scale(-1,1);
-  ctx.fillStyle='#6d4c41';ctx.beginPath();ctx.ellipse(0,2,11,12,0,0,7);ctx.fill();
-  ctx.fillStyle='#ffb3c1';ctx.beginPath();ctx.arc(10,2,4,0,7);ctx.fill();
-  ctx.fillStyle='#000';ctx.fillRect(3,-3,3,3);
-  ctx.fillStyle='#ffca28';ctx.beginPath();ctx.arc(0,-6,10,Math.PI,0);ctx.fill();ctx.fillRect(-12,-7,24,3);
-  ctx.fillStyle='#fff59d';ctx.fillRect(-2,-13,4,4);
-  ctx.fillStyle='#ffb3c1';ctx.fillRect(-8,12,6,3);ctx.fillRect(3,12,6,3);
-  ctx.restore();
+  // the mole: bigger, with hard hat, headlamp, overalls and digging claws
+  ctx.save();ctx.translate(ppx,ppy);ctx.fillStyle='rgba(0,0,0,.4)';ctx.beginPath();ctx.ellipse(0,14,11,3,0,0,7);ctx.fill();
+  const face=p.fx<0?-1:1,up=p.fy<0,down=p.fy>0,dig=p.t>0?Math.sin(t/40)*2:0;ctx.scale(face*1.15,1.15);
+  if(up)ctx.rotate(-.35);else if(down)ctx.rotate(.35);
+  // feet + claws
+  ctx.fillStyle='#ffb3c1';ctx.beginPath();ctx.ellipse(-6,12,4,2.4,0,0,7);ctx.ellipse(5,12,4,2.4,0,0,7);ctx.fill();
+  // body
+  ctx.fillStyle='#1a0e08';ctx.beginPath();ctx.ellipse(0,2,12,13,0,0,7);ctx.fill();const mg=ctx.createRadialGradient(-3,-3,2,0,2,13);mg.addColorStop(0,'#9a7060');mg.addColorStop(1,'#4a2e22');ctx.fillStyle=mg;ctx.beginPath();ctx.ellipse(0,2,11,12,0,0,7);ctx.fill();
+  // overalls
+  ctx.fillStyle='#2f6fe8';ctx.beginPath();ctx.ellipse(0,7,9.5,6.5,0,0,Math.PI);ctx.fill();ctx.fillRect(-9.5,3,19,4);ctx.fillRect(-5,-1,10,5);ctx.fillStyle='#1f4fa8';ctx.fillRect(-8,0,2,4);ctx.fillRect(6,0,2,4);ctx.fillStyle='#ffd23f';ctx.fillRect(-6,1,1.6,1.6);ctx.fillRect(4.4,1,1.6,1.6);
+  // digging claw arm
+  ctx.fillStyle='#4a2e22';ctx.beginPath();ctx.ellipse(10+dig,4,4,3,.3,0,7);ctx.fill();ctx.fillStyle='#f4e8d0';for(let k=0;k<3;k++){ctx.beginPath();ctx.moveTo(12+dig,2+k*1.8);ctx.lineTo(17+dig,1.5+k*2.2);ctx.lineTo(12+dig,3.5+k*1.8);ctx.fill()}
+  // snout + whiskers + eye
+  ctx.fillStyle='#ffb3c1';ctx.beginPath();ctx.ellipse(10,-1,4.5,3.4,0,0,7);ctx.fill();ctx.fillStyle='#e07a90';ctx.beginPath();ctx.arc(13.5,-1.5,1.6,0,7);ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=.6;ctx.beginPath();ctx.moveTo(10,0);ctx.lineTo(17,1.5);ctx.moveTo(10,1);ctx.lineTo(16,3.5);ctx.stroke();
+  ctx.fillStyle='#000';ctx.beginPath();ctx.arc(4.5,-4,1.6,0,7);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(4.2,-5,.8,.8);
+  // hard hat with lamp
+  ctx.fillStyle='#1a1006';ctx.beginPath();ctx.arc(0,-6,11,Math.PI,0);ctx.fill();ctx.fillRect(-13,-7.5,26,4);
+  const hg=ctx.createLinearGradient(0,-16,0,-6);hg.addColorStop(0,'#fff176');hg.addColorStop(1,'#f9a825');ctx.fillStyle=hg;ctx.beginPath();ctx.arc(0,-6,10,Math.PI,0);ctx.fill();ctx.fillRect(-12,-7,24,3);ctx.fillStyle='rgba(0,0,0,.15)';ctx.fillRect(-1,-15,2,8);
+  ctx.fillStyle='#ccc';ctx.fillRect(-2,-14,5,4);ctx.fillStyle='#fffde0';ctx.beginPath();ctx.arc(2,-12,2,0,7);ctx.fill();ctx.restore();
+  // headlamp beam lighting the tunnel ahead
+  if(state==='play'){ctx.save();ctx.globalCompositeOperation='lighter';const bx=ppx+p.fx*10,by=ppy-12+p.fy*10,ang=Math.atan2(p.fy,p.fx||(p.fy?0:1));const lg=ctx.createRadialGradient(bx,by,2,bx,by,70);lg.addColorStop(0,'rgba(255,250,200,.35)');lg.addColorStop(1,'rgba(255,250,200,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.moveTo(bx,by);ctx.arc(bx,by,70,ang-.45,ang+.45);ctx.closePath();ctx.fill();ctx.restore()}
+  A.vignette(ctx,416,416,.35);
 }
 let last=performance.now();
 function loop(t){const dt=Math.min(.05,(t-last)/1000);last=t;if(state==='play')update(dt);if(dirt)draw(t);requestAnimationFrame(loop)}
 round=1;newRound();requestAnimationFrame(loop);
 </script>
 
+<script src="../lib/joy.js" data-axes="4" data-hide=".dpad"></script>
 </body></html>

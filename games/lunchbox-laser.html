@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Lunchbox Laser: waves of runaway snacks, each wave flies its own pattern. Clear them before your energy runs out.
 K.theme({ bg: '#1a0f2e', ink: '#fff4f8', accent: '#ff5fa2', accentInk: '#2a0016' });
@@ -99,7 +100,7 @@ function stepParts(dt) { for (const p of parts) { p.x += (p.vx || 0) * dt; p.y +
 function colorOf() { return ['#c8792c', '#d9a35b', '#ffd23f', '#ff8fc7', '#e63946', '#e8743b', '#ffb02e', '#fff0d6'][wave % 8]; }
 
 function drawSnack(c, x, y, k, tt) {
-  x = Math.round(x); y = Math.round(y);
+  x = Math.round(x); y = Math.round(y); A.glow(c, x, y, 13, '255,220,150', 0.12);
   switch (k) {
     case 0: c.fillStyle = '#e0a14a'; c.fillRect(x - 8, y - 6, 16, 4); c.fillStyle = '#3fa34d'; c.fillRect(x - 8, y - 2, 16, 2); c.fillStyle = '#6b3a1e'; c.fillRect(x - 8, y, 16, 3); c.fillStyle = '#e0a14a'; c.fillRect(x - 7, y + 3, 14, 3); break;
     case 1: c.fillStyle = '#d9a35b'; c.beginPath(); c.arc(x, y, 7, 0, 7); c.fill(); c.fillStyle = '#4a2810'; [[-3, -2], [2, -3], [0, 2], [3, 2], [-3, 3]].forEach(p => c.fillRect(x + p[0], y + p[1], 2, 2)); break;
@@ -112,13 +113,27 @@ function drawSnack(c, x, y, k, tt) {
   }
 }
 function draw(c, now) {
-  c.fillStyle = '#1a0f2e'; c.fillRect(0, 0, W, H);
-  c.fillStyle = '#ffffff'; for (const s of stars) { c.globalAlpha = 0.3 + s.s * 0.4; c.fillRect(s.x, s.y, 1, 1); } c.globalAlpha = 1;
+  // cafeteria at night: checkered floor in perspective, lit windows, nebula glow
+  const bgG = c.createLinearGradient(0, 0, 0, H); bgG.addColorStop(0, '#120a28'); bgG.addColorStop(0.55, '#2a1440'); bgG.addColorStop(1, '#3a1a3a'); c.fillStyle = bgG; c.fillRect(0, 0, W, H);
+  A.glow(c, 60, 80, 90, '255,90,170', 0.18); A.glow(c, 190, 150, 100, '90,140,255', 0.16);
+  for (const s of stars) { c.fillStyle = 'rgba(255,255,255,' + (0.3 + s.s * 0.4) * (0.7 + 0.3 * Math.sin(now / 400 + s.x)) + ')'; c.fillRect(s.x, s.y, s.s > 0.7 ? 1.5 : 1, s.s > 0.7 ? 1.5 : 1); }
+  const HZ = 250; c.save(); c.beginPath(); c.rect(0, HZ, W, H - HZ); c.clip();
+  const fg = c.createLinearGradient(0, HZ, 0, H); fg.addColorStop(0, '#2a1a3a'); fg.addColorStop(1, '#4a2a4a'); c.fillStyle = fg; c.fillRect(0, HZ, W, H - HZ);
+  for (let r = 0; r < 8; r++) { const y0 = HZ + Math.pow(r / 8, 1.8) * (H - HZ), y1 = HZ + Math.pow((r + 1) / 8, 1.8) * (H - HZ);
+    for (let k = -8; k < 8; k++) { if ((k + r) % 2) continue; const sx = (v, y) => W / 2 + v * (24 + (y - HZ) * 1.6);
+      c.fillStyle = 'rgba(255,240,220,.08)'; c.beginPath(); c.moveTo(sx(k, y0), y0); c.lineTo(sx(k + 1, y0), y0); c.lineTo(sx(k + 1, y1), y1); c.lineTo(sx(k, y1), y1); c.fill(); } }
+  c.restore(); c.fillStyle = 'rgba(255,140,200,.35)'; c.fillRect(0, HZ, W, 1);
   if (state === 'title') { for (let k = 0; k < 8; k++) drawSnack(c, 30 + (k % 4) * 60, 110 + Math.floor(k / 4) * 50 + Math.sin(now / 400 + k) * 6, k); return; }
   for (const e of enemies) if (e.alive) drawSnack(c, e.x, e.y, wave % 8, now);
-  c.fillStyle = '#ff5fa2'; for (const s of shots) c.fillRect(s.x - 1, s.y - 8, 2, 9);
-  c.fillStyle = '#f2e3c6'; for (const cr of crumbs) c.fillRect(cr.x - 1.5, cr.y - 1.5, 3, 3);
-  if (dead <= 0 && state === 'play') { const x = Math.round(px); c.fillStyle = '#7ee0ff'; c.fillRect(x - 10, PY + 2, 20, 6); c.fillRect(x - 6, PY - 2, 12, 4); c.fillStyle = '#ffffff'; c.fillRect(x - 1, PY - 9, 2, 7); c.fillStyle = '#ff5fa2'; c.fillRect(x - 8, PY + 8, 4, 2); c.fillRect(x + 4, PY + 8, 4, 2); }
+  for (const s of shots) { A.glow(c, s.x, s.y - 4, 9, '255,95,162', 0.5); c.fillStyle = '#ff5fa2'; c.fillRect(s.x - 1.5, s.y - 9, 3, 11); c.fillStyle = '#fff'; c.fillRect(s.x - 0.5, s.y - 8, 1, 9); }
+  for (const cr of crumbs) { c.fillStyle = A.INK; c.fillRect(cr.x - 2.2, cr.y - 2.2, 4.4, 4.4); c.fillStyle = '#e8c890'; c.fillRect(cr.x - 1.6, cr.y - 1.6, 3.2, 3.2); c.fillStyle = '#fff4dc'; c.fillRect(cr.x - 1.6, cr.y - 1.6, 1.4, 1.2); }
+  if (dead <= 0 && state === 'play') { const x = Math.round(px);
+    // lunchbox cannon
+    A.glow(c, x, PY + 14, 18, '120,220,255', 0.25);
+    A.part(c, x - 13, PY + 1, 26, 12, '#3a9adf'); c.fillStyle = '#7ee0ff'; c.fillRect(x - 13, PY + 1, 26, 3); c.fillStyle = '#ffd23f'; c.fillRect(x - 3, PY + 5, 6, 3); c.fillStyle = A.INK; c.fillRect(x - 13, PY + 7, 26, 0.8);
+    c.strokeStyle = A.INK; c.lineWidth = 3; c.beginPath(); c.arc(x, PY + 1, 6, Math.PI, 0); c.stroke(); c.strokeStyle = '#d0d8e8'; c.lineWidth = 1.6; c.stroke();
+    A.part(c, x - 2.5, PY - 11, 5, 10, '#e8eef8'); c.fillStyle = '#ff5fa2'; c.fillRect(x - 2.5, PY - 11, 5, 2);
+    c.fillStyle = '#ff5fa2'; c.fillRect(x - 10, PY + 13, 5, 2.5); c.fillRect(x + 5, PY + 13, 5, 2.5); c.fillStyle = 'rgba(255,200,240,' + (0.5 + 0.5 * Math.sin(now / 60)) + ')'; c.fillRect(x - 9, PY + 15.5, 3, 2); c.fillRect(x + 6, PY + 15.5, 3, 2); }
   for (const p of parts) { c.globalAlpha = Math.min(1, p.l * 2); if (p.txt) K.text(c, p.txt, p.x, p.y, 10, '#ffd23f'); else { c.fillStyle = p.c; c.fillRect(p.x - 2, p.y - 2, 4, 4); } } c.globalAlpha = 1;
   // energy bar
   c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(20, H - 10, W - 40, 5);
@@ -126,7 +141,10 @@ function draw(c, now) {
   if (banner > 0) K.text(c, kind.n.toUpperCase() + '!', W / 2, 160, 18, '#ffd23f');
   if (dead > 0 && lives > 0) K.text(c, 'GET READY', W / 2, 200, 14, '#fff');
 }
+drawSnack = A.ink(drawSnack);
+{ const _sn = drawSnack; drawSnack = function (c, x, y, k, tt) { c.save(); c.translate(x, y); c.scale(1.25, 1.25); _sn(c, 0, 0, k, tt); c.restore(); }; }
 title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.4); }; }
 K.run(update, draw);
 </script>
 </body>

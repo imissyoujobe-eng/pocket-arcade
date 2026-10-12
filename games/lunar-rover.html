@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Lunar Rover: drive a six-wheel moon buggy, hop craters and boulders, and blast saucers overhead.
 K.theme({ bg: '#0b0a1e', ink: '#eef0ff', accent: '#b98bff', accentInk: '#14062a' });
@@ -62,26 +63,31 @@ function update(dt) {
   K.set('score', score); K.set('post', 'POINT ' + String.fromCharCode(65 + post)); K.set('lives', '♥'.repeat(Math.max(0, lives)));
 }
 function draw(c, t) {
-  c.fillStyle = '#0b0a1e'; c.fillRect(0, 0, W, H);
-  stars.forEach(s => { c.fillStyle = 'rgba(255,255,255,' + s.b + ')'; c.fillRect((s.x - dist * 0.02 % W + W) % W, s.y, 1, 1); });
-  c.fillStyle = '#5a4a8a'; c.beginPath(); c.arc(260, 40, 16, 0, 7); c.fill();
-  const off1 = dist * 0.15 % 160, off2 = dist * 0.4 % 100;
-  c.fillStyle = '#2a2550'; for (let x = -off1 - 160; x < W + 160; x += 160) { c.beginPath(); c.moveTo(x, 140); c.lineTo(x + 50, 80); c.lineTo(x + 90, 110); c.lineTo(x + 120, 70); c.lineTo(x + 160, 140); c.fill(); }
-  c.fillStyle = '#3d3570'; for (let x = -off2 - 100; x < W + 100; x += 100) { c.beginPath(); c.moveTo(x, 160); c.lineTo(x + 30, 130); c.lineTo(x + 60, 145); c.lineTo(x + 100, 160); c.fill(); }
-  c.fillStyle = '#8a7a5a'; c.fillRect(0, GY, W, H - GY); c.fillStyle = '#6a5a40'; for (let x = -(dist % 20); x < W; x += 20) c.fillRect(x, GY + 8, 8, 2);
+  const sk = c.createLinearGradient(0, 0, 0, GY); sk.addColorStop(0, '#05030f'); sk.addColorStop(1, '#1a1440'); c.fillStyle = sk; c.fillRect(0, 0, W, H);
+  stars.forEach(s2 => { c.fillStyle = 'rgba(255,255,255,' + s2.b * (0.7 + 0.3 * Math.sin(t / 400 + s2.x)) + ')'; c.fillRect((s2.x - dist * 0.02 % W + W) % W, s2.y, 1, 1); });
+  A.glow(c, 262, 42, 40, '90,160,255', 0.35); A.ball(c, 262, 42, 17, '#3a7ad8'); c.fillStyle = '#5ab04a'; c.beginPath(); c.ellipse(256, 38, 6, 4, 0.4, 0, 7); c.ellipse(268, 48, 5, 3, -0.3, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(262, 34, 9, 2, 0, 0, 7); c.fill();
+  A.ridge(c, dist, { factor: 0.12, base: 145, amp: 60, col: '#2e2858', edge: 'rgba(160,140,255,.35)', seed: 3, fog: 'rgba(120,100,200,.15)' });
+  A.ridge(c, dist, { factor: 0.35, base: 165, amp: 32, col: '#443a7a', bands: ['rgba(255,255,255,.06)'], edge: 'rgba(0,0,0,.4)', seed: 8 });
+  const gg = c.createLinearGradient(0, GY, 0, H); gg.addColorStop(0, '#a8987a'); gg.addColorStop(1, '#6a5a44'); c.fillStyle = gg; c.fillRect(0, GY, W, H - GY);
+  c.fillStyle = A.INK; c.fillRect(0, GY - 1, W, 2); c.fillStyle = '#c8b898'; c.fillRect(0, GY + 1, W, 1.5);
+  for (let k = 0; k < 40; k++) { const x = ((A.hash(k, 1) * 600 - dist) % 600 + 600) % 600 - 40, y = GY + 4 + A.hash(k, 2) * (H - GY - 6); if (k % 5 === 0) { c.fillStyle = 'rgba(60,50,40,.45)'; c.beginPath(); c.ellipse(x, y, 7, 2, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(255,240,210,.25)'; c.beginPath(); c.ellipse(x, y + 1, 7, 1.2, 0, 0, Math.PI); c.fill(); } else { c.fillStyle = k % 2 ? 'rgba(70,60,45,.5)' : 'rgba(230,215,185,.45)'; c.fillRect(x, y, 2, 1.5); } }
   obs.forEach(o => { if (o.k === 'crater') { c.fillStyle = '#0b0a1e'; c.beginPath(); c.moveTo(o.x, GY); c.lineTo(o.x + 4, GY + 12); c.lineTo(o.x + o.w - 4, GY + 12); c.lineTo(o.x + o.w, GY); c.fill(); } else { c.fillStyle = o.hp > 1 ? '#a08060' : '#b8a080'; c.beginPath(); c.arc(o.x + 6, GY - 5, 7, Math.PI, 0); c.fill(); c.fillRect(o.x - 1, GY - 5, 14, 5); } });
   if (state === 'play' && !(invul > 0 && Math.floor(t / 100) % 2)) {
-    const x = car.x, y = car.y;
-    c.fillStyle = '#d0d4ff'; c.fillRect(x - 12, y - 12, 24, 6); c.fillStyle = '#b98bff'; c.fillRect(x - 6, y - 18, 10, 6); c.fillStyle = '#7fe0ff'; c.fillRect(x - 3, y - 17, 6, 4);
-    c.fillStyle = '#222'; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(x - 9 + i * 9, y - 3, 3.5, 0, 7); c.fill(); }
-    c.fillStyle = '#888'; c.fillRect(x + 10, y - 11, 5, 2);
+    const x = car.x, y = car.y, bob = car.air ? 0 : Math.sin(t / 60) * 0.6;
+    A.shadow(c, x, GY + 1, car.air ? 8 : 13);
+    A.part(c, x + 10, y - 12 + bob, 6, 2.5, '#9a9aa8'); A.part(c, x - 13, y - 13 + bob, 26, 7, '#d8dcff'); c.fillStyle = '#9a8ad8'; c.fillRect(x - 13, y - 8 + bob, 26, 2);
+    A.part(c, x - 6, y - 20 + bob, 11, 7, '#b98bff'); c.fillStyle = '#7fe0ff'; c.fillRect(x - 3, y - 19 + bob, 7, 4); c.fillStyle = 'rgba(255,255,255,.7)'; c.fillRect(x - 2, y - 19 + bob, 2, 1.5);
+    c.fillStyle = '#ccc'; c.fillRect(x - 9, y - 26 + bob, 1, 7); c.fillStyle = Math.floor(t / 300) % 2 ? '#ff4a4a' : '#5a1a1a'; c.fillRect(x - 10, y - 27 + bob, 3, 2);
+    for (let i = 0; i < 3; i++) { const wx = x - 9 + i * 9, wy = y - 3; A.ball(c, wx, wy, 3.8, '#444'); c.fillStyle = '#aaa'; c.save(); c.translate(wx, wy); c.rotate(dist / 4); c.fillRect(-0.6, -3, 1.2, 6); c.fillRect(-3, -0.6, 6, 1.2); c.restore(); }
+    if (!car.air) A.dust(x - 14, GY - 1, 1, 'rgba(210,195,165,');
   }
-  foes.forEach(f => { c.fillStyle = '#ff6ad5'; c.beginPath(); c.ellipse(f.x, f.y, 10, 4, 0, 0, 7); c.fill(); c.fillStyle = '#ffe0f6'; c.beginPath(); c.arc(f.x, f.y - 3, 4, Math.PI, 0); c.fill(); });
+  foes.forEach(f => { A.glow(c, f.x, f.y + 4, 14, '255,100,220', 0.3); c.fillStyle = A.INK; c.beginPath(); c.ellipse(f.x, f.y, 11, 4.8, 0, 0, 7); c.fill(); const fg = c.createLinearGradient(0, f.y - 4, 0, f.y + 4); fg.addColorStop(0, '#ffa0e8'); fg.addColorStop(1, '#b02a9a'); c.fillStyle = fg; c.beginPath(); c.ellipse(f.x, f.y, 10, 4, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(200,240,255,.85)'; c.beginPath(); c.arc(f.x, f.y - 3, 4.5, Math.PI, 0); c.fill(); for (let k = -1; k <= 1; k++) { c.fillStyle = Math.floor(t / 120 + k) % 2 ? '#ffe04a' : '#fff'; c.fillRect(f.x + k * 5 - 0.7, f.y + 0.5, 1.4, 1.4); } });
   c.fillStyle = '#ff5050'; bombs.forEach(b => c.fillRect(b.x - 2, b.y - 2, 4, 4));
   c.fillStyle = '#fff36a'; shots.forEach(s => c.fillRect(s.x - 1, s.y - 1, s.vx ? 5 : 2, s.vx ? 2 : 5));
   parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
   if (state === 'play') { const f = (dist % POSTLEN) / POSTLEN; c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(10, H - 8, W - 20, 3); c.fillStyle = '#b98bff'; c.fillRect(10, H - 8, (W - 20) * f, 3); }
 }
+{ const _u = update; update = function (dt) { _u(dt); A.stepFx(dt); }; const _draw = draw; draw = function (c, t) { _draw(c, t); A.drawFx(c); A.vignette(c, W, H, 0.35); }; }
 start(); state = 'title'; title(); K.run(update, draw);
 </script>
 </body>

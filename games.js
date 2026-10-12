@@ -1,7 +1,7 @@
 // The game list for the arcade menu.
 // To add a new game: put its file in the games/ folder (games/<id>.html),
 // then add one line below and raise ARCADE_TOTAL to match.
-window.ARCADE_TOTAL = 58;
+window.ARCADE_TOTAL = 54;
 window.ARCADE_GAMES = [
   { id: 'gloom-dungeon',   name: 'Gloom Dungeon',   genre: 'Arcade',  tag: 'Hunt the creatures by radar' },
   { id: 'rotor-strike',    name: 'Rotor Strike',    genre: 'Shooter', tag: 'Fly cover for a desert convoy' },
@@ -12,7 +12,6 @@ window.ARCADE_GAMES = [
   { id: 'tread-storm',     name: 'Tread Storm',     genre: 'Shooter', tag: 'Tank battles from the gunner seat' },
   { id: 'coast-rush',      name: 'Coast Rush',      genre: 'Racing',  tag: 'Beat the clock down the highway' },
   { id: 'frost-cup',       name: 'Frost Cup',       genre: 'Sports',  tag: 'Skate, jump and slalom for gold' },
-  { id: 'tic-tac-toe-3d',  name: 'Tic Tac Toe 3D',  genre: 'Puzzle',  tag: 'Beat the computer or a friend' },
   { id: 'dot-chomper',     name: 'Dot Chomper',     genre: 'Arcade',  tag: 'Chomp the dots, scare the Gloops' },
   { id: 'star-trench',     name: 'Star Trench',     genre: 'Shooter', tag: 'Dogfight, then run the trench' },
   { id: 'eat-my-dust',     name: 'Eat My Dust',     genre: 'Racing',  tag: 'Motocross jumps at sunset' },
@@ -26,7 +25,7 @@ window.ARCADE_GAMES = [
   { id: 'volt-maze',       name: 'Volt Maze',       genre: 'Shooter', tag: 'Robots, electric walls, keep moving' },
   { id: 'quarter-mile', name: 'Quarter Mile', genre: 'Racing', tag: 'Launch on green, shift on time' },
   { id: 'ping',            name: 'Ping',            genre: 'Sports',  tag: 'Table tennis, first to seven' },
-  { id: 'kaboom',          name: 'Kaboom',          genre: 'Arcade',  tag: 'Catch the raccoon’s bombs' },
+  { id: 'kablam',          name: 'Kablam',          genre: 'Arcade',  tag: 'Catch the raccoon’s bombs' },
   { id: 'spore-patrol',    name: 'Spore Patrol',    genre: 'Shooter', tag: 'Blast the crawler in the mushrooms' },
   { id: 'barn-buzzer', name: 'Barn Buzzer', genre: 'Racing', tag: 'Fly a biplane through the barns' },
   { id: 'lake-showdown', name: 'Lake Showdown', genre: 'Sports', tag: 'Fishing race to 99 lbs' },
@@ -45,12 +44,9 @@ window.ARCADE_GAMES = [
   { id: 'fuel-run', name: 'Fuel Run', genre: 'Shooter', tag: 'Fly the river, blast the bridges' },
   { id: 'rodeo-roundup', name: 'Rodeo Roundup', genre: 'Arcade', tag: 'Rope the stampeding herd' },
   { id: 'lunchbox-laser', name: 'Lunchbox Laser', genre: 'Shooter', tag: 'Zap waves of runaway snacks' },
-  { id: 'brick-pigs', name: 'Brick Pigs', genre: 'Arcade', tag: 'Keep the wolf out of the wall' },
   { id: 'saucer-sweep', name: 'Saucer Sweep', genre: 'Shooter', tag: 'Zap the ground cannons below' },
-  { id: 'burger-rush', name: 'Burger Rush', genre: 'Arcade', tag: 'Catch toppings, build the order' },
+  { id: 'wing-knights', name: 'Wing Knights', genre: 'Arcade', tag: 'Fly high, joust, grab the eggs' },
   { id: 'brush-blaster', name: 'Brush Blaster', genre: 'Shooter', tag: 'Defend the teeth from junk food' },
-  { id: 'igloo-hop', name: 'Igloo Hop', genre: 'Arcade', tag: 'Hop the ice, build your igloo' },
-  { id: 'mall-chase', name: 'Mall Chase', genre: 'Arcade', tag: 'Catch the robber in the store' },
   { id: 'copter-pack', name: 'Copter Pack', genre: 'Arcade', tag: 'Heli-pack mine rescue' },
   { id: 'lost-mine', name: 'Lost Mine', genre: 'Arcade', tag: 'Explore the cavern for the relic' },
   { id: 'apex-grand-prix', name: "Apex Grand Prix", genre: 'Racing', tag: "Qualify, then race the pack" },
@@ -60,5 +56,5 @@ window.ARCADE_GAMES = [
   { id: 'bounce-breaker', name: "Bounce Breaker", genre: 'Arcade', tag: "Bust bricks, catch power-ups" },
   { id: 'marble-run', name: "Marble Run", genre: 'Puzzle', tag: "Roll to the goal against the clock" },
   { id: 'city-smash', name: "City Smash", genre: 'Arcade', tag: "Giant lizard vs the city" },
-  { id: 'heros-reflex', name: "Hero's Reflex", genre: 'Arcade', tag: "React fast or the hero falls" }
+  { id: 'sundown-showdown', name: "Sundown Showdown", genre: 'Shooter', tag: "Old West gunfight, first to 10" }
 ];

@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Saucer Sweep: hover over the alien plains and zap the ground cannons before they lock on and fire back.
 K.theme({ bg: '#120a24', ink: '#f2ecff', accent: '#7cff6b', accentInk: '#0a2a00' });
@@ -71,8 +72,11 @@ function draw(c, t) {
   const g = c.createLinearGradient(0, 0, 0, GROUND); g.addColorStop(0, '#120a24'); g.addColorStop(1, '#5a2a6a'); c.fillStyle = g; c.fillRect(0, 0, W, H);
   if (stars) for (const s of stars) { c.fillStyle = 'rgba(255,255,255,' + (0.3 + 0.5 * Math.abs(Math.sin(t / 700 + s.b * 9))) + ')'; c.fillRect(s.x, s.y, 1, 1); }
   c.fillStyle = '#ff8fc7'; c.beginPath(); c.arc(260, 40, 18, 0, 7); c.fill(); c.fillStyle = '#5a2a6a'; c.beginPath(); c.arc(268, 36, 16, 0, 7); c.fill();
-  c.fillStyle = '#3a1f4a'; c.beginPath(); c.moveTo(0, GROUND); for (let x = 0; x <= W; x += 16) c.lineTo(x, GROUND - 22 - Math.abs(Math.sin(x / 37)) * 26); c.lineTo(W, GROUND); c.fill();
-  c.fillStyle = '#2a1636'; c.fillRect(0, GROUND, W, H - GROUND); c.fillStyle = '#7cff6b'; c.fillRect(0, GROUND, W, 2);
+  A.glow(c, 260, 40, 50, '255,140,200', 0.25);
+  A.ridge(c, 0, { factor: 0, base: GROUND - 6, amp: 50, col: '#2a1640', edge: 'rgba(255,140,220,.35)', seed: 3 });
+  A.skyline(c, 0, { factor: 0, base: GROUND, col: '#1a0c28', amp: 36, win: 'rgba(255,200,120,.5)' });
+  for (let x = 0; x < W; x += 16) A.tile(c, 'ss', x, GROUND, { t: true, b: false, l: false, r: false }, x / 16, 0, Object.assign({}, A.PAL.stone, { base: '#3a2a50', hi: '#5a4a70', lo: '#24183a', mortar: '#120a1e', grass: '#7cff6b', grassHi: '#c8ffb8', grassLo: '#3aa83a' }));
+  c.fillStyle = '#1a0e28'; c.fillRect(0, GROUND + 16, W, H - GROUND - 16);
   if (!cannons) return;
   for (const cn of cannons) {
     if (cn.hp <= 0) continue;
@@ -97,6 +101,7 @@ function draw(c, t) {
   if (msgT > 0) K.text(c, 'WAVE ' + (wave + 1), W / 2, 110, 16, '#7cff6b');
 }
 title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.35); }; }
 K.run(update, draw);
 </script>
 </body>

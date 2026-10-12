@@ -29,6 +29,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <div id="overlay"><h1>Bug Bloom</h1><p id="msg">Munch every seed in the garden maze. Spin the green gates to block the beetles and spell BLOOM with the petal letters.</p><p class="how">Drag anywhere to walk. Walk into a gate to spin it. Avoid the red thorns, and lure beetles into them. Keys: arrows.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
+<script src="../lib/art.js"></script>
 <script>
 const GAME_ID='bug-bloom';
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
@@ -143,24 +144,35 @@ function update(dt){for(const l of letters)l.t+=dt/1.2;for(const g of gates)g.ro
   if(thorns.some(t=>t.c===e.c&&t.r===e.r)){const q=pos(e);burst(q.x,q.y,[e.col,'#fff'],20,160,.7,3);score+=500;floatText(q.x,q.y-10,'+500',e.col);e.c=CC;e.r=CR;e.p=0;e.wait=3;noise(.3,.08,1400);hud()}
   const q=pos(e);if(pl.inv<=0&&Math.hypot(q.x-pp.x,q.y-pp.y)<CS*.6){killPlayer();return}}
 }
-function drawBug(x,y,d,body,spots,t,isPlayer){ctx.save();ctx.translate(x,y);ctx.rotate([-Math.PI/2,0,Math.PI/2,Math.PI][d]+Math.PI/2);const wig=Math.sin(t*18)*2;
+function drawBug(x,y,d,body,spots,t,isPlayer){ctx.save();ctx.translate(x,y);ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(2,4,12,10,0,0,TAU);ctx.fill();ctx.rotate([-Math.PI/2,0,Math.PI/2,Math.PI][d]+Math.PI/2);ctx.scale(1.15,1.15);const wig=Math.sin(t*18)*2;
  ctx.strokeStyle='#111';ctx.lineWidth=1.6;for(const s of[-1,1])for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(s*6,i*4);ctx.lineTo(s*12,i*5+(i%2?wig:-wig));ctx.stroke()}
- ctx.fillStyle=body;ctx.beginPath();ctx.ellipse(0,1,10,11,0,0,TAU);ctx.fill();ctx.strokeStyle='#111';ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(0,12);ctx.stroke();
- ctx.fillStyle=spots;for(const [sx,sy] of[[-5,-1],[5,-1],[-4,6],[4,6]]){ctx.beginPath();ctx.arc(sx,sy,2.2,0,TAU);ctx.fill()}
- ctx.fillStyle='#111';ctx.beginPath();ctx.arc(0,-10,5,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(-3,-12,2,2);ctx.fillRect(1,-12,2,2);
- ctx.strokeStyle='#111';ctx.beginPath();ctx.moveTo(-2,-14);ctx.lineTo(-5,-19);ctx.moveTo(2,-14);ctx.lineTo(5,-19);ctx.stroke();ctx.restore()}
-function draw(){ctx.fillStyle='#0f1f12';ctx.fillRect(0,0,W,H);
- ctx.fillStyle='#16301b';ctx.fillRect(X0,Y0,GC*CS,GR*CS);
+ ctx.fillStyle='#111';ctx.beginPath();ctx.ellipse(0,1,11,12,0,0,TAU);ctx.fill();{const g=ctx.createRadialGradient(-4,-3,1,0,1,12);g.addColorStop(0,A.shade(body,.55));g.addColorStop(.5,body);g.addColorStop(1,A.shade(body,-.45));ctx.fillStyle=g;}ctx.beginPath();ctx.ellipse(0,1,10,11,0,0,TAU);ctx.fill();ctx.strokeStyle='#111';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(0,12);ctx.stroke();
+ ctx.fillStyle=spots;for(const [sx,sy,r] of[[-5,-1,2.4],[5,-1,2.4],[-4,6,2.2],[4,6,2.2],[-6.5,3,1.4],[6.5,3,1.4]]){ctx.beginPath();ctx.arc(sx,sy,r,0,TAU);ctx.fill()}
+ ctx.fillStyle='rgba(255,255,255,.55)';ctx.beginPath();ctx.ellipse(-4,-4,2.6,1.4,-.6,0,TAU);ctx.fill();ctx.beginPath();ctx.ellipse(4,-4,1.6,1,.6,0,TAU);ctx.fill();
+ ctx.fillStyle='#111';ctx.beginPath();ctx.arc(0,-10,5.4,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-2.2,-11.2,1.6,0,TAU);ctx.arc(2.2,-11.2,1.6,0,TAU);ctx.fill();ctx.fillStyle='#111';ctx.fillRect(-2,-11.6,1,1);ctx.fillRect(2.4,-11.6,1,1);ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-3.6,-8,.9,0,TAU);ctx.arc(3.6,-8,.9,0,TAU);ctx.fill();
+ ctx.strokeStyle='#111';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(-2,-14);ctx.quadraticCurveTo(-4,-18,-6,-19);ctx.moveTo(2,-14);ctx.quadraticCurveTo(4,-18,6,-19);ctx.stroke();ctx.fillStyle='#111';ctx.beginPath();ctx.arc(-6,-19,1.4,0,TAU);ctx.arc(6,-19,1.4,0,TAU);ctx.fill();ctx.restore()}
+let _gard=null;
+function gardenArt(){if(_gard)return _gard;const cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');
+ c.fillStyle='#1a2a14';c.fillRect(0,0,W,H);for(let y=0;y<H;y+=16)for(let x=0;x<W;x+=16)A.grassTD(c,x,y,x/16,y/16,{base:'#3a7a2a',hi:'#5a9a3a',lo:'#2a5a1e'});
+ c.fillStyle='rgba(0,0,0,.35)';c.fillRect(0,0,W,H);
+ for(let y=Y0;y<Y0+GR*CS;y+=16)for(let x=X0;x<X0+GC*CS;x+=16)A.grassTD(c,x,y,x/16+50,y/16,{base:'#6cbc4a',hi:'#8ad864',lo:'#4a9a34'});
+ for(let i=0;i<50;i++){c.fillStyle='rgba(80,50,20,.18)';c.beginPath();c.ellipse(X0+A.hash(i,1)*GC*CS,Y0+A.hash(i,2)*GR*CS,6+A.hash(i,3)*10,4+A.hash(i,4)*6,A.hash(i,5)*3,0,7);c.fill()}
+ return(_gard=cv)}
+function hedge(path){ctx.lineCap='round';ctx.lineJoin='round';for(const [lw,col] of[[11,'#0e2a10'],[9,'#2a6a2a'],[6,'#3f8f3a'],[2.5,'#6abf55']]){ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.stroke(path)}
+ }
+function draw(){ctx.drawImage(gardenArt(),0,0);
  // release timer runs around the border like a garden fuse
  const k=1-releaseT/releaseEvery,per=2*(GC+GR)*CS;ctx.strokeStyle='#ffd23f';ctx.lineWidth=3;ctx.setLineDash([per*k,per]);rr(X0-6,Y0-6,GC*CS+12,GR*CS+12,6);ctx.stroke();ctx.setLineDash([]);
- for(let r=0;r<GR;r++)for(let c=0;c<GC;c++)if(dots[r][c]){ctx.fillStyle='#f4e3b5';ctx.beginPath();ctx.ellipse(X0+(c+.5)*CS,Y0+(r+.5)*CS,2.6,3.6,.6,0,TAU);ctx.fill()}
- ctx.strokeStyle='#d8f5c8';ctx.lineWidth=5;ctx.lineCap='round';ctx.beginPath();
- for(let r=0;r<GR;r++)for(let c=0;c<GC;c++){const x=X0+c*CS,y=Y0+r*CS,o=open[r][c];if(!(o&1)){ctx.moveTo(x,y);ctx.lineTo(x+CS,y)}if(!(o&8)){ctx.moveTo(x,y);ctx.lineTo(x,y+CS)}if(r===GR-1&&!(o&4)){ctx.moveTo(x,y+CS);ctx.lineTo(x+CS,y+CS)}if(c===GC-1&&!(o&2)){ctx.moveTo(x+CS,y);ctx.lineTo(x+CS,y+CS)}}ctx.stroke();
- for(const g of gates){const x=X0+g.x*CS,y=Y0+g.y*CS,a=(g.v?Math.PI/2:0)+(g.rot*Math.PI/2)*(g.v?-1:1);ctx.strokeStyle='#4fe36b';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(x-Math.cos(a)*CS*.95,y-Math.sin(a)*CS*.95);ctx.lineTo(x+Math.cos(a)*CS*.95,y+Math.sin(a)*CS*.95);ctx.stroke();ctx.fillStyle='#e8ffd8';ctx.beginPath();ctx.arc(x,y,4,0,TAU);ctx.fill()}
+ for(let r=0;r<GR;r++)for(let c=0;c<GC;c++)if(dots[r][c]){const x=X0+(c+.5)*CS,y=Y0+(r+.5)*CS;ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(x+1,y+2,3,2,0,0,TAU);ctx.fill();ctx.fillStyle='#5a3a10';ctx.beginPath();ctx.ellipse(x,y,3.3,4.3,.6,0,TAU);ctx.fill();ctx.fillStyle='#f4e3b5';ctx.beginPath();ctx.ellipse(x,y,2.6,3.6,.6,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(x-1.2,y-2,1,1.4)}
+ {const p=new Path2D();
+ for(let r=0;r<GR;r++)for(let c=0;c<GC;c++){const x=X0+c*CS,y=Y0+r*CS,o=open[r][c];if(!(o&1)){p.moveTo(x,y);p.lineTo(x+CS,y)}if(!(o&8)){p.moveTo(x,y);p.lineTo(x,y+CS)}if(r===GR-1&&!(o&4)){p.moveTo(x,y+CS);p.lineTo(x+CS,y+CS)}if(c===GC-1&&!(o&2)){p.moveTo(x+CS,y);p.lineTo(x+CS,y+CS)}}
+ ctx.save();ctx.translate(2,3);ctx.strokeStyle='rgba(0,0,0,.3)';ctx.lineWidth=11;ctx.lineCap='round';ctx.stroke(p);ctx.restore();hedge(p);
+ ctx.fillStyle='rgba(180,240,140,.6)';for(let r=0;r<=GR;r++)for(let c=0;c<=GC;c++){const h=A.hash(c,r);if(h<.4){ctx.beginPath();ctx.arc(X0+c*CS+(h-.2)*10,Y0+r*CS-1,1.3,0,TAU);ctx.fill()}else if(h>.93){ctx.fillStyle=['#ff7aa8','#fff','#ffe04a'][Math.floor(h*100)%3];ctx.beginPath();ctx.arc(X0+c*CS,Y0+r*CS,2,0,TAU);ctx.fill();ctx.fillStyle='rgba(180,240,140,.6)'}}}
+ for(const g of gates){const x=X0+g.x*CS,y=Y0+g.y*CS,a=(g.v?Math.PI/2:0)+(g.rot*Math.PI/2)*(g.v?-1:1),ex=Math.cos(a)*CS*.95,ey=Math.sin(a)*CS*.95;ctx.lineCap='round';for(const [lw,col] of[[8,'#3a2410'],[6,'#c8904a'],[2,'#f0c88a']]){ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.beginPath();ctx.moveTo(x-ex,y-ey);ctx.lineTo(x+ex,y+ey);ctx.stroke()}ctx.strokeStyle='rgba(60,30,10,.6)';ctx.lineWidth=1;for(let k=-3;k<=3;k++){if(!k)continue;const px=x+ex*k/4,py=y+ey*k/4;ctx.beginPath();ctx.moveTo(px-ey*.08,py+ex*.08);ctx.lineTo(px+ey*.08,py-ex*.08);ctx.stroke()}A.ball(ctx,x,y,4.4,'#4fe36b')}
  ctx.fillStyle='rgba(255,210,63,.15)';ctx.fillRect(X0+CC*CS+3,Y0+CR*CS+3,CS-6,CS-6);
- for(const t of thorns){const x=X0+(t.c+.5)*CS,y=Y0+(t.r+.5)*CS;ctx.fillStyle='#8a1f3a';ctx.beginPath();for(let i=0;i<12;i++){const a=i/12*TAU,r2=i%2?5:12;ctx.lineTo(x+Math.cos(a)*r2,y+Math.sin(a)*r2)}ctx.fill();ctx.fillStyle='#ff4f6b';ctx.beginPath();ctx.arc(x,y,3,0,TAU);ctx.fill()}
+ for(const t of thorns){const x=X0+(t.c+.5)*CS,y=Y0+(t.r+.5)*CS;A.glow(ctx,x,y,18,'255,60,100',.25);ctx.fillStyle='#3a0a18';ctx.beginPath();for(let i=0;i<12;i++){const a=i/12*TAU,r2=i%2?6:13.5;ctx.lineTo(x+Math.cos(a)*r2,y+Math.sin(a)*r2)}ctx.fill();ctx.fillStyle='#8a1f3a';ctx.beginPath();for(let i=0;i<12;i++){const a=i/12*TAU,r2=i%2?5:12;ctx.lineTo(x+Math.cos(a)*r2,y+Math.sin(a)*r2)}ctx.fill();ctx.fillStyle='#ff4f6b';ctx.beginPath();ctx.arc(x,y,3,0,TAU);ctx.fill()}
  for(const l of letters){const x=X0+(l.c+.5)*CS,y=Y0+(l.r+.5)*CS,col=['#ff3d52','#ffd23f','#4fa3ff'][Math.floor(l.t)%3];ctx.fillStyle=col;for(let i=0;i<5;i++){const a=i/5*TAU+T;ctx.beginPath();ctx.arc(x+Math.cos(a)*7,y+Math.sin(a)*7,5,0,TAU);ctx.fill()}ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,7,0,TAU);ctx.fill();ctx.fillStyle='#111';ctx.font='11px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillText(WORD[word]||'',x,y+4)}
- if(veg){const x=X0+(veg.c+.5)*CS,y=Y0+(veg.r+.5)*CS;ctx.fillStyle='#ff7a1f';ctx.beginPath();ctx.moveTo(x,y+12);ctx.lineTo(x-6,y-4);ctx.lineTo(x+6,y-4);ctx.fill();ctx.fillStyle='#4fe36b';ctx.fillRect(x-4,y-10,3,7);ctx.fillRect(x+1,y-11,3,8)}
+ if(veg){const x=X0+(veg.c+.5)*CS,y=Y0+(veg.r+.5)*CS;A.glow(ctx,x,y,20,'255,180,60',.35);ctx.fillStyle='#2a6a1a';for(const [dx,h] of[[-4,10],[0,13],[4,10]]){ctx.beginPath();ctx.ellipse(x+dx,y-4-h/2,2,h/2,dx*.06,0,TAU);ctx.fill()}ctx.fillStyle='#3a1a00';ctx.beginPath();ctx.moveTo(x,y+13);ctx.lineTo(x-7,y-4.5);ctx.lineTo(x+7,y-4.5);ctx.fill();{const g=ctx.createLinearGradient(x-6,0,x+6,0);g.addColorStop(0,'#ffa040');g.addColorStop(1,'#d05a10');ctx.fillStyle=g;}ctx.beginPath();ctx.moveTo(x,y+12);ctx.lineTo(x-6,y-4);ctx.lineTo(x+6,y-4);ctx.fill();ctx.strokeStyle='rgba(120,40,0,.6)';ctx.lineWidth=.8;for(let k=0;k<3;k++){ctx.beginPath();ctx.moveTo(x-4+k,y-1+k*4);ctx.lineTo(x-1+k,y+k*4);ctx.stroke()}}
  for(const e of ens){const q=pos(e);ctx.globalAlpha=freezeT>0&&Math.floor(T*8)%2?.5:1;drawBug(q.x,q.y,e.d,e.col,'#111',e.t,false);ctx.globalAlpha=1}
  if(deadT<=0&&!(pl.inv>0&&Math.floor(T*10)%2)){const q=pos(pl);drawBug(q.x,q.y,pl.face,'#ff3d52','#111',pl.moving?T:0,true)}
  ctx.fillStyle='#a7c9a0';ctx.font='11px Rubik, sans-serif';ctx.textAlign='left';ctx.fillText('SEEDS '+dotsLeft,X0,H-22);ctx.textAlign='right';ctx.fillText('Walk into a green gate to spin it',X0+GC*CS,H-22);
@@ -169,4 +181,5 @@ function draw(){ctx.fillStyle='#0f1f12';ctx.fillRect(0,0,W,H);
 reset();requestAnimationFrame(frame);
 </script>
 
+<script src="../lib/joy.js" data-axes="4"></script>
 </body></html>

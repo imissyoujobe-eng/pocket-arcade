@@ -7,10 +7,11 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // City Smash: you are a giant lizard. Climb the towers, punch out every window until each one crumbles, and swat the soldiers and choppers fighting back.
 K.theme({ bg: '#1a1030', ink: '#fff2e0', accent: '#7aff4a', accentInk: '#0a2400' });
-const W = 320, H = 220, GY = 196, FW = 12, FH = 13;
+const W = 320, H = 220, GY = 196, FW = 16, FH = 16;
 K.screen(W, H);
 K.hud(['score', 'city', 'hp']);
 K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'JUMP' }, { id: 'a', label: 'PUNCH' }] });
@@ -19,8 +20,8 @@ let state = 'title', score, hp, city, me, blds, foes, shots, people, parts, spaw
 function title() { K.card({ title: 'CITY SMASH', text: '◀ ▶ walk. Walk into a tower and press ▲ ▼ to climb it. PUNCH smashes windows, soldiers and choppers. JUMP leaps. Grab the little people in the windows to heal. Knock down every tower to wreck the city!', best: best ? 'BEST ' + best : '', button: 'Rampage', onStart: start }); }
 function start() { score = 0; hp = 100; city = 1; buildCity(); state = 'play'; }
 function buildCity() {
-  blds = []; const n = 3 + Math.min(2, Math.floor(city / 2)); let x = 30;
-  for (let i = 0; i < n; i++) { const cols = K.ri(3, 4), rows = K.ri(5, 9); const w = cols * FW + 6, gap = (W - 40) / n;
+  blds = []; const n = 3 + Math.min(1, Math.floor(city / 3)); let x = 30;
+  for (let i = 0; i < n; i++) { const cols = 3, rows = K.ri(5, 8); const w = cols * FW + 6, gap = (W - 40) / n;
     const b = { x: 20 + i * gap + (gap - w) / 2, w, cols, rows, h: rows * FH + 8, col: ['#5a6a8a', '#8a5a5a', '#6a7a5a', '#8a7a5a', '#6a5a8a'][i % 5], wins: [], fall: 0, down: false };
     for (let r = 0; r < rows; r++) for (let cc = 0; cc < cols; cc++) b.wins.push({ r, c: cc, hp: 2, person: Math.random() < 0.08 });
     blds.push(b); }
@@ -47,10 +48,10 @@ function update(dt) {
     if (K.hit('b') && !me.air) { me.vy = -150; me.air = true; K.beep(250, 0.1, { to: 400 }); }
     me.vy += 350 * dt; me.x += me.vx * dt; me.y += me.vy * dt; me.x = K.clamp(me.x, 8, W - 8);
     if (me.y >= GY) { me.y = GY; me.vy = 0; me.air = false; }
-    const b = bldAt(me.x + me.face * 8); if (b && (K.down('up') || (me.air && me.vy > -40)) && me.y <= GY + 1 && me.y > GY - b.h + b.fall) { me.cling = b; me.x = me.face > 0 ? b.x - 6 : b.x + b.w + 6; me.vx = 0; me.vy = 0; me.air = false; }
+    const b = bldAt(me.x + me.face * 8); if (b && (K.down('up') || (me.air && me.vy > -40)) && me.y <= GY + 1 && me.y > GY - b.h + b.fall) { me.cling = b; me.x = me.face > 0 ? b.x - 9 : b.x + b.w + 9; me.vx = 0; me.vy = 0; me.air = false; }
   }
   if (K.hit('a') || (K.ptr.tapped && K.ptr.y < me.y - 30)) {
-    punchT = 0.18; const px = me.x + me.face * 14, py = me.y - 16; K.noise(0.06, 0.2);
+    punchT = 0.18; const px = me.x + me.face * 19, py = me.y - 22; K.noise(0.06, 0.2);
     for (const b of blds) { if (b.down) continue; for (const w of b.wins) { if (w.hp <= 0) continue; const p = winPos(b, w); if (Math.abs(p.x + 5 - px) < 9 && Math.abs(p.y + 5 - py) < 9) { w.hp--; score += 10; boom(p.x + 5, p.y + 5, '#9cf', 4); if (w.hp <= 0) { score += 40; if (w.person) people.push({ x: p.x + 5, y: p.y + 6, t: 3 }); } } } }
     foes.forEach(f => { if (Math.abs(f.x - px) < 14 && Math.abs(f.y - py) < 16) { f.dead = true; score += f.k === 'heli' ? 300 : 100; boom(f.x, f.y, '#ffb04a', 12); } });
     people.forEach(p => { if (Math.abs(p.x - px) < 12 && Math.abs(p.y - py) < 14) { p.dead = true; hp = Math.min(100, hp + 15); score += 200; K.tune([660, 880], 0.05); } });
@@ -75,24 +76,42 @@ function update(dt) {
 }
 function draw(c, t) {
   if (shake > 0) c.translate(K.rnd(-2, 2), K.rnd(-2, 2));
-  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#2a1a50'); g.addColorStop(1, '#e8705a'); c.fillStyle = g; c.fillRect(-4, -4, W + 8, H + 8);
-  c.fillStyle = '#3a2a5a'; for (let i = 0; i < 10; i++) c.fillRect(i * 34, GY - 40 - (i * 37 % 50), 30, 60);
-  blds.forEach(b => { if (b.down) { c.fillStyle = '#777'; c.beginPath(); c.moveTo(b.x - 4, GY); c.lineTo(b.x + b.w / 2, GY - 8); c.lineTo(b.x + b.w + 4, GY); c.fill(); return; }
-    c.save(); c.beginPath(); c.rect(b.x - 10, 0, b.w + 20, GY); c.clip();
-    const top = GY - b.h + b.fall; c.fillStyle = b.col; c.fillRect(b.x, top, b.w, b.h); c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(b.x, top, b.w, 4);
-    b.wins.forEach(w => { const p = winPos(b, w); c.fillStyle = w.hp === 2 ? '#ffe9a0' : w.hp === 1 ? '#c09060' : '#1a1020'; c.fillRect(p.x, p.y, FW - 3, FH - 4); if (w.hp === 1) { c.strokeStyle = '#fff'; c.beginPath(); c.moveTo(p.x + 1, p.y + 1); c.lineTo(p.x + 7, p.y + 8); c.stroke(); } if (w.person && w.hp > 0) { c.fillStyle = '#c05030'; c.fillRect(p.x + 3, p.y + 3, 3, 5); } });
+  A.sky(c, W, H, { top: '#1a1040', mid: '#8a3a6a', bottom: '#ff9a5a', sun: '#ffe0a0', sunX: 250, sunY: 120, sunR: 22, clouds: true, cloud: 'rgba(255,190,200,.55)' }, t);
+  A.skyline(c, 0, { factor: 0, base: GY - 10, col: '#2a1a40', amp: 90, win: 'rgba(255,210,120,.45)' });
+  A.skyline(c, 37, { factor: 0, base: GY, col: '#1a1028', amp: 50, win: 'rgba(255,200,110,.35)' });
+  blds.forEach(b => { if (b.down) { c.fillStyle = A.INK; c.beginPath(); c.moveTo(b.x - 6, GY); c.lineTo(b.x + 6, GY - 12); c.lineTo(b.x + b.w / 2, GY - 16); c.lineTo(b.x + b.w - 4, GY - 10); c.lineTo(b.x + b.w + 6, GY); c.fill(); c.fillStyle = '#8a8088'; c.beginPath(); c.moveTo(b.x - 4, GY); c.lineTo(b.x + 6, GY - 10); c.lineTo(b.x + b.w / 2, GY - 14); c.lineTo(b.x + b.w - 4, GY - 8); c.lineTo(b.x + b.w + 4, GY); c.fill(); for (let k = 0; k < 6; k++) { A.part(c, b.x + A.hash(k, b.x) * b.w, GY - 6 - A.hash(k, 2) * 6, 5, 3, '#a09098'); } return; }
+    c.save(); c.beginPath(); c.rect(b.x - 12, 0, b.w + 24, GY); c.clip();
+    const top = GY - b.h + b.fall;
+    c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(b.x + 4, top + 4, b.w, b.h);
+    c.fillStyle = A.INK; c.fillRect(b.x - 1, top - 1, b.w + 2, b.h + 2);
+    for (let yy = top; yy < GY; yy += 6) for (let xx = 0; xx < b.w; xx += 10) { const o = ((yy - top) / 6) % 2 ? 5 : 0; c.fillStyle = A.hash(b.x + xx, yy) < 0.18 ? A.shade(b.col, -0.15) : b.col; c.fillRect(b.x + Math.max(0, xx - o), yy, Math.min(9.4, b.w - Math.max(0, xx - o)), 5.4); }
+    const sg = c.createLinearGradient(b.x, 0, b.x + b.w, 0); sg.addColorStop(0, 'rgba(255,255,255,.12)'); sg.addColorStop(1, 'rgba(0,0,0,.25)'); c.fillStyle = sg; c.fillRect(b.x, top, b.w, b.h);
+    A.part(c, b.x - 2, top - 3, b.w + 4, 4, A.shade(b.col, -0.3)); A.part(c, b.x + b.w - 14, top - 12, 9, 9, '#8a6a4a'); c.fillStyle = '#5a4a3a'; c.fillRect(b.x + b.w - 13, top - 3, 1.5, 3); c.fillRect(b.x + b.w - 7.5, top - 3, 1.5, 3); c.fillStyle = '#ccc'; c.fillRect(b.x + 6, top - 16, 1, 13); c.fillStyle = Math.floor(t / 400) % 2 ? '#ff3a3a' : '#5a1a1a'; c.fillRect(b.x + 5, top - 17, 3, 2);
+    b.wins.forEach(w => { const p = winPos(b, w), ww = FW - 4, wh = FH - 5; c.fillStyle = A.INK; c.fillRect(p.x - 1, p.y - 1, ww + 2, wh + 2);
+      if (w.hp === 2) { const gg = c.createLinearGradient(p.x, p.y, p.x + ww, p.y + wh); gg.addColorStop(0, '#fff2b8'); gg.addColorStop(1, '#e8b85a'); c.fillStyle = gg; c.fillRect(p.x, p.y, ww, wh); c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.moveTo(p.x + 1, p.y + wh - 2); c.lineTo(p.x + 5, p.y + 1); c.lineTo(p.x + 7, p.y + 1); c.lineTo(p.x + 3, p.y + wh - 2); c.fill(); c.fillStyle = A.INK; c.fillRect(p.x + ww / 2 - 0.4, p.y, 0.8, wh); }
+      else if (w.hp === 1) { c.fillStyle = '#c8905a'; c.fillRect(p.x, p.y, ww, wh); c.strokeStyle = '#fff'; c.lineWidth = 0.8; c.beginPath(); c.moveTo(p.x + 2, p.y + 1); c.lineTo(p.x + 6, p.y + 6); c.lineTo(p.x + 4, p.y + wh); c.moveTo(p.x + 6, p.y + 6); c.lineTo(p.x + ww, p.y + 4); c.stroke(); }
+      else { c.fillStyle = '#120a18'; c.fillRect(p.x, p.y, ww, wh); c.fillStyle = '#e8e0d0'; c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x + 4, p.y); c.lineTo(p.x, p.y + 5); c.fill(); c.beginPath(); c.moveTo(p.x + ww, p.y + wh); c.lineTo(p.x + ww - 4, p.y + wh); c.lineTo(p.x + ww, p.y + wh - 4); c.fill(); }
+      c.fillStyle = A.shade(b.col, -0.35); c.fillRect(p.x - 1.5, p.y + wh + 1, ww + 3, 1.5);
+      if (w.person && w.hp > 0) { A.part(c, p.x + 4, p.y + 5, 4, 6, '#3a7aff'); A.part(c, p.x + 4.5, p.y + 1.5, 3, 3, '#f0c8a0'); c.fillStyle = '#f0c8a0'; c.fillRect(p.x + 2 + Math.sin(t / 150) * 1, p.y + 2, 1.5, 3); } });
     c.restore(); });
-  c.fillStyle = '#3a3040'; c.fillRect(0, GY, W, H - GY);
-  people.forEach(p => { c.fillStyle = '#ffd0a0'; c.fillRect(p.x - 2, p.y - 6, 4, 4); c.fillStyle = '#4a8aff'; c.fillRect(p.x - 2, p.y - 2, 4, 6); K.text(c, 'HELP', p.x, p.y - 12, 6, '#fff'); });
-  foes.forEach(f => { if (f.k === 'sol') { c.fillStyle = '#4a5a2a'; c.fillRect(f.x - 2, f.y - 9, 4, 9); c.fillStyle = '#e0b090'; c.fillRect(f.x - 2, f.y - 12, 4, 3); } else { c.fillStyle = '#4a5a6a'; c.beginPath(); c.ellipse(f.x, f.y, 12, 5, 0, 0, 7); c.fill(); c.fillRect(f.x - (f.vx > 0 ? 22 : -8), f.y - 2, 14, 3); c.strokeStyle = '#111'; c.beginPath(); const r = Math.sin(t / 25) * 16; c.moveTo(f.x - r, f.y - 7); c.lineTo(f.x + r, f.y - 7); c.stroke(); } });
-  if (state !== 'title') { const x = me.x, y = me.y, f = me.face, step = me.vx && !me.air ? Math.sin(t / 80) * 2 : 0;
-    c.fillStyle = '#4ab83a'; c.fillRect(x - 7, y - 26, 14, 18); c.fillStyle = '#3a9a2a'; c.beginPath(); c.moveTo(x - f * 7, y - 12); c.lineTo(x - f * 16, y - 2); c.lineTo(x - f * 7, y - 6); c.fill();
-    c.fillStyle = '#4ab83a'; c.fillRect(x - 6 + step, y - 8, 5, 8); c.fillRect(x + 1 - step, y - 8, 5, 8);
-    c.fillRect(x - 6 + f * 4, y - 34, 12, 9); c.fillStyle = '#fff'; c.fillRect(x + f * 5 - 1, y - 32, 3, 3); c.fillStyle = '#c8f0a0'; c.fillRect(x - 3, y - 22, 6, 12);
-    for (let i = 0; i < 3; i++) { c.fillStyle = '#ffd84a'; c.fillRect(x - f * 8 - 1, y - 24 + i * 5, 2, 3); }
-    c.fillStyle = '#4ab83a'; const reach = punchT > 0 ? 16 : 8; c.fillRect(f > 0 ? x + 4 : x - 4 - reach, y - 20, reach, 4); if (punchT > 0) { c.fillStyle = '#fff'; c.fillRect(x + f * 18 - 2, y - 21, 4, 6); } }
-  c.fillStyle = '#ffec6a'; shots.forEach(s => c.fillRect(s.x - 1, s.y - 1, 2, 2));
-  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
+  // street: sidewalk and road
+  c.fillStyle = A.INK; c.fillRect(0, GY - 1, W, 2); A.floor(c, 0, GY, GY + 10, W, Object.assign({}, A.PAL.stone, { base: '#9a92a0', hi: '#bab2c0', lo: '#6a6270', mortar: '#3a3440' }));
+  c.fillStyle = '#2a2630'; c.fillRect(0, GY + 10, W, H - GY - 10); c.fillStyle = '#f4d84a'; for (let x = 4; x < W; x += 28) c.fillRect(x, GY + 17, 14, 2); c.fillStyle = A.INK; c.fillRect(0, GY + 10, W, 1);
+  A.vignette(c, W, H, 0.3);
+  const big = (x, y, s, fn) => { c.save(); c.translate(x, y); c.scale(s, s); c.translate(-x, -y); fn(); c.restore(); };
+  people.forEach(p => big(p.x, p.y, 1.5, () => { A.part(c, p.x - 2, p.y - 6, 4, 4, '#f0c8a0'); A.part(c, p.x - 2, p.y - 2, 4, 6, '#4a8aff'); c.fillStyle = '#5a3a1a'; c.fillRect(p.x - 2, p.y - 7, 4, 1.5); }) || K.text(c, 'HELP!', p.x, p.y - 18, 7, '#fff'));
+  foes.forEach(f => { if (f.k === 'sol') big(f.x, f.y, 1.6, () => { A.shadow(c, f.x, f.y, 4); A.part(c, f.x - 2, f.y - 4, 1.8, 4, '#2a3a1a'); A.part(c, f.x + 0.2, f.y - 4, 1.8, 4, '#2a3a1a'); A.part(c, f.x - 2.5, f.y - 9, 5, 5.5, '#4a5a2a'); A.part(c, f.x - 2, f.y - 12, 4, 3, '#e0b090'); A.part(c, f.x - 2.5, f.y - 13, 5, 2, '#3a4a1a'); const d = Math.sign(me.x - f.x) || 1; c.fillStyle = A.INK; c.fillRect(f.x + (d > 0 ? 1 : -6), f.y - 8, 5, 1.5); });
+    else big(f.x, f.y, 1.4, () => { const d = f.vx > 0 ? 1 : -1; c.fillStyle = A.INK; c.beginPath(); c.ellipse(f.x, f.y, 12.8, 5.8, 0, 0, 7); c.fill(); const hg = c.createLinearGradient(0, f.y - 5, 0, f.y + 5); hg.addColorStop(0, '#7a8a9a'); hg.addColorStop(1, '#3a4a5a'); c.fillStyle = hg; c.beginPath(); c.ellipse(f.x, f.y, 12, 5, 0, 0, 7); c.fill(); A.part(c, f.x - (d > 0 ? 22 : -8), f.y - 2, 14, 3, '#4a5a6a'); A.part(c, f.x - (d > 0 ? 23 : -20), f.y - 6, 3, 6, '#4a5a6a'); c.fillStyle = '#9ad8ff'; c.beginPath(); c.ellipse(f.x + d * 6, f.y - 1, 4, 3, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(f.x + d * 5, f.y - 3, 2, 1); c.fillStyle = 'rgba(30,30,30,.7)'; const r = Math.sin(t / 25) * 16; c.fillRect(f.x - Math.abs(r), f.y - 8, Math.abs(r) * 2, 1.4); c.fillStyle = 'rgba(200,200,200,.15)'; c.fillRect(f.x - 16, f.y - 8.5, 32, 2.5); c.fillRect(f.x - 3, f.y - 7, 1.5, 2); }); });
+  if (state !== 'title') big(me.x, me.y, 1.4, () => { const x = me.x, y = me.y, f = me.face, step = me.vx && !me.air ? Math.sin(t / 80) * 2 : 0;
+    A.shadow(c, x, y, 10);
+    c.fillStyle = A.INK; c.beginPath(); c.moveTo(x - f * 6, y - 13); c.lineTo(x - f * 17, y - 1); c.lineTo(x - f * 6, y - 5); c.fill(); c.fillStyle = '#3a9a2a'; c.beginPath(); c.moveTo(x - f * 6.5, y - 12); c.lineTo(x - f * 16, y - 2); c.lineTo(x - f * 6.5, y - 6); c.fill();
+    A.part(c, x - 6 + step, y - 8, 5, 8, '#3aa82a'); A.part(c, x + 1 - step, y - 8, 5, 8, '#3aa82a'); c.fillStyle = '#fff'; c.fillRect(x - 6 + step, y - 1, 1, 1.5); c.fillRect(x - 3 + step, y - 1, 1, 1.5); c.fillRect(x + 1 - step, y - 1, 1, 1.5); c.fillRect(x + 4 - step, y - 1, 1, 1.5);
+    A.part(c, x - 7, y - 26, 14, 18, '#4ab83a'); c.fillStyle = '#c8f0a0'; c.fillRect(x - 3, y - 22, 6, 12); c.fillStyle = 'rgba(60,120,40,.5)'; for (let k = 0; k < 4; k++) c.fillRect(x - 3, y - 20 + k * 3, 6, 0.8);
+    A.part(c, x - 6 + f * 4, y - 34, 12, 9, '#4ab83a'); c.fillStyle = '#fff'; c.fillRect(x + f * 5 - 1, y - 32, 3, 3); c.fillStyle = '#111'; c.fillRect(x + f * 5 + (f > 0 ? 0.5 : -0.5), y - 31, 1.5, 2); c.fillStyle = A.INK; c.fillRect(x - 6 + f * 4 + (f > 0 ? 6 : 0), y - 27.5, 6, 0.8); c.fillStyle = '#fff'; c.fillRect(x + f * 7, y - 27, 1, 1.5); c.fillRect(x + f * 9, y - 27, 1, 1.5);
+    for (let i = 0; i < 4; i++) { c.fillStyle = A.INK; c.beginPath(); c.moveTo(x - f * 7, y - 30 + i * 6); c.lineTo(x - f * 11, y - 28 + i * 6); c.lineTo(x - f * 7, y - 26 + i * 6); c.fill(); c.fillStyle = '#ffd84a'; c.beginPath(); c.moveTo(x - f * 7, y - 29.5 + i * 6); c.lineTo(x - f * 10, y - 28 + i * 6); c.lineTo(x - f * 7, y - 26.5 + i * 6); c.fill(); }
+    const reach = punchT > 0 ? 16 : 8; A.part(c, f > 0 ? x + 4 : x - 4 - reach, y - 20, reach, 4, '#4ab83a'); if (punchT > 0) { A.part(c, x + f * 19 - 3, y - 22, 6, 7, '#5ac84a'); A.glow(c, x + f * 21, y - 19, 10, '255,255,200', 0.5); } });
+  shots.forEach(s => { A.glow(c, s.x, s.y, 5, '255,240,120', 0.6); c.fillStyle = '#fff6a0'; c.fillRect(s.x - 1, s.y - 1, 2.5, 2.5); });
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2.5, 2.5); });
 }
 start(); state = 'title'; title(); K.run(update, draw);
 </script>

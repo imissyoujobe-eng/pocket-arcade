@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Track Ten: ten track-and-field events back to back. Tap left and right in turn to run, then nail your ACTION timing.
 K.theme({ bg: '#0f2a1a', ink: '#f2fff6', accent: '#ff5a36', accentInk: '#fff' });
@@ -123,20 +124,40 @@ function finish() {
 function runner(c, x, y, t, speed, pose) {
   x = Math.round(x); y = Math.round(y);
   const k = speed > 0.3 ? Math.floor(t / Math.max(40, 160 - speed * 10)) % 2 : 0;
-  c.fillStyle = '#ffcf9e'; c.fillRect(x - 3, y - 30, 6, 6);
-  c.fillStyle = '#e63946'; c.fillRect(x - 4, y - 24, 8, 10);
-  c.fillStyle = '#fff'; c.fillRect(x - 2, y - 22, 4, 3);
-  c.fillStyle = '#1f4aa8'; c.fillRect(x - 4, y - 14, 8, 4);
-  c.fillStyle = '#ffcf9e';
-  if (pose === 'air') { c.fillRect(x - 6, y - 10, 4, 6); c.fillRect(x + 2, y - 12, 6, 3); }
-  else { c.fillRect(x - 4 + (k ? 3 : -2), y - 10, 3, 10); c.fillRect(x + 1 + (k ? -3 : 2), y - 10, 3, 10); }
-  c.fillRect(x + (k ? 4 : -6), y - 23, 3, 7);
+  if (pose !== 'air') A.shadow(c, x, y, 9);
+  c.save(); c.translate(x, y); c.scale(1.45, 1.45); x = 0; y = 0;
+  const SK = '#e8b088';
+  // back arm and leg first (darker), then body, then front limbs
+  c.fillStyle = A.shade(SK, -0.2); c.fillRect(x + (k ? -6 : 4), y - 23, 3, 7);
+  if (pose === 'air') { A.part(c, x - 6, y - 10, 4, 6, SK); A.part(c, x + 2, y - 12, 6, 3, SK); A.part(c, x + 7, y - 13, 3, 4, '#fff'); }
+  else { A.part(c, x - 4 + (k ? 3 : -2), y - 10, 3, 9, SK); A.part(c, x - 4.5 + (k ? 3 : -2), y - 1.5, 4.5, 2, '#fff'); }
+  A.part(c, x - 4, y - 14, 8, 4.5, '#1f4aa8');
+  A.part(c, x - 4, y - 24, 8, 10, '#e63946'); c.fillStyle = '#fff'; c.fillRect(x - 2.5, y - 21.5, 5, 3.5); c.fillStyle = '#222'; c.font = 'bold 3px sans-serif'; c.textAlign = 'center'; c.fillText('10', x, y - 18.8);
+  c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect(x - 4, y - 24, 1, 10);
+  if (pose !== 'air') { A.part(c, x + 1 + (k ? -3 : 2), y - 10, 3, 9, SK); A.part(c, x + 0.5 + (k ? -3 : 2), y - 1.5, 4.5, 2, '#fff'); }
+  A.part(c, x + (k ? 4 : -6), y - 23, 3, 7, SK);
+  A.part(c, x - 3, y - 30.5, 6.5, 6.5, SK); c.fillStyle = '#4a2a10'; c.fillRect(x - 3.3, y - 31, 7, 2.2); c.fillRect(x - 3.3, y - 31, 1.6, 4);
+  c.fillStyle = '#ff5a36'; c.fillRect(x - 3.3, y - 29.4, 7, 1); c.fillStyle = '#000'; c.fillRect(x + 1.6, y - 27.6, 1, 1.2);
+  c.restore();
 }
 function draw(c, t) {
-  c.fillStyle = '#8fd0ff'; c.fillRect(0, 0, W, 90);
-  c.fillStyle = '#3a4a6a'; c.fillRect(0, 70, W, 30); for (let i = 0; i < 64; i++) { c.fillStyle = ['#ff5a36', '#ffd23f', '#fff', '#46a8ff'][i % 4]; c.fillRect((i * 5 - ((a ? a.x : 0) * 6)) % W + (i * 5 < 0 ? W : 0), 74 + (i % 4) * 5, 3, 3); }
-  c.fillStyle = '#3fa34d'; c.fillRect(0, 100, W, H - 100);
-  c.fillStyle = '#c8502c'; c.fillRect(0, GY - 30, W, 44); c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(0, GY - 30, W, 1); c.fillRect(0, GY + 14, W, 1);
+  const sc = (a ? a.x : 0) * 6;
+  A.sky(c, W, 70, { top: '#3a7ae0', mid: '#8ac8f8', bottom: '#d8f0ff', sun: '#fff6c0', sunX: 270, sunY: 22, sunR: 10 }, t);
+  // stadium: roof, light towers, crowd tiers, ad boards
+  c.fillStyle = '#4a5468'; c.fillRect(0, 40, W, 8); c.fillStyle = '#6a7488'; c.fillRect(0, 40, W, 2); c.fillStyle = A.INK; c.fillRect(0, 48, W, 1);
+  for (let i = 0; i < 3; i++) { const lx = ((i * 140 - sc * 0.3) % 420 + 420) % 420 - 50; c.fillStyle = '#5a6070'; c.fillRect(lx + 7, 8, 3, 34); A.part(c, lx, 4, 18, 8, '#d0d4dc'); c.fillStyle = '#fffbe0'; for (let k = 0; k < 4; k++) c.fillRect(lx + 1.5 + k * 4, 6, 3, 4); A.glow(c, lx + 9, 8, 20, '255,250,210', 0.35); }
+  const cg = c.createLinearGradient(0, 48, 0, 98); cg.addColorStop(0, '#2a3048'); cg.addColorStop(1, '#4a5470'); c.fillStyle = cg; c.fillRect(0, 48, W, 50);
+  for (let r = 0; r < 9; r++) { c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(0, 52 + r * 5 + 3.5, W, 1);
+    for (let i = 0; i < 70; i++) { const x = ((i * 5 + r * 2.5 - sc * (0.5 + r * 0.03)) % W + W) % W, hop = Math.sin(t / 120 + i * 1.7 + r) > 0.85 ? -1.5 : 0; const h = A.hash(i, r); c.fillStyle = ['#ff5a36', '#ffd23f', '#f2f2f2', '#46a8ff', '#3fc35d', '#c86aff'][Math.floor(h * 6)]; c.fillRect(x, 52 + r * 5 + hop, 3, 2.4); c.fillStyle = ['#ffcf9e', '#c8875a', '#8a5a3a'][Math.floor(A.hash(i, r + 9) * 3)]; c.fillRect(x + 0.5, 50.6 + r * 5 + hop, 2, 1.6); } }
+  for (let i = -1; i < 7; i++) { const bx = i * 60 - ((sc % 60) + 60) % 60; A.part(c, bx, 92, 58, 10, ['#e63946', '#1f4aa8', '#ffd23f', '#2a8a4a'][((i + Math.floor(sc / 60)) % 4 + 4) % 4]); c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(bx + 8, 96, 30, 2); }
+  // grass infield with mowing stripes
+  for (let y = 102; y < H; y += 8) { c.fillStyle = (y / 8) % 2 < 1 ? '#3fa34d' : '#4ab458'; c.fillRect(0, y, W, 8); }
+  for (let i = 0; i < 90; i++) { c.fillStyle = 'rgba(20,80,30,.35)'; c.fillRect(((A.hash(i, 1) * 640 - sc * 3) % 640 + 640) % 640 - 160, 104 + A.hash(i, 2) * 36, 1, 2); }
+  // track lanes with rubber texture
+  const tg = c.createLinearGradient(0, GY - 30, 0, GY + 14); tg.addColorStop(0, '#b8462a'); tg.addColorStop(1, '#d8603a'); c.fillStyle = tg; c.fillRect(0, GY - 30, W, 44);
+  for (let i = 0; i < 160; i++) { c.fillStyle = i % 2 ? 'rgba(255,190,150,.25)' : 'rgba(90,20,10,.25)'; c.fillRect(((A.hash(i, 5) * 640 - sc * 3) % 640 + 640) % 640 - 160, GY - 29 + A.hash(i, 6) * 42, 1.5, 1); }
+  c.fillStyle = 'rgba(255,255,255,.75)'; c.fillRect(0, GY - 30, W, 1.5); c.fillRect(0, GY - 15, W, 1); c.fillRect(0, GY + 13, W, 1.5); c.fillStyle = A.INK; c.fillRect(0, GY + 14.5, W, 1);
+  for (let y = GY + 16; y < H; y += 8) { c.fillStyle = (y / 8) % 2 < 1 ? '#3fa34d' : '#4ab458'; c.fillRect(0, y, W, 8); }
   if (!a) return;
   const ppm = ev.k === 'sprint' ? 18 : ev.k === 'bar' ? 14 : (ev.ppm || 10), cam = (ev.k === 'stand' ? 0 : a.x) * ppm - 90;
   const wx = m => m * ppm - cam;
@@ -152,7 +173,7 @@ function draw(c, t) {
   runner(c, rx, ry, t, a.v, pose);
   if (a.obj && (ev.k === 'stand' || ev.throwing)) {
     const k = Math.min(1, a.obj.t), sx = ev.k === 'stand' ? 90 : wx(ev.run), ox = sx + k * a.obj.d * ppm, oy = GY - 24 - Math.sin(k * Math.PI) * a.obj.d * ppm * Math.tan(a.obj.ang) / 4;
-    c.fillStyle = ev.n === 'Javelin' ? '#ddd' : '#555'; if (ev.n === 'Javelin') c.fillRect(ox - 8, oy, 16, 2); else { c.beginPath(); c.arc(ox, oy, 3, 0, 7); c.fill(); }
+    A.shadow(c, ox, GY + 6, 5); if (ev.n === 'Javelin') { A.part(c, ox - 11, oy - 1, 22, 2.2, '#e8e8f0'); c.fillStyle = '#ffd23f'; c.fillRect(ox - 2, oy - 1, 4, 2.2); } else A.ball(c, ox, oy, 3.6, ev.n === 'Discus' ? '#c8a050' : '#5a5a62');
   }
   if (a.holding) { c.strokeStyle = '#ffd23f'; c.lineWidth = 2; c.beginPath(); c.moveTo(rx, GY - 20); c.lineTo(rx + Math.cos(a.angle * Math.PI / 180) * 30, GY - 20 - Math.sin(a.angle * Math.PI / 180) * 30); c.stroke(); K.text(c, Math.round(a.angle) + '°', rx + 30, GY - 52, 8, '#ffd23f'); }
   // speed / stamina meters
@@ -167,6 +188,7 @@ function wrap(c, txt, x, y, mw) {
   const words = txt.split(' '); let line = ''; for (const w of words) { const test = line ? line + ' ' + w : w; if (c.measureText(test).width > mw) { c.fillText(line, x, y); y += 11; line = w; } else line = test; } c.fillText(line, x, y);
 }
 title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.25); }; }
 K.run(update, draw);
 </script>
 </body>

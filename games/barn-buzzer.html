@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Barn Buzzer: fly a biplane through every barn on the course as fast as you can. Dodge geese and windmills.
 K.theme({ bg: '#18301c', ink: '#fffbea', accent: '#ffd23f', accentInk: '#2a1d00' });
@@ -89,10 +90,10 @@ function draw(c, t) {
   c.fillStyle = '#fff';
   if (clouds) for (const cl of clouds) { const x = ((cl.x - cm * 0.2 * cl.s) % 720 + 720) % 720 - 60; c.beginPath(); c.arc(x, cl.y, 12 * cl.s, 0, 7); c.arc(x + 14 * cl.s, cl.y - 5, 14 * cl.s, 0, 7); c.arc(x + 28 * cl.s, cl.y, 11 * cl.s, 0, 7); c.fill(); }
   // hills
-  c.fillStyle = '#7fbf5a';
-  c.beginPath(); c.moveTo(0, GROUND); for (let x = 0; x <= W; x += 8) c.lineTo(x, GROUND - 26 - Math.sin((x + cm * 0.4) / 50) * 14); c.lineTo(W, GROUND); c.fill();
-  c.fillStyle = '#4e9a3a'; c.fillRect(0, GROUND, W, H - GROUND);
-  c.fillStyle = '#3f8530'; for (let x = -((cm) % 24); x < W; x += 24) c.fillRect(x, GROUND + 6, 12, 3);
+  A.ridge(c, cm, { factor: 0.15, base: GROUND - 20, amp: 34, col: '#9ac8a8', edge: 'rgba(0,0,0,.15)', seed: 2, fog: 'rgba(230,245,255,.4)' });
+  A.ridge(c, cm, { factor: 0.4, base: GROUND, amp: 22, col: '#6aae4a', edge: 'rgba(0,0,0,.25)', seed: 5 });
+  A.trees(c, cm, { factor: 0.4, base: GROUND - 2, col: '#2e7a2e', hi: '#4a9a3a', kind: 'round', spacing: 34, size: 0.9 });
+  for (let x = -((cm) % 16) - 16; x < W; x += 16) for (let ty = 0; ty < (H - GROUND) / 16 + 1; ty++) A.tile(c, 'bz', x, GROUND + ty * 16, { t: ty === 0, b: false, l: false, r: false }, Math.floor((x + cm) / 16), ty, A.PAL.earth);
   // fence
   c.fillStyle = '#c99a57'; for (let x = -((cm * 1) % 30); x < W; x += 30) c.fillRect(x, GROUND - 10, 3, 10); c.fillRect(0, GROUND - 7, W, 2);
   if (!things) return;
@@ -136,6 +137,7 @@ function draw(c, t) {
   if (done) K.text(c, 'COURSE CLEAR!', W / 2, 60, 18, '#ffd23f');
 }
 title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.2); }; }
 K.run(update, draw);
 </script>
 </body>

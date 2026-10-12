@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Lake Showdown: fishing race against the computer. Deeper fish weigh more. Reel fast, but the shark wants your catch. First to 99 lbs wins.
 K.theme({ bg: '#0b2236', ink: '#effaff', accent: '#ffd23f', accentInk: '#2a1d00' });
@@ -84,45 +85,68 @@ function drawFish(c, f, t) {
   const x = Math.round(f.x), y = Math.round(f.y), dir = f.by ? 1 : Math.sign(f.vx) || 1, s = 0.7 + f.w * 0.08;
   c.save(); c.translate(x, y); c.scale(dir * s, s);
   if (f.by) c.rotate(-0.9 + Math.sin(t / 80) * 0.4);
-  c.fillStyle = ['#9ad', '#9ad', '#7c6', '#7c6', '#da6', '#e86', '#f6a'][f.row];
-  c.beginPath(); c.ellipse(0, 0, 9, 4.5, 0, 0, 7); c.fill();
-  c.beginPath(); c.moveTo(-8, 0); c.lineTo(-14, -5); c.lineTo(-14, 5); c.fill();
-  c.fillStyle = '#000'; c.fillRect(4, -2, 2, 2); c.restore();
+  const col = ['#88aadd', '#88aadd', '#77cc66', '#77cc66', '#ddaa66', '#ee8866', '#ff66aa'][f.row], fg = c.createLinearGradient(0, -5, 0, 5); fg.addColorStop(0, A.shade(col, -0.35)); fg.addColorStop(0.5, col); fg.addColorStop(1, A.shade(col, 0.55));
+  c.fillStyle = A.INK; c.beginPath(); c.ellipse(0, 0, 10, 5.4, 0, 0, 7); c.fill(); c.beginPath(); c.moveTo(-8, 0); c.lineTo(-15, -6); c.lineTo(-15, 6); c.fill();
+  c.fillStyle = A.shade(col, -0.2); c.beginPath(); c.moveTo(-8, 0); c.lineTo(-14, -5 + Math.sin(t / 90) * 1.2); c.lineTo(-14, 5 + Math.sin(t / 90) * 1.2); c.fill();
+  c.beginPath(); c.moveTo(-3, -4); c.lineTo(2, -8); c.lineTo(4, -4); c.fill();
+  c.fillStyle = fg; c.beginPath(); c.ellipse(0, 0, 9, 4.5, 0, 0, 7); c.fill();
+  c.fillStyle = 'rgba(0,0,0,.18)'; for (let i = -4; i < 6; i += 3) { c.beginPath(); c.arc(i, -1, 1.5, 0, Math.PI); c.fill(); }
+  c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 0.7; c.beginPath(); c.arc(3, 0, 3.5, -1.2, 1.2); c.stroke();
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(5, -1.2, 1.6, 0, 7); c.fill(); c.fillStyle = '#000'; c.fillRect(5, -1.8, 1.2, 1.2); c.restore();
 }
 function drawAngler(c, x, flip, col) {
-  c.save(); c.translate(x, 88); c.scale(flip, 1);
-  c.fillStyle = col; c.fillRect(-5, -14, 10, 12); c.fillStyle = '#ffcf9e'; c.fillRect(-4, -22, 8, 8); c.fillStyle = '#3a5a2a'; c.fillRect(-6, -24, 12, 3);
-  c.fillStyle = '#334'; c.fillRect(-5, -2, 4, 6); c.fillRect(1, -2, 4, 6);
-  c.strokeStyle = '#5a3a1a'; c.lineWidth = 2; c.beginPath(); c.moveTo(3, -10); c.lineTo(22, -22); c.stroke(); c.restore();
+  c.save(); c.translate(x, 88); c.scale(flip * 1.25, 1.25);
+  c.strokeStyle = A.INK; c.lineWidth = 3; c.beginPath(); c.moveTo(3, -10); c.lineTo(18, -18); c.stroke(); c.strokeStyle = '#7a4a22'; c.lineWidth = 1.8; c.stroke();
+  A.part(c, -5, -2, 4, 6, '#3a3a5a'); A.part(c, 1, -2, 4, 6, '#3a3a5a'); c.fillStyle = '#2a1a0a'; c.fillRect(-6, 3, 5, 2); c.fillRect(1, 3, 5, 2);
+  A.part(c, -5.5, -14, 11, 12, col); c.fillStyle = '#c8b070'; c.fillRect(-5.5, -14, 3, 12); c.fillRect(2.5, -14, 3, 12);
+  A.part(c, 2, -12, 3, 6, '#ffcf9e');
+  A.part(c, -4, -22, 8, 8, '#ffcf9e'); c.fillStyle = '#000'; c.fillRect(1.5, -19.5, 1.4, 1.6); c.fillStyle = '#d88a6a'; c.fillRect(1, -16.5, 3, 0.9);
+  A.part(c, -6, -24, 12, 3, '#3a5a2a'); A.part(c, -3.5, -27, 7, 3.5, '#4a7a3a'); c.fillStyle = '#ffd23f'; c.fillRect(-4, -26, 1.2, 1.2);
+  c.restore();
 }
 function draw(c, t) {
-  c.fillStyle = '#9ad8ff'; c.fillRect(0, 0, W, SURF); c.fillStyle = '#ffe9a8'; c.beginPath(); c.arc(W / 2, 30, 14, 0, 7); c.fill();
-  c.fillStyle = '#5a8a4a'; c.beginPath(); c.moveTo(0, SURF); for (let x = 0; x <= W; x += 10) c.lineTo(x, 80 - Math.sin(x / 30) * 8); c.lineTo(W, SURF); c.fill();
-  const g = c.createLinearGradient(0, SURF, 0, H); g.addColorStop(0, '#2a7ab0'); g.addColorStop(1, '#0b2236'); c.fillStyle = g; c.fillRect(0, SURF, W, H - SURF);
-  c.fillStyle = 'rgba(255,255,255,.35)'; for (let x = -((t / 40) % 16); x < W; x += 16) c.fillRect(x, SURF, 8, 2);
-  c.fillStyle = '#2a4a2a'; for (let x = 6; x < W; x += 22) { c.fillRect(x, H - 14 - (x % 3) * 4, 3, 14 + (x % 3) * 4); }
-  // docks
-  c.fillStyle = '#8a5a32'; c.fillRect(0, 88, 46, 8); c.fillRect(W - 46, 88, 46, 8); c.fillStyle = '#5a3a1a'; c.fillRect(6, 96, 4, 20); c.fillRect(34, 96, 4, 20); c.fillRect(W - 10, 96, 4, 20); c.fillRect(W - 38, 96, 4, 20);
+  c.save(); c.beginPath(); c.rect(0, 0, W, SURF); c.clip();
+  A.sky(c, W, SURF, { top: '#4a8ae0', mid: '#9ad0f8', bottom: '#ffe8c0', sun: '#fff0b0', sunX: W / 2, sunY: 30, sunR: 13 }, t);
+  A.ridge(c, 0, { factor: 0, base: 74, amp: 22, col: '#6a8ab0', edge: 'rgba(0,0,0,.15)', seed: 3, fog: 'rgba(200,220,240,.5)' });
+  A.ridge(c, 0, { factor: 0, base: 88, amp: 12, col: '#3a6a3a', edge: 'rgba(0,0,0,.3)', seed: 8 });
+  A.trees(c, 0, { factor: 0, base: SURF - 2, col: '#1e4a2a', hi: '#3a7a3a', spacing: 16, size: 0.9 });
+  c.restore();
+  const g = c.createLinearGradient(0, SURF, 0, H); g.addColorStop(0, '#3a9ac0'); g.addColorStop(0.3, '#1e6a90'); g.addColorStop(1, '#06182a'); c.fillStyle = g; c.fillRect(0, SURF, W, H - SURF);
+  // reflection of the shore and sun
+  c.fillStyle = 'rgba(30,74,42,.45)'; c.fillRect(0, SURF, W, 10); A.glow(c, W / 2, SURF + 8, 30, '255,240,180', 0.25);
+  c.save(); c.globalCompositeOperation = 'lighter'; for (let i = 0; i < 5; i++) { const rx = i * 56 + Math.sin(t / 1500 + i) * 10; const rg = c.createLinearGradient(0, SURF, 0, SURF + 160); rg.addColorStop(0, 'rgba(160,230,255,.12)'); rg.addColorStop(1, 'rgba(160,230,255,0)'); c.fillStyle = rg; c.beginPath(); c.moveTo(rx, SURF); c.lineTo(rx + 16, SURF); c.lineTo(rx + 46, SURF + 160); c.lineTo(rx + 22, SURF + 160); c.fill(); } c.restore();
+  c.fillStyle = 'rgba(255,255,255,.55)'; for (let x = -((t / 40) % 16); x < W; x += 16) { c.beginPath(); c.ellipse(x + 4, SURF + 1 + Math.sin(t / 300 + x) * 0.8, 5, 1.2, 0, 0, 7); c.fill(); }
+  // lake bed: rocks, sand and swaying weeds
+  c.fillStyle = '#2a2a1e'; c.beginPath(); c.moveTo(0, H); for (let x = 0; x <= W; x += 8) c.lineTo(x, H - 10 - Math.sin(x / 23) * 4 - A.hash(x, 1) * 3); c.lineTo(W, H); c.fill();
+  for (let i = 0; i < 9; i++) A.ball(c, 10 + i * 27 + A.hash(i, 2) * 10, H - 8, 4 + A.hash(i, 3) * 4, '#4a4a42');
+  c.lineCap = 'round'; for (let x = 6; x < W; x += 15) { const h = 18 + (x % 5) * 6; c.strokeStyle = x % 2 ? '#2f6a2a' : '#4a8a2a'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(x, H - 8); c.quadraticCurveTo(x + Math.sin(t / 700 + x) * 6, H - 8 - h / 2, x + Math.sin(t / 500 + x) * 4, H - 8 - h); c.stroke(); } c.lineCap = 'butt';
+  // docks with planks and posts
+  for (const dx of [0, W - 48]) { for (let k = 0; k < 6; k++) A.part(c, dx + k * 8, 88, 7.4, 7, k % 2 ? '#9a6a3a' : '#8a5a32'); for (const px of [6, 34]) { A.part(c, dx + px, 95, 5, 24, '#5a3a1a'); c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(dx + px, SURF, 5, 15); } }
   drawAngler(c, 24, 1, '#e63946'); drawAngler(c, W - 24, -1, '#46a8ff');
   if (!fish) return;
   for (const f of fish) drawFish(c, f, t);
   for (const p of [me, cpu]) {
     const rx = p.cpu ? W - 46 : 46, ry = 66;
     c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = 1; c.beginPath(); c.moveTo(rx, ry); c.quadraticCurveTo((rx + p.x) / 2, SURF, p.x, p.y); c.stroke();
-    c.fillStyle = p.cpu ? '#46a8ff' : '#e63946'; c.fillRect(p.x - 2, p.y - 2, 4, 4);
+    A.ball(c, p.x, p.y - 2, 2.6, p.cpu ? '#46a8ff' : '#e63946'); c.strokeStyle = '#ccc'; c.lineWidth = 0.8; c.beginPath(); c.arc(p.x, p.y + 2, 2, 0, Math.PI); c.stroke();
   }
   // shark
   const sx = Math.round(shark.x), sy = shark.y, d = Math.sign(shark.vx) || 1;
   c.save(); c.translate(sx, sy); c.scale(d, 1);
-  c.fillStyle = '#5d6b78'; c.beginPath(); c.ellipse(0, 0, 18, 6, 0, 0, 7); c.fill();
-  c.beginPath(); c.moveTo(-16, 0); c.lineTo(-26, -7); c.lineTo(-24, 6); c.fill(); c.beginPath(); c.moveTo(-2, -5); c.lineTo(4, -13); c.lineTo(8, -5); c.fill();
-  c.fillStyle = '#dfe6ec'; c.fillRect(2, 2, 14, 2); c.fillStyle = '#000'; c.fillRect(11, -2, 2, 2); c.restore();
+  c.scale(1.3, 1.3); const shg = c.createLinearGradient(0, -7, 0, 7); shg.addColorStop(0, '#3a4652'); shg.addColorStop(0.55, '#6d7c8a'); shg.addColorStop(0.6, '#e8eef2'); shg.addColorStop(1, '#c8d2da');
+  c.fillStyle = A.INK; c.beginPath(); c.ellipse(0, 0, 19, 7, 0, 0, 7); c.fill(); c.beginPath(); c.moveTo(-16, 0); c.lineTo(-27, -8); c.lineTo(-25, 7); c.fill(); c.beginPath(); c.moveTo(-3, -5); c.lineTo(4, -14); c.lineTo(9, -5); c.fill();
+  c.fillStyle = '#4a5662'; const tw = Math.sin(t / 120) * 2; c.beginPath(); c.moveTo(-16, 0); c.lineTo(-26, -7 + tw); c.lineTo(-24, 6 + tw); c.fill(); c.beginPath(); c.moveTo(-2, -5); c.lineTo(4, -13); c.lineTo(8, -5); c.fill(); c.beginPath(); c.moveTo(2, 3); c.lineTo(-2, 9); c.lineTo(6, 4); c.fill();
+  c.fillStyle = shg; c.beginPath(); c.ellipse(0, 0, 18, 6, 0, 0, 7); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,.4)'; c.lineWidth = 0.6; for (let i = 0; i < 3; i++) { c.beginPath(); c.moveTo(6 + i * 1.6, -3); c.lineTo(5 + i * 1.6, 1); c.stroke(); }
+  c.fillStyle = '#fff'; for (let i = 0; i < 5; i++) { c.beginPath(); c.moveTo(10 + i * 1.6, 2); c.lineTo(10.8 + i * 1.6, 3.6); c.lineTo(11.6 + i * 1.6, 2); c.fill(); }
+  c.fillStyle = '#000'; c.beginPath(); c.arc(12, -2, 1.3, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(12, -2.6, 0.6, 0.6); c.restore();
   for (const s of splash) { c.fillStyle = 'rgba(255,255,255,.8)'; c.fillRect(s.x, s.y, 2, 2); }
   // scale bars
   [[me, 10, '#e63946'], [cpu, W - 18, '#46a8ff']].forEach(([p, x, col]) => { c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(x, 112, 8, 200); c.fillStyle = col; const h = 200 * p.lbs / GOAL; c.fillRect(x, 312 - h, 8, h); });
   if (msgT > 0) K.text(c, msg, W / 2, 50, 14, '#fff');
 }
 title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.35); }; }
 K.run(update, draw);
 </script>
 </body>

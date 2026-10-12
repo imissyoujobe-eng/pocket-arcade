@@ -28,6 +28,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
       <button id="go">Play</button></div>
   </div>
 </div>
+<script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
 const N=40,T=560/N,WIN=5,DIRS=[[0,-1],[1,0],[0,1],[-1,0]];
@@ -71,13 +72,45 @@ function step(){
     if(score[0]>=WIN||score[1]>=WIN){state='over';const w=score[0]>=WIN?(opp==='cpu'?'You win':'Blue wins'):(opp==='cpu'?'CPU wins':'Orange wins');
       setTimeout(()=>{$('msg').textContent=`${w} ${Math.max(...score)}–${Math.min(...score)}!`;$('go').textContent='Play again';$('overlay').hidden=false},1200)}
   }else beep(180+((P[0].x+P[0].y)%6)*20,.02,.015)}
-function draw(dt){ctx.fillStyle='#0a0a14';ctx.fillRect(0,0,560,560);
-  ctx.strokeStyle='#16162a';ctx.lineWidth=1;ctx.beginPath();for(let i=0;i<=N;i++){ctx.moveTo(i*T,0);ctx.lineTo(i*T,560);ctx.moveTo(0,i*T);ctx.lineTo(560,i*T)}ctx.stroke();
-  if(grid){for(let y=0;y<N;y++)for(let x=0;x<N;x++){const v=grid[y][x];if(!v)continue;const c=v===1?'#38f2ff':'#ff8a1f';ctx.fillStyle=c;ctx.globalAlpha=.85;ctx.fillRect(x*T+1,y*T+1,T-2,T-2)}ctx.globalAlpha=1;
-    for(const p of P){ctx.shadowColor=p.c;ctx.shadowBlur=18;ctx.fillStyle='#fff';ctx.fillRect(p.x*T,p.y*T,T,T);ctx.shadowBlur=0}}
-  for(const b of boom){b.x+=b.vx*dt;b.y+=b.vy*dt;b.l-=dt;ctx.globalAlpha=Math.max(0,b.l);ctx.fillStyle=b.c;ctx.fillRect(b.x-2,b.y-2,4,4)}ctx.globalAlpha=1;boom=boom.filter(b=>b.l>0);
-  ctx.strokeStyle='#38f2ff';ctx.globalAlpha=.35;ctx.lineWidth=3;ctx.strokeRect(1.5,1.5,557,557);ctx.globalAlpha=1;
-  if(state==='play'&&acc<0&&!roundEnd){ctx.fillStyle='#e9ecff';ctx.font='36px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillText('READY',280,290)}}
+// ---- detail art: neon arena floor, light-wall trails, glowing light-cycles ----
+let floorCv=null;
+function buildFloor(){const c2=document.createElement('canvas');c2.width=c2.height=560;const c=c2.getContext('2d');
+  const g=c.createRadialGradient(280,280,40,280,280,420);g.addColorStop(0,'#141a38');g.addColorStop(1,'#05060e');c.fillStyle=g;c.fillRect(0,0,560,560);
+  // floor panels with bevels
+  for(let y=0;y<N;y+=4)for(let x=0;x<N;x+=4){const h=A.hash(x,y);c.fillStyle=h<.2?'rgba(60,80,160,.10)':'rgba(30,40,90,.06)';c.fillRect(x*T+1,y*T+1,4*T-2,4*T-2);c.fillStyle='rgba(120,160,255,.08)';c.fillRect(x*T+1,y*T+1,4*T-2,1);c.fillStyle='rgba(0,0,0,.35)';c.fillRect(x*T+1,y*T+4*T-2,4*T-2,1)}
+  c.strokeStyle='rgba(56,120,255,.10)';c.lineWidth=1;c.beginPath();for(let i=0;i<=N;i++){c.moveTo(i*T,0);c.lineTo(i*T,560);c.moveTo(0,i*T);c.lineTo(560,i*T)}c.stroke();
+  c.strokeStyle='rgba(56,180,255,.22)';c.beginPath();for(let i=0;i<=N;i+=4){c.moveTo(i*T,0);c.lineTo(i*T,560);c.moveTo(0,i*T);c.lineTo(560,i*T)}c.stroke();
+  // center emblem
+  c.strokeStyle='rgba(56,242,255,.18)';c.lineWidth=2;c.beginPath();c.arc(280,280,60,0,7);c.stroke();c.beginPath();c.arc(280,280,40,0,7);c.stroke();c.font='bold 18px Bungee, Impact, sans-serif';c.textAlign='center';c.fillStyle='rgba(56,242,255,.14)';c.fillText('BOX OUT',280,286);
+  // arena wall with pylons
+  c.fillStyle='#0a0e22';c.fillRect(0,0,560,6);c.fillRect(0,554,560,6);c.fillRect(0,0,6,560);c.fillRect(554,0,6,560);
+  for(let i=0;i<=8;i++){for(const [px,py] of[[i*70,0],[i*70,560],[0,i*70],[560,i*70]]){A.glow(c,px,py,22,'56,242,255',.35);c.fillStyle='#1a2a5a';c.fillRect(px-4,py-4,8,8);c.fillStyle='#38f2ff';c.fillRect(px-2,py-2,4,4)}}
+  floorCv=c2}
+const RGB={1:'56,242,255',2:'255,138,31'};
+function drawCycle(p,t){const cx=(p.x+.5)*T,cy=(p.y+.5)*T,ang=[-Math.PI/2,0,Math.PI/2,Math.PI][p.d];
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);A.glow(ctx,0,0,46,RGB[p.id],.5);ctx.scale(1.45,1.45);ctx.translate(-4,0);
+  // wheels
+  for(const wx of[-9,10]){ctx.fillStyle='#05060e';ctx.beginPath();ctx.ellipse(wx,0,6,5.5,0,0,7);ctx.fill();ctx.strokeStyle=p.c;ctx.lineWidth=2;ctx.beginPath();ctx.ellipse(wx,0,5,4.5,0,0,7);ctx.stroke();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(wx,0,1.4,0,7);ctx.fill()}
+  // body shell
+  ctx.fillStyle='#05060e';ctx.beginPath();ctx.moveTo(-14,-4.5);ctx.lineTo(8,-5);ctx.quadraticCurveTo(17,-3,17,0);ctx.quadraticCurveTo(17,3,8,5);ctx.lineTo(-14,4.5);ctx.closePath();ctx.fill();
+  const bg=ctx.createLinearGradient(0,-4,0,4);bg.addColorStop(0,'#e8f8ff');bg.addColorStop(.5,'#3a4a6a');bg.addColorStop(1,'#10182a');ctx.fillStyle=bg;ctx.beginPath();ctx.moveTo(-12,-3.5);ctx.lineTo(8,-4);ctx.quadraticCurveTo(15,-2.5,15,0);ctx.quadraticCurveTo(15,2.5,8,4);ctx.lineTo(-12,3.5);ctx.closePath();ctx.fill();
+  ctx.fillStyle=p.c;ctx.fillRect(-12,-.8,24,1.6);ctx.fillRect(10,-3,2,6);
+  // rider canopy
+  ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(1,0,5,2.6,0,0,7);ctx.fill();ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillRect(1,-1.6,3,.8);
+  ctx.restore()}
+function draw(dt){if(!floorCv)buildFloor();ctx.drawImage(floorCv,0,0);
+  const t=performance.now();
+  if(grid){// light walls: soft glow, solid wall, bright core
+    for(const v of[1,2]){const c=v===1?'#38f2ff':'#ff8a1f';
+      ctx.fillStyle=v===1?'rgba(56,242,255,.13)':'rgba(255,138,31,.13)';for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(grid[y][x]===v)ctx.fillRect(x*T-3,y*T-3,T+6,T+6);
+      ctx.fillStyle=v===1?'#1a6a8a':'#8a4410';for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(grid[y][x]===v)ctx.fillRect(x*T+1.5,y*T+1.5,T-3,T-3);
+      ctx.fillStyle=c;for(let y=0;y<N;y++)for(let x=0;x<N;x++){if(grid[y][x]!==v)continue;const L=x>0&&grid[y][x-1]===v,R=x<N-1&&grid[y][x+1]===v,U=y>0&&grid[y-1][x]===v,D=y<N-1&&grid[y+1][x]===v;
+        ctx.fillRect(x*T+T*.3,y*T+T*.3,T*.4,T*.4);if(L)ctx.fillRect(x*T,y*T+T*.3,T*.5,T*.4);if(R)ctx.fillRect(x*T+T*.5,y*T+T*.3,T*.5,T*.4);if(U)ctx.fillRect(x*T+T*.3,y*T,T*.4,T*.5);if(D)ctx.fillRect(x*T+T*.3,y*T+T*.5,T*.4,T*.5)}
+      ctx.fillStyle='rgba(255,255,255,.7)';for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(grid[y][x]===v)ctx.fillRect(x*T+T*.45,y*T+T*.45,T*.1,T*.1)}
+    for(const p of P)if(p.alive||roundEnd>1.2)drawCycle(p,t)}
+  ctx.globalCompositeOperation='lighter';for(const b of boom){b.x+=b.vx*dt;b.y+=b.vy*dt;b.l-=dt;ctx.globalAlpha=Math.max(0,b.l);A.glow(ctx,b.x,b.y,8,b.c==='#38f2ff'?'56,242,255':'255,138,31',.6);ctx.fillStyle='#fff';ctx.fillRect(b.x-1.5,b.y-1.5,3,3)}ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';boom=boom.filter(b=>b.l>0);
+  A.vignette(ctx,560,560,.35);
+  if(state==='play'&&acc<0&&!roundEnd){ctx.font='36px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillStyle='#000';ctx.fillText('READY',282,292);ctx.fillStyle='#e9ecff';ctx.fillText('READY',280,290)}}
 let last=performance.now();
 function loop(t){const dt=Math.min(.05,(t-last)/1000);last=t;
   if(state==='play'){if(roundEnd){roundEnd-=dt;if(roundEnd<=0)newRound()}else{acc+=dt;const st=1/speed;while(acc>=st&&!roundEnd){acc-=st;step()}}}
@@ -86,4 +119,5 @@ function loop(t){const dt=Math.min(.05,(t-last)/1000);last=t;
 newRound();requestAnimationFrame(loop);
 </script>
 
+<script src="../lib/joy.js" data-axes="4"></script>
 </body></html>

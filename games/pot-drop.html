@@ -7,6 +7,7 @@
 </head>
 <body>
 <script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
 <script>
 // Pot Drop: bugs are climbing your building. Run along the rooftop ledge and drop flowerpots on them before they get in.
 K.theme({ bg: '#2a1d14', ink: '#fff6e8', accent: '#7ee04a', accentInk: '#102a00' });
@@ -64,14 +65,13 @@ function smash(x, y, col) { K.noise(0.15, 0.2); for (let i = 0; i < 10; i++) par
 function over() { state = 'over'; best = K.saveBest('potdrop', score); K.card({ title: 'BUGGED OUT', text: 'The bugs moved in on wave ' + (wave + 1) + '. You scored ' + score + '.', best: 'BEST ' + best, button: 'Try again', onStart: start }); }
 
 function draw(c, t) {
-  c.fillStyle = '#ffb27a'; c.fillRect(0, 0, W, LEDGE);
-  c.fillStyle = '#ffd9a8'; c.beginPath(); c.arc(200, 22, 12, 0, 7); c.fill();
+  A.sky(c, W, LEDGE, { top: '#5a7ad8', mid: '#ffb27a', bottom: '#ffe0b0', sun: '#fff0c0', sunX: 200, sunY: 22, sunR: 11, clouds: false }, t);
+  A.skyline(c, 0, { factor: 0, base: LEDGE, col: 'rgba(90,60,110,.6)', amp: 30 });
   // brick wall
-  c.fillStyle = '#9a4a32'; c.fillRect(0, LEDGE, W, H - LEDGE);
-  c.fillStyle = '#7d3a26';
-  for (let y = LEDGE + 10; y < H; y += 10) { c.fillRect(0, y, W, 1); for (let x = (y / 10 % 2) * 10; x < W; x += 20) c.fillRect(x, y - 10, 1, 10); }
+  for (let y = LEDGE; y < H; y += 10) for (let x = -((y / 10) % 2) * 10; x < W; x += 20) { const v = A.hash(x, y); c.fillStyle = v < 0.15 ? '#8a3e28' : v > 0.85 ? '#b0583a' : '#9a4a32'; c.fillRect(x + 0.5, y + 0.5, 19, 9); c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(x + 0.5, y + 0.5, 19, 1.5); c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(x + 0.5, y + 8, 19, 1.5); }
+  c.fillStyle = 'rgba(60,20,10,.6)'; for (let y = LEDGE; y < H; y += 10) c.fillRect(0, y, W, 0.6);
   // windows
-  for (let r = 0; r < 4; r++) for (let i = 0; i < 3; i++) { const x = 30 + i * 70, y = 100 + r * 60; c.fillStyle = '#3a2a1a'; c.fillRect(x, y, 40, 30); c.fillStyle = r * 3 + i < (house || 6) * 2 ? '#ffd86b' : '#2a2a3a'; c.fillRect(x + 3, y + 3, 15, 24); c.fillRect(x + 22, y + 3, 15, 24); }
+  for (let r = 0; r < 4; r++) for (let i = 0; i < 3; i++) { const x = 30 + i * 70, y = 100 + r * 60; c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(x + 3, y + 3, 40, 30); c.fillStyle = A.INK; c.fillRect(x - 1, y - 1, 42, 32); c.fillStyle = '#e8e0d0'; c.fillRect(x - 3, y + 30, 46, 3); c.fillStyle = '#3a2a1a'; c.fillRect(x, y, 40, 30); c.fillStyle = r * 3 + i < (house || 6) * 2 ? '#ffd86b' : '#2a2a3a'; c.fillRect(x + 3, y + 3, 15, 24); c.fillRect(x + 22, y + 3, 15, 24); }
   // drainpipe lanes (where bugs climb)
   c.fillStyle = 'rgba(0,0,0,.12)'; for (let i = 0; i < COLS; i++) c.fillRect(colX(i) - 6, LEDGE + 12, 12, H);
   // ledge
@@ -100,6 +100,7 @@ function drawBug(c, b, t) {
   if (b.ty.n === 'Beetles') { c.fillStyle = '#3fd6b0'; c.fillRect(x, y + 1, 1, 7); }
 }
 title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.25); }; }
 K.run(update, draw);
 </script>
 </body>
