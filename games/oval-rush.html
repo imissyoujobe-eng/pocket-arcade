@@ -45,6 +45,10 @@ cv.addEventListener('pointerdown',e=>steerTouch[e.pointerId]=e.clientX<W/2?-1:1)
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>cv.addEventListener(ev,e=>delete steerTouch[e.pointerId]));
 function beep(f,d,v=.08){if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.type='square';o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}
 const MAXV=620;
+// wrap an angle into -PI..PI
+function wrapA(a){while(a>Math.PI)a-=2*Math.PI;while(a<-Math.PI)a+=2*Math.PI;return a}
+// direction the track runs at point index i
+function trackAngle(i){const p=pts[i],q=pts[(i+1)%M];return Math.atan2(q.y-p.y,q.x-p.x)}
 function update(dt){
   if(count>0){const before=Math.ceil(count);count-=dt;if(Math.ceil(count)!==before&&count>0)beep(440,.15);if(count<=0)beep(880,.4);return}
   raceTime+=dt;
@@ -63,8 +67,19 @@ function update(dt){
     c.v+=(throttle>0?throttle*(max-c.v)*.9:throttle*400)*dt;if(c.v>max)c.v-=(c.v-max)*3*dt;
     c.a+=steer*dt*(1.9-c.v/MAXV*.6)*Math.min(1,c.v/120);
     c.x+=Math.cos(c.a)*c.v*dt;c.y+=Math.sin(c.a)*c.v*dt;
-    // hard outer wall
-    if(n.d>TW/2+120){const p=pts[n.i];const k=(TW/2+120)/n.d;c.x=p.x+(c.x-p.x)*k;c.y=p.y+(c.y-p.y)*k;c.v*=.6;if(!c.cpu)beep(90,.1,.06)}
+    // outer wall: bounce off it instead of sticking, then ease the car back to facing down the track
+    {const w=nearest(c.x,c.y,c.idx),lim=TW/2+120;
+      if(w.d>lim){const p=pts[w.i],ox=(c.x-p.x)/w.d,oy=(c.y-p.y)/w.d;
+        c.x=p.x+ox*(lim-6);c.y=p.y+oy*(lim-6);
+        const hx=Math.cos(c.a),hy=Math.sin(c.a),into=hx*ox+hy*oy;
+        if(into>0){c.a=Math.atan2(hy-2*into*oy,hx-2*into*ox)}
+        c.v=Math.max(c.v*.85,180);c.nudge=.6;
+        if(!c.cpu&&(c.wallT||0)<=0){beep(90,.1,.06);c.wallT=.25}}}
+    if(c.wallT>0)c.wallT-=dt;
+    // gentle auto-straighten after a wall hit, or whenever the car is pointing badly the wrong way
+    {const d=wrapA(trackAngle(c.idx)-c.a);
+      if(c.nudge>0){c.nudge-=dt;c.a+=d*Math.min(1,dt*6)}
+      else if(Math.abs(d)>Math.PI*.6&&c.v<200){c.a+=d*Math.min(1,dt*3)}}
     const lapNow=Math.floor((c.prog)/M);if(lapNow>c.lap){c.lap=lapNow;if(c.lap>=LAPS&&!c.done){c.done=true;c.finish=raceTime;finishOrder.push(c);if(!c.cpu)finish()}else if(!c.cpu)beep(660,.12)}
   }
   // car-to-car bumps

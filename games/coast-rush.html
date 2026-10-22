@@ -219,11 +219,11 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) { keys[k] = false; $(k).classList.remove('on'); } });
 
   // ---------- state ----------
-  let position = 0, speed = 0, playerX = 0, timeLeft = 45, score = 0, phase = 'title', countdown = 0, lastBeep = 4, skyOffset = 0, bump = 0, laps = 0, best = 0, steerVis = 0;
+  let position = 0, speed = 0, playerX = 0, timeLeft = 45, score = 0, phase = 'title', countdown = 0, lastBeep = 4, skyOffset = 0, bump = 0, laps = 0, best = 0, steerVis = 0, pushX = 0;
   try { best = +localStorage.getItem('coastrush-best') || 0; } catch (e) {}
   function banner(t, ms) { const b = $('banner'); b.textContent = t; b.hidden = false; clearTimeout(banner.t); banner.t = setTimeout(() => b.hidden = true, ms || 1100); }
   function newGame() {
-    position = 0; speed = 0; playerX = 0; timeLeft = 45; score = 0; laps = 0; stageIdx = 0; bump = 0;
+    position = 0; speed = 0; playerX = 0; pushX = 0; timeLeft = 45; score = 0; laps = 0; stageIdx = 0; bump = 0;
     spawnCars(); phase = 'count'; countdown = 3.99; lastBeep = 4;
     $('stage').textContent = ST().name;
   }
@@ -266,7 +266,8 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       if (speed > OFFROAD_LIMIT) speed += OFFROAD_DECEL * dt;
       for (const sp of playerSeg.sprites) {
         if (sp.kind === 'arch') continue;
-        if (Math.abs(playerX - sp.offset) < .35) { speed = MAX_SPEED / 6; position = (position - SEG * 2 + TRACK) % TRACK; thud(); bump = .5; break; }
+        // hitting roadside scenery bounces you back toward the road instead of stopping you dead
+        if (Math.abs(playerX - sp.offset) < .35 && pushX * Math.sign(playerX) >= 0) { speed = Math.max(speed * .6, MAX_SPEED / 4); pushX = -Math.sign(playerX) * 3.2; thud(); bump = .4; break; }
       }
     }
     for (const car of playerSeg.cars) {
@@ -274,6 +275,9 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
         speed = car.speed * (car.speed / speed); position = (car.z - PLAYER_Z - 40 + TRACK) % TRACK; thud(); bump = .5; break;
       }
     }
+    // the outer barrier at the edge of the shoulder also bounces you back toward the road
+    if (Math.abs(playerX) > 2.4 && pushX * Math.sign(playerX) >= 0) { pushX = -Math.sign(playerX) * 2.6; speed = Math.max(speed * .85, MAX_SPEED / 4); thud(); bump = .3; }
+    if (pushX) { playerX += pushX * dt; pushX *= Math.pow(0.02, dt); if (Math.abs(pushX) < .05) pushX = 0; }
     playerX = Math.max(-2.5, Math.min(2.5, playerX));
     speed = Math.max(0, Math.min(MAX_SPEED, speed));
     if (bump > 0) bump -= dt;
