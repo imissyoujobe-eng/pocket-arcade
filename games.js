@@ -1,7 +1,7 @@
 // The game list for the arcade menu.
 // To add a new game: put its file in the games/ folder (games/<id>.html),
 // then add one line below and raise ARCADE_TOTAL to match.
-window.ARCADE_TOTAL = 51;
+window.ARCADE_TOTAL = 52;
 window.ARCADE_GAMES = [
   { id: 'gloom-dungeon',   name: 'Gloom Dungeon',   genre: 'Arcade',  tag: 'Hunt the creatures by radar' },
   { id: 'rotor-strike',    name: 'Rotor Strike',    genre: 'Shooter', tag: 'Fly cover for a desert convoy' },
@@ -53,5 +53,6 @@ window.ARCADE_GAMES = [
   { id: 'bounce-breaker', name: "Bounce Breaker", genre: 'Arcade', tag: "Bust bricks, catch power-ups" },
   { id: 'marble-run', name: "Marble Run", genre: 'Puzzle', tag: "Roll to the goal against the clock" },
   { id: 'city-smash', name: "City Smash", genre: 'Arcade', tag: "Giant lizard and ape vs the city" },
-  { id: 'sundown-showdown', name: "Sundown Showdown", genre: 'Shooter', tag: "Old West gunfight, first to 10" }
+  { id: 'sundown-showdown', name: "Sundown Showdown", genre: 'Shooter', tag: "Old West gunfight, first to 10" },
+  { id: 'peak-hopper', name: "Peak Hopper", genre: 'Arcade', tag: "Hop the pyramid, flip every cube" }
 ];

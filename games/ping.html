@@ -113,7 +113,7 @@ window.addEventListener('error', function (e) { var c = document.getElementById(
     serveDir = Math.random() < .5 ? 1 : -1; serve(); phase = 'play'; $('pauseBtn').hidden = false;
   }
   function serve() {
-    ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 8 * U, sp: 290 * U }; trail = []; rally = 0;
+    ball = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 8 * U, sp: 870 * U }; trail = []; rally = 0;
     serveT = 1.1;
   }
   function launch() {
@@ -171,7 +171,7 @@ window.addEventListener('error', function (e) { var c = document.getElementById(
   }
   function bounce(p, dir) {
     const off = Math.max(-1, Math.min(1, (ball.x - p.x) / (p.w / 2)));
-    ball.sp = Math.min(ball.sp * 1.06, 900 * U);
+    ball.sp = Math.min(ball.sp * 1.06, 2700 * U);
     const a = off * 1.05;
     ball.vx = Math.sin(a) * ball.sp; ball.vy = Math.cos(a) * ball.sp * dir;
     p.glow = 1; flash = .08; rally++; sfx.paddle(ball.sp / U);
@@ -184,8 +184,8 @@ window.addEventListener('error', function (e) { var c = document.getElementById(
     // keyboard
     if (keys.ArrowLeft) bot.tx = bot.x - 60; if (keys.ArrowRight) bot.tx = bot.x + 60;
     if (mode === '2p') { if (keys.KeyA) top.tx = top.x - 60; if (keys.KeyD) top.tx = top.x + 60; }
-    movePaddle(bot, dt, 2400 * U);
-    if (mode === '2p') movePaddle(top, dt, 2400 * U);
+    movePaddle(bot, dt, 7200 * U);
+    if (mode === '2p') movePaddle(top, dt, 7200 * U);
     else {
       const hard = mode === 'hard';
       if (ball.vy < 0) {
@@ -194,7 +194,7 @@ window.addEventListener('error', function (e) { var c = document.getElementById(
         while (px < 0 || px > W) px = px < 0 ? -px : 2 * W - px;
         top.tx = px + (hard ? 0 : Math.sin(performance.now() / 400) * top.w * .35);
       } else top.tx = W / 2;
-      movePaddle(top, dt, (hard ? 520 : 260) * U + (hard ? 0 : bot.score * 10 * U));
+      movePaddle(top, dt, (hard ? 1560 : 780) * U + (hard ? 0 : bot.score * 30 * U));
     }
     if (serveT > 0) { serveT -= dt; if (serveT <= 0) launch(); return; }
     // ball, in small steps so fast balls don't tunnel

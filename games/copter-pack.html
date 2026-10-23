@@ -11,8 +11,10 @@
 <script>
 // Copter Pack: fly a heli-pack down through the mine, blast critters with your helmet laser, dynamite the walls and rescue the trapped miner.
 K.theme({ bg: '#120c08', ink: '#fff2e0', accent: '#ffb02e', accentInk: '#2a1600' });
-const W = 320, H = 240, T = 16;
-K.screen(W, H);
+const W = 320, H = 240, T = 16;          // one mine room, in world units
+const VW = 150, VH = 200;                  // camera window: zoomed in on the pilot, phone-shaped
+K.screen(VW, VH);
+let camX = 0, camY = 0, camRoom = -1;
 K.hud(['score', 'level', 'lives', 'tnt']);
 K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'TNT' }, { id: 'a', label: 'LASER' }] });
 
@@ -135,42 +137,127 @@ function die(t) { lives--; hud(); dead = 1.6; msg = t; msgT = 1.6; pop(p.x + 5, 
 function over() { state = 'over'; best = K.saveBest('copter', score); K.card({ title: 'MISSION OVER', text: 'You reached level ' + (lvIdx + 1) + ' and scored ' + score + '.', best: 'BEST ' + best, button: 'Fly again', onStart: start }); }
 
 function draw(c, t) {
-  const bgc = c.createLinearGradient(0, 0, 0, H); bgc.addColorStop(0, '#120a06'); bgc.addColorStop(1, '#2a1a10'); c.fillStyle = bgc; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#0a0604'; c.fillRect(0, 0, VW, VH);
   if (!rooms) return;
+  // follow camera, kept inside the room; snaps when you fly into a new room
+  const tx = K.clamp(p.x + 5 + p.face * 10 - VW / 2, 0, W - VW), ty = K.clamp(p.y + 7 - VH / 2, 0, H - VH);
+  if (camRoom !== room) { camX = tx; camY = ty; camRoom = room; } else { camX += (tx - camX) * 0.12; camY += (ty - camY) * 0.12; }
+  c.save(); c.translate(-camX, -camY);
+  const bgc = c.createLinearGradient(0, 0, 0, H); bgc.addColorStop(0, '#120a06'); bgc.addColorStop(1, '#2a1a10'); c.fillStyle = bgc; c.fillRect(0, 0, W, H);
   const g = rooms[room].g;
   for (let i = 0; i < 14; i++) { c.fillStyle = 'rgba(80,55,35,' + (0.2 + A.hash(i, room) * 0.2) + ')'; c.beginPath(); c.ellipse(A.hash(i, room, 1) * W, A.hash(i, room, 2) * H, 14 + A.hash(i, 3) * 20, 8 + A.hash(i, 4) * 10, A.hash(i, 5) * 3, 0, 7); c.fill(); }
   const solidC = (x, y) => x < 0 || y < 0 || x >= 20 || y >= 15 || g[y][x] === '#';
   for (let y = 0; y < 15; y++) for (let x = 0; x < 20; x++) {
     const ch = g[y][x], X = x * T, Y = y * T;
     if (ch === '#') A.tile(c, 'cp', X, Y, A.edges(solidC, x, y), x + room * 20, y, Object.assign({}, A.PAL.earth, { base: '#6b4a2e', hi: '#8a6440', lo: '#4a321e', mortar: '#24160c', grass: null }));
-    else if (ch === 'W') { c.fillStyle = '#c8a050'; c.fillRect(X, Y, T, T); c.fillStyle = '#8a6a2a'; for (let k = 0; k < T; k += 6) c.fillRect(X, Y + k, T, 2); c.fillStyle = '#e8c070'; c.fillRect(X + 2, Y + 2, 3, 2); }
+    else if (ch === 'W') { // cracked timber wall, weak to TNT
+      c.fillStyle = '#3a2410'; c.fillRect(X, Y, T, T);
+      for (let k = 0; k < 3; k++) { const py = Y + 0.5 + k * 5.2, g2 = c.createLinearGradient(0, py, 0, py + 4.6); g2.addColorStop(0, '#e8c070'); g2.addColorStop(1, '#a87a34'); c.fillStyle = g2; c.fillRect(X + 0.5, py, T - 1, 4.6); c.fillStyle = 'rgba(90,55,20,.55)'; c.fillRect(X + 1 + A.hash(x, y + k) * 8, py + 1.6, 5, 0.5); c.fillStyle = '#5a3a1a'; c.beginPath(); c.arc(X + 2.5, py + 2.3, 0.7, 0, 7); c.arc(X + T - 2.5, py + 2.3, 0.7, 0, 7); c.fill(); }
+      c.strokeStyle = 'rgba(30,15,5,.8)'; c.lineWidth = 0.6; c.beginPath(); c.moveTo(X + 4 + A.hash(x, y) * 6, Y + 1); c.lineTo(X + 7, Y + 7); c.lineTo(X + 5 + A.hash(y, x) * 6, Y + 15); c.stroke();
+      c.fillStyle = 'rgba(230,57,70,.85)'; c.fillRect(X + 1, Y + T - 3, 3, 2); c.fillRect(X + T - 4, Y + T - 3, 3, 2);
+    }
     else if (ch === 'L') A.lava(c, X, Y, T, T, t + x * 50);
   }
   const mn = rooms[room].miner;
-  if (mn && rescued <= 0) { const x = mn.x, y = mn.y; c.fillStyle = '#3a6ad8'; c.fillRect(x - 4, y - 12, 8, 8); c.fillStyle = '#ffcf9e'; c.fillRect(x - 3, y - 18, 6, 6); c.fillStyle = '#ffd23f'; c.fillRect(x - 4, y - 20, 8, 3); c.fillStyle = '#333'; c.fillRect(x - 4, y - 4, 3, 4); c.fillRect(x + 1, y - 4, 3, 4); if (Math.floor(t / 300) % 2) K.text(c, 'HELP!', x, y - 28, 8, '#fff'); c.fillStyle = '#ffd23f'; c.fillRect(x + 4 + Math.sin(t / 200) * 2, y - 16, 2, 6); }
-  for (const m of rooms[room].mobs) {
-    if (m.dead) continue;
-    if (m.t === 'spider') { c.strokeStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.moveTo(m.x, m.y0); c.lineTo(m.x, m.y - 5); c.stroke(); c.fillStyle = '#2a1a3a'; c.beginPath(); c.arc(m.x, m.y, 5, 0, 7); c.fill(); c.fillStyle = '#ff3b5c'; c.fillRect(m.x - 2, m.y - 1, 1, 1); c.fillRect(m.x + 1, m.y - 1, 1, 1); c.strokeStyle = '#2a1a3a'; for (let k = -1; k <= 1; k += 2) for (let j = 0; j < 3; j++) { c.beginPath(); c.moveTo(m.x, m.y); c.lineTo(m.x + k * 8, m.y - 3 + j * 3); c.stroke(); } }
-    else { const f = Math.floor(t / 90) % 2; c.fillStyle = '#5a3a6a'; c.fillRect(m.x - 3, m.y - 3, 6, 6); c.fillRect(m.x - 10, m.y - (f ? 5 : 0), 7, 3); c.fillRect(m.x + 3, m.y - (f ? 5 : 0), 7, 3); c.fillStyle = '#ffd23f'; c.fillRect(m.x - 2, m.y - 2, 1, 1); c.fillRect(m.x + 1, m.y - 2, 1, 1); }
+  if (mn && rescued <= 0) drawMiner(c, mn.x, mn.y, t);
+  for (const m of rooms[room].mobs) { if (m.dead) continue; if (m.t === 'spider') drawSpider(c, m, t); else drawBat(c, m, t); }
+  for (const b of bombs) if (b.room === room) drawTNT(c, b.x, b.y, t, b.t);
+  for (const f of fx) if (f.room === room || f.room === undefined) {
+    if (f.boom) { const k = 1 - f.l / 0.5, r = 34 * (0.3 + k * 0.7); A.glow(c, f.x, f.y, r * 1.6, '255,170,60', 0.7 * (1 - k)); c.fillStyle = 'rgba(255,120,40,' + (1 - k) + ')'; c.beginPath(); for (let i = 0; i < 16; i++) { const an = i / 16 * 6.283, rr = r * (i % 2 ? 0.7 : 1); c.lineTo(f.x + Math.cos(an) * rr, f.y + Math.sin(an) * rr); } c.fill(); c.fillStyle = 'rgba(255,240,170,' + (1 - k) + ')'; c.beginPath(); c.arc(f.x, f.y, r * 0.45, 0, 7); c.fill(); }
+    else { c.fillStyle = A.INK; c.fillRect(f.x - 2.2, f.y - 2.2, 3.4, 3.4); c.fillStyle = f.c || '#8a6a3a'; c.fillRect(f.x - 1.7, f.y - 1.7, 2.4, 2.4); }
   }
-  for (const b of bombs) if (b.room === room) { c.fillStyle = '#e63946'; c.fillRect(b.x - 2, b.y - 4, 4, 8); c.fillStyle = Math.floor(t / 80) % 2 ? '#ffd23f' : '#fff'; c.fillRect(b.x - 1, b.y - 7, 2, 3); }
-  for (const f of fx) if (f.room === room || f.room === undefined) { if (f.boom) { c.fillStyle = 'rgba(255,200,80,' + f.l * 2 + ')'; c.beginPath(); c.arc(f.x, f.y, 34 * (1 - f.l), 0, 7); c.fill(); } else { c.fillStyle = f.c || '#8a6a3a'; c.fillRect(f.x - 2, f.y - 2, 3, 3); } }
-  // hero
-  if (dead <= 0) {
-    const x = Math.round(p.x), y = Math.round(p.y);
-    const rot = Math.floor(t / 40) % 2 ? 9 : 4; c.fillStyle = '#ddd'; c.fillRect(x + 5 - rot, y - 3, rot * 2, 1); c.fillRect(x + 4, y - 2, 2, 3);
-    c.fillStyle = '#ffd23f'; c.fillRect(x + 1, y, 8, 4); c.fillStyle = '#ffcf9e'; c.fillRect(x + 2, y + 3, 6, 4);
-    c.fillStyle = '#e63946'; c.fillRect(x + 1, y + 7, 8, 5); c.fillStyle = '#555'; c.fillRect(x + (p.face > 0 ? -2 : 9), y + 6, 3, 6);
-    c.fillStyle = '#2a3a6a'; c.fillRect(x + 1, y + 12, 3, 2); c.fillRect(x + 6, y + 12, 3, 2);
-    if (beam) { c.fillStyle = '#7cff6b'; const bx = p.face > 0 ? x + 10 : x - beam; c.fillRect(bx, y + 3, beam, 2); }
-  }
+  if (dead <= 0) drawHero(c, p.x, p.y, p.face, t, K.down('up'));
+  if (dead <= 0 && beam) { const y = p.y + 5.2, bx = p.face > 0 ? p.x + 13 : p.x - 3 - beam; A.glow(c, bx + beam / 2, y, beam / 2 + 6, '120,255,110', 0.16); c.fillStyle = 'rgba(124,255,107,.55)'; c.fillRect(bx, y - 1.6, beam, 3.2); c.fillStyle = '#eaffe4'; c.fillRect(bx, y - 0.5, beam, 1); const ex = p.face > 0 ? bx + beam : bx; A.glow(c, ex, y, 6, '200,255,180', 0.8); }
+  c.restore();
   // power bar
-  c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(100, H - 10, 120, 7); c.fillStyle = power < 25 ? '#ff3b5c' : '#ffd23f'; c.fillRect(101, H - 9, 118 * power / 100, 5);
-  K.text(c, 'ROOM ' + (room + 1) + '/' + rooms.length, 280, H - 7, 7, '#ccc');
-  if (msgT > 0) K.text(c, msg, W / 2, 40, 13, '#fff');
+  c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(6, VH - 10, 80, 6); c.fillStyle = power < 25 ? '#ff3b5c' : '#ffd23f'; c.fillRect(7, VH - 9, 78 * power / 100, 4);
+  K.text(c, 'POWER', 6, VH - 15, 4, '#ccc', 'left');
+  K.text(c, 'ROOM ' + (room + 1) + '/' + rooms.length, VW - 5, VH - 7, 4.5, '#ccc', 'right');
+  if (msgT > 0) K.text(c, msg, VW / 2, 30, 9, '#fff');
+}
+// ---------- detailed sprites (drawn at world scale, canvas is high-res) ----------
+function drawHero(c, x, y, face, t, thrust) {
+  const INK = A.INK; c.save(); c.translate(x + 5, y); if (face < 0) c.scale(-1, 1);
+  // rotor: blurred disc plus spinning blades
+  const sp = t / 25; c.fillStyle = 'rgba(220,220,230,.18)'; c.beginPath(); c.ellipse(0, -3.6, 9.5, 1.6, 0, 0, 7); c.fill();
+  c.strokeStyle = '#e8e8ee'; c.lineWidth = 1; c.beginPath(); const bl = 9 * Math.cos(sp); c.moveTo(-bl, -3.6); c.lineTo(bl, -3.6); c.stroke();
+  c.fillStyle = INK; c.fillRect(-1.1, -4.6, 2.2, 4); c.fillStyle = '#9a9aa6'; c.fillRect(-0.6, -4.2, 1.2, 3.4); c.fillStyle = '#e63946'; c.beginPath(); c.arc(0, -3.6, 0.9, 0, 7); c.fill();
+  // backpack motor
+  c.fillStyle = INK; c.fillRect(-7.2, 3.5, 4, 7.5); c.fillStyle = '#6a6a78'; c.fillRect(-6.8, 4, 3.2, 6.6); c.fillStyle = '#9a9aa8'; c.fillRect(-6.6, 4.2, 1, 6); c.fillStyle = '#3a3a44'; for (let k = 0; k < 3; k++) c.fillRect(-6.4, 5 + k * 1.8, 2.6, 0.6);
+  if (thrust) { const f = 0.6 + Math.random() * 0.6; A.glow(c, -5.2, 12.5, 4, '255,160,60', 0.7); c.fillStyle = '#ffb02e'; c.beginPath(); c.moveTo(-6.6, 11); c.lineTo(-5.2, 11 + 4 * f); c.lineTo(-3.8, 11); c.fill(); }
+  // boots and legs
+  c.fillStyle = INK; c.fillRect(-4.3, 10.6, 3.6, 3.6); c.fillRect(0.7, 10.6, 3.6, 3.6);
+  c.fillStyle = '#2a3a6a'; c.fillRect(-3.9, 10.6, 2.8, 2.2); c.fillRect(1.1, 10.6, 2.8, 2.2);
+  c.fillStyle = '#4a2e1a'; c.fillRect(-4, 12.6, 3.2, 1.4); c.fillRect(1, 12.6, 3.6, 1.4);
+  // red jumpsuit with belt and zipper
+  c.fillStyle = INK; c.beginPath(); c.roundRect(-4.6, 5.6, 9.2, 6, 1.6); c.fill();
+  const g = c.createLinearGradient(-4, 0, 4, 0); g.addColorStop(0, '#9a1d25'); g.addColorStop(0.4, '#ff5a5a'); g.addColorStop(1, '#b8232c'); c.fillStyle = g; c.beginPath(); c.roundRect(-4.1, 6, 8.2, 5.2, 1.3); c.fill();
+  c.fillStyle = '#3a2410'; c.fillRect(-4.1, 9, 8.2, 1.1); c.fillStyle = '#ffd23f'; c.fillRect(-0.7, 8.9, 1.4, 1.3);
+  c.fillStyle = 'rgba(255,255,255,.4)'; c.fillRect(0.2, 6.3, 0.4, 2.5);
+  c.fillStyle = '#ffd23f'; c.fillRect(-3.9, 6.6, 1.2, 0.6); c.fillRect(2.7, 6.6, 1.2, 0.6);
+  // arm holding the laser pistol
+  c.fillStyle = INK; c.fillRect(2.4, 6.6, 3.4, 2.4); c.fillStyle = '#d83a3a'; c.fillRect(2.7, 6.9, 2.8, 1.8);
+  c.fillStyle = INK; c.fillRect(5, 4.2, 4.2, 3.2); c.fillStyle = '#4a4a56'; c.fillRect(5.3, 4.5, 3.6, 2); c.fillStyle = '#7cff6b'; c.fillRect(8.3, 4.8, 0.7, 1.2); c.fillStyle = '#ffcf9e'; c.fillRect(5.2, 6.4, 1.6, 1.4);
+  // head with goggles
+  c.fillStyle = INK; c.beginPath(); c.arc(0, 2.6, 3.9, 0, 7); c.fill();
+  const fg = c.createRadialGradient(-1, 1.6, 0.4, 0, 2.6, 3.6); fg.addColorStop(0, '#ffe2c0'); fg.addColorStop(1, '#d89a68'); c.fillStyle = fg; c.beginPath(); c.arc(0, 2.6, 3.4, 0, 7); c.fill();
+  c.fillStyle = '#5a3a1a'; c.fillRect(-3.3, 2.1, 6.6, 1); c.fillStyle = INK; c.beginPath(); c.arc(1.5, 2.6, 1.35, 0, 7); c.fill(); c.fillStyle = '#7ac8ff'; c.beginPath(); c.arc(1.5, 2.6, 0.95, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(1, 2, 0.5, 0.5);
+  c.fillStyle = '#b8603a'; c.fillRect(1.2, 4.4, 1.6, 0.5);
+  // mining helmet with lamp
+  c.fillStyle = INK; c.beginPath(); c.arc(0, 1.6, 4.1, Math.PI, 0); c.fill(); c.fillRect(-4.6, 1.2, 9.2, 1.5);
+  const hg = c.createLinearGradient(0, -2.4, 0, 1.6); hg.addColorStop(0, '#fff09a'); hg.addColorStop(1, '#d8a020'); c.fillStyle = hg; c.beginPath(); c.arc(0, 1.5, 3.6, Math.PI, 0); c.fill(); c.fillRect(-4.2, 1.4, 8.4, 0.9);
+  c.fillStyle = '#c8c8d0'; c.fillRect(2.2, -1.3, 1.8, 1.8); c.fillStyle = '#fffbe0'; c.fillRect(3.1, -1, 0.8, 1.2);
+  c.restore();
+  // helmet lamp beam lights up the tunnel ahead
+  const lx = x + 5 + face * 4, ly = y - 0.3; const lg = c.createRadialGradient(lx, ly, 1, lx + face * 18, ly + 4, 26); lg.addColorStop(0, 'rgba(255,240,180,.28)'); lg.addColorStop(1, 'rgba(255,240,180,0)');
+  c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = lg; c.beginPath(); c.moveTo(lx, ly); c.lineTo(lx + face * 40, ly - 10); c.lineTo(lx + face * 40, ly + 18); c.closePath(); c.fill(); c.restore();
+}
+function drawMiner(c, x, y, t) {
+  const INK = A.INK, wave = Math.sin(t / 180) * 2;
+  A.shadow(c, x, y, 6);
+  c.fillStyle = INK; c.fillRect(x - 4.4, y - 4.6, 3.6, 4.6); c.fillRect(x + 0.8, y - 4.6, 3.6, 4.6); c.fillStyle = '#4a3a2a'; c.fillRect(x - 4, y - 4.2, 2.8, 3); c.fillRect(x + 1.2, y - 4.2, 2.8, 3); c.fillStyle = '#2a1a10'; c.fillRect(x - 4.2, y - 1.4, 3.4, 1.4); c.fillRect(x + 1, y - 1.4, 3.4, 1.4);
+  c.fillStyle = INK; c.beginPath(); c.roundRect(x - 5, y - 13, 10, 9, 1.6); c.fill(); c.fillStyle = '#3a6ad8'; c.beginPath(); c.roundRect(x - 4.5, y - 12.5, 9, 8, 1.4); c.fill();
+  c.fillStyle = '#2a4aa8'; c.fillRect(x - 2.8, y - 12.5, 1, 8); c.fillRect(x + 1.8, y - 12.5, 1, 8); c.fillStyle = '#ffd23f'; c.fillRect(x - 2.9, y - 11.5, 1.2, 1.2); c.fillRect(x + 1.7, y - 11.5, 1.2, 1.2);
+  c.fillStyle = INK; c.fillRect(x + 4, y - 18 + wave, 2.6, 7); c.fillStyle = '#3a6ad8'; c.fillRect(x + 4.4, y - 17 + wave, 1.8, 5.5); c.fillStyle = '#ffcf9e'; c.beginPath(); c.arc(x + 5.3, y - 18.4 + wave, 1.5, 0, 7); c.fill();
+  c.fillStyle = INK; c.beginPath(); c.arc(x, y - 16, 3.9, 0, 7); c.fill(); c.fillStyle = '#ffcf9e'; c.beginPath(); c.arc(x, y - 16, 3.4, 0, 7); c.fill();
+  c.fillStyle = '#5a3a1a'; c.fillRect(x - 3, y - 14.6, 6, 1.6); c.fillStyle = INK; c.fillRect(x - 1.6, y - 16.6, 0.8, 0.9); c.fillRect(x + 0.9, y - 16.6, 0.8, 0.9); c.fillRect(x - 0.6, y - 14.3, 1.2, 0.9);
+  c.fillStyle = INK; c.beginPath(); c.arc(x, y - 17.2, 4, Math.PI, 0); c.fill(); c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(x, y - 17.3, 3.5, Math.PI, 0); c.fill(); c.fillRect(x - 4.3, y - 17.6, 8.6, 0.9);
+  c.fillStyle = '#fffbe0'; c.fillRect(x - 0.7, y - 20, 1.4, 1.4); A.glow(c, x, y - 19.5, 6, '255,240,180', 0.5);
+  if (Math.floor(t / 300) % 2) { c.fillStyle = 'rgba(255,255,255,.92)'; c.beginPath(); c.roundRect(x - 13, y - 34, 26, 10, 3); c.fill(); c.beginPath(); c.moveTo(x - 2, y - 24.5); c.lineTo(x + 2, y - 24.5); c.lineTo(x, y - 21.5); c.fill(); K.text(c, 'HELP!', x, y - 29, 6, '#e63946'); }
+}
+function drawBat(c, m, t) {
+  const INK = A.INK, f = Math.sin(t / 60 + m.x) , x = m.x, y = m.y, d = Math.sign(m.vx) || 1;
+  c.save(); c.translate(x, y);
+  for (const s of [-1, 1]) { c.fillStyle = INK; c.beginPath(); c.moveTo(s * 2, -1); c.quadraticCurveTo(s * 7, -6 * f - 2, s * 11, -3 * f); c.lineTo(s * 9, 1); c.lineTo(s * 7, -0.2); c.lineTo(s * 5, 2); c.lineTo(s * 2, 1.5); c.closePath(); c.fill();
+    c.fillStyle = '#6a3a8a'; c.beginPath(); c.moveTo(s * 2.3, -0.6); c.quadraticCurveTo(s * 7, -5.4 * f - 1.6, s * 10.2, -2.8 * f); c.lineTo(s * 8.6, 0.5); c.lineTo(s * 6.8, -0.6); c.lineTo(s * 4.9, 1.4); c.lineTo(s * 2.3, 1); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(30,10,40,.6)'; c.lineWidth = 0.35; c.beginPath(); c.moveTo(s * 2.5, 0); c.lineTo(s * 8.6, 0.4); c.moveTo(s * 2.5, 0); c.lineTo(s * 6.8, -0.5); c.stroke(); }
+  c.fillStyle = INK; c.beginPath(); c.ellipse(0, 0.6, 3.1, 3.6, 0, 0, 7); c.fill(); c.fillStyle = '#5a2e6e'; c.beginPath(); c.ellipse(0, 0.6, 2.6, 3.1, 0, 0, 7); c.fill();
+  c.fillStyle = INK; c.beginPath(); c.moveTo(-2.2, -1.6); c.lineTo(-1.6, -4.4); c.lineTo(-0.6, -2); c.moveTo(2.2, -1.6); c.lineTo(1.6, -4.4); c.lineTo(0.6, -2); c.fill();
+  c.fillStyle = '#ffd23f'; c.fillRect(-1.6 + d * 0.3, -0.6, 1, 1); c.fillRect(0.6 + d * 0.3, -0.6, 1, 1); A.glow(c, 0, 0, 4, '255,210,63', 0.25);
+  c.fillStyle = '#fff'; c.fillRect(-0.8, 1.6, 0.5, 0.8); c.fillRect(0.3, 1.6, 0.5, 0.8);
+  c.restore();
+}
+function drawSpider(c, m, t) {
+  const INK = A.INK, x = m.x, y = m.y;
+  c.strokeStyle = 'rgba(230,230,240,.55)'; c.lineWidth = 0.5; c.beginPath(); c.moveTo(x, m.y0); c.lineTo(x, y - 4); c.stroke();
+  c.strokeStyle = INK; c.lineWidth = 1.1; for (const s of [-1, 1]) for (let j = 0; j < 4; j++) { const wig = Math.sin(t / 120 + j) * 0.8; c.beginPath(); c.moveTo(x, y); c.lineTo(x + s * 5, y - 4 + j * 2 + wig); c.lineTo(x + s * 8, y - 1 + j * 2.4); c.stroke(); }
+  c.strokeStyle = '#4a2a5a'; c.lineWidth = 0.5; for (const s of [-1, 1]) for (let j = 0; j < 4; j++) { const wig = Math.sin(t / 120 + j) * 0.8; c.beginPath(); c.moveTo(x, y); c.lineTo(x + s * 5, y - 4 + j * 2 + wig); c.lineTo(x + s * 8, y - 1 + j * 2.4); c.stroke(); }
+  c.fillStyle = INK; c.beginPath(); c.arc(x, y - 1.6, 4.4, 0, 7); c.fill();
+  const g = c.createRadialGradient(x - 1.4, y - 3, 0.4, x, y - 1.6, 4); g.addColorStop(0, '#6a4a8a'); g.addColorStop(1, '#1e0e2a'); c.fillStyle = g; c.beginPath(); c.arc(x, y - 1.6, 3.9, 0, 7); c.fill();
+  c.fillStyle = '#ff3b5c'; c.beginPath(); c.moveTo(x, y - 4); c.lineTo(x + 1, y - 2.4); c.lineTo(x, y - 0.8); c.lineTo(x - 1, y - 2.4); c.fill();
+  c.fillStyle = INK; c.beginPath(); c.arc(x, y + 2.4, 2.4, 0, 7); c.fill(); c.fillStyle = '#2a1a3a'; c.beginPath(); c.arc(x, y + 2.4, 2, 0, 7); c.fill();
+  c.fillStyle = '#ff3b5c'; for (const [ex, ey] of [[-1, 2], [1, 2], [-0.5, 3], [0.5, 3]]) c.fillRect(x + ex - 0.35, y + ey - 0.35, 0.7, 0.7);
+}
+function drawTNT(c, x, y, t, left) {
+  const INK = A.INK;
+  for (let k = -1; k <= 1; k++) { c.fillStyle = INK; c.fillRect(x + k * 2.4 - 1.4, y - 4.6, 2.8, 9); c.fillStyle = '#e63946'; c.fillRect(x + k * 2.4 - 1, y - 4.2, 2, 8.2); c.fillStyle = 'rgba(255,255,255,.35)'; c.fillRect(x + k * 2.4 - 0.8, y - 4, 0.6, 7.6); }
+  c.fillStyle = '#3a2410'; c.fillRect(x - 3.8, y - 1, 7.6, 1.6); K.text(c, 'TNT', x, y + 2.6, 2.6, '#ffd23f');
+  c.strokeStyle = '#6a5a4a'; c.lineWidth = 0.6; c.beginPath(); c.moveTo(x, y - 4.6); c.quadraticCurveTo(x + 2, y - 7, x + 1, y - 8.5); c.stroke();
+  const sp = Math.floor(t / 60) % 2; A.glow(c, x + 1, y - 8.7, 5, '255,200,80', 0.8); c.fillStyle = sp ? '#ffd23f' : '#fff'; c.beginPath(); c.arc(x + 1, y - 8.7, 1.1, 0, 7); c.fill();
+  if (left < 0.6 && Math.floor(t / 80) % 2) { c.strokeStyle = 'rgba(255,60,60,.8)'; c.lineWidth = 0.6; c.beginPath(); c.arc(x, y, 26, 0, 7); c.stroke(); }
 }
 title();
-{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.ambient(c, W, H, t, 'dust', 12); A.vignette(c, W, H, 0.5); }; }
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.ambient(c, VW, VH, t, 'dust', 10); A.vignette(c, VW, VH, 0.45); }; }
 K.run(update, draw);
 </script>
 </body>

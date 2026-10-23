@@ -94,12 +94,15 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
 (function () {
   const $ = id => document.getElementById(id);
   const cv = $('cv'), ctx = cv.getContext('2d'), field = $('field');
-  let W = 0, H = 0, U = 1;
+  let W = 0, H = 0, U = 1, SW = 0, SH = 0, DPR = 1;
+  const ZOOM = 2; // camera zoom: the view shows half as much ground, so everything is twice as big
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = field.clientWidth; H = field.clientHeight;
-    cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    U = Math.max(.8, Math.min(W, H) / 400);
+    const dpr = DPR = Math.min(window.devicePixelRatio || 1, 2);
+    SW = field.clientWidth; SH = field.clientHeight;
+    W = SW / ZOOM; H = SH / ZOOM;
+    cv.width = SW * dpr; cv.height = SH * dpr; ctx.setTransform(dpr * ZOOM, 0, 0, dpr * ZOOM, 0, 0);
+    U = Math.max(.8, Math.min(SW, SH) / 400) * .85;
+    for (const k in groundPat) delete groundPat[k];
   }
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   function hash(i) { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
@@ -206,7 +209,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       if (ox > 0 && oy > 0) { if (ox < oy) o.x += ox * Math.sign(dx || 1); else o.y += oy * Math.sign(dy || 1); }
     }
   }
-  function newPlayer(y) { P = { x: W / 2, y, ax: 0, ay: -1, inv: 2.5, walk: 0 }; pushOut(P, 10 * U); }
+  function newPlayer(y) { P = { x: W / 2, y, ax: 0, ay: -1, inv: 2.5, walk: 0 }; pushOut(P, 14 * U); }
   function startStage() {
     objs = []; foes = []; shots = []; eShots = []; nades = []; booms = [];
     camY = 0; goalY = -(2200 + stage * 300) * U; genY = H * .5;
@@ -277,18 +280,18 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
         P.ax = Math.cos(a); P.ay = Math.sin(a);
       } else if (keys.fire || nadeQ) {
         // standing still: auto-aim at the closest enemy so it plays well on a phone
-        let tgt = null, bd = 260 * U;
+        let tgt = null, bd = 220 * U;
         foes.forEach(f => { const d = Math.hypot(f.x - P.x, f.y - P.y); if (d < bd) { bd = d; tgt = f; } });
         if (tgt) { const a = Math.atan2(tgt.y - P.y, tgt.x - P.x); P.ax = Math.cos(a); P.ay = Math.sin(a); }
       }
-      pushOut(P, 8 * U);
-      P.x = clamp(P.x, 10 * U, W - 10 * U); P.y = clamp(P.y, camY + 14 * U, camY + H - 14 * U);
+      pushOut(P, 12 * U);
+      P.x = clamp(P.x, 16 * U, W - 16 * U); P.y = clamp(P.y, camY + 20 * U, camY + H - 20 * U);
       if (P.y - camY < H * .45) camY = P.y - H * .45;
       P.inv -= dt;
       fireCd -= dt;
       if (keys.fire && fireCd <= 0 && shots.length < 8) {
         fireCd = .13; sfx.shot();
-        shots.push({ x: P.x + P.ax * 14 * U, y: P.y + P.ay * 14 * U, vx: P.ax * 520 * U, vy: P.ay * 520 * U, t: .55 });
+        shots.push({ x: P.x + P.ax * 26 * U, y: P.y + P.ay * 26 * U, vx: P.ax * 520 * U, vy: P.ay * 520 * U, t: .55 });
       }
       if (nadeQ) {
         nadeQ = false;
@@ -316,7 +319,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       let x, y;
       if (Math.random() < .3) { x = Math.random() < .5 ? -10 * U : W + 10 * U; y = camY + H * (.08 + .4 * Math.random()); }
       else { x = W * (.08 + .84 * Math.random()); y = camY - 14 * U; }
-      foes.push({ x, y, cd: 1 + Math.random() * 1.5, walk: 0, a: Math.PI / 2, spd: (45 + stage * 6 + Math.random() * 20) * U, hold: (Math.random() < .5 ? 130 : 70) * U, side: Math.random() < .5 ? -1 : 1 });
+      foes.push({ x, y, cd: 1 + Math.random() * 1.5, walk: 0, a: Math.PI / 2, spd: (45 + stage * 6 + Math.random() * 20) * U, hold: (Math.random() < .5 ? 110 : 65) * U, side: Math.random() < .5 ? -1 : 1 });
     }
     // foes
     for (let i = foes.length - 1; i >= 0; i--) {
@@ -326,10 +329,10 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       f.a = Math.atan2(dy, dx);
       if (d > f.hold) { f.x += dx / d * f.spd * dt; f.y += dy / d * f.spd * dt; f.walk += dt * 10; }
       else { f.x += Math.cos(f.a + Math.PI / 2) * f.spd * .4 * f.side * dt; f.walk += dt * 5; if (f.x < 12 * U || f.x > W - 12 * U) f.side *= -1; }
-      pushOut(f, 8 * U);
+      pushOut(f, 12 * U);
       f.cd -= dt;
-      if (P && playing && f.cd <= 0 && f.y > camY && f.y < camY + H) { f.cd = Math.max(.8, 2.2 - stage * .15) + Math.random() * 1.2; eShot(f.x + Math.cos(f.a) * 12 * U, f.y + Math.sin(f.a) * 12 * U, f.a, (150 + stage * 12) * U); sfx.eshot(); }
-      if (P && playing && P.inv <= 0 && d < 14 * U) { playerHit(); }
+      if (P && playing && f.cd <= 0 && f.y > camY && f.y < camY + H) { f.cd = Math.max(.8, 2.2 - stage * .15) + Math.random() * 1.2; eShot(f.x + Math.cos(f.a) * 24 * U, f.y + Math.sin(f.a) * 24 * U, f.a, (150 + stage * 12) * U); sfx.eshot(); }
+      if (P && playing && P.inv <= 0 && d < 21 * U) { playerHit(); }
       if (f.y > camY + H + 40 * U) foes.splice(i, 1);
     }
     // bunkers
@@ -344,7 +347,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       let gone = s.t <= 0 || s.x < -10 || s.x > W + 10;
       const b = !gone && blocksAt(s.x, s.y, 0);
       if (b) { gone = true; if (b.t === 'bunker') { b.hp--; if (b.hp <= 0) wreckBunker(b); } }
-      if (!gone) for (let j = foes.length - 1; j >= 0; j--) if (Math.hypot(foes[j].x - s.x, foes[j].y - s.y) < 12 * U) { killFoe(j); gone = true; break; }
+      if (!gone) for (let j = foes.length - 1; j >= 0; j--) if (Math.hypot(foes[j].x - s.x, foes[j].y - s.y) < 17 * U) { killFoe(j); gone = true; break; }
       if (gone) shots.splice(i, 1);
     }
     for (let i = eShots.length - 1; i >= 0; i--) {
@@ -352,7 +355,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
       let gone = s.t <= 0 || s.y > camY + H + 20 || s.y < camY - 40;
       const b = !gone && blocksAt(s.x, s.y, 0);
       if (b && b.t !== 'bunker') gone = true;
-      if (!gone && P && playing && P.inv <= 0 && Math.hypot(P.x - s.x, P.y - s.y) < 9 * U) { gone = true; playerHit(); if (!eShots.length) break; }
+      if (!gone && P && playing && P.inv <= 0 && Math.hypot(P.x - s.x, P.y - s.y) < 12 * U) { gone = true; playerHit(); if (!eShots.length) break; }
       if (gone && eShots[i] === s) eShots.splice(i, 1);
     }
     // grenades
@@ -371,9 +374,9 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   // ---------- drawing ----------
   function soldier(x, y, a, walk, body, player) {
     const u = U, Y = y - camY;
-    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(x + 2 * u, Y + 3 * u, 9 * u, 7 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.beginPath(); ctx.ellipse(x + 3 * u, Y + 4.5 * u, 13.5 * u, 10.5 * u, 0, 0, Math.PI * 2); ctx.fill();
     ctx.save(); ctx.translate(x, Y); ctx.rotate(a);
-    ctx.scale(1.25, 1.25);
+    ctx.scale(1.875, 1.875);
     const s = Math.sin(walk) * 4 * u, INK = '#120e08';
     // boots
     ctx.fillStyle = INK; ctx.fillRect(-3.6 * u + s, -7.6 * u, 7.2 * u, 4.7 * u); ctx.fillRect(-3.6 * u - s, 2.9 * u, 7.2 * u, 4.7 * u);
@@ -457,23 +460,52 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
     if (th.name === 'Snowfield') { ctx.fillStyle = 'rgba(255,255,255,.75)'; for (let i = 0; i < 5; i++) { const a = i * 1.3 + o.seed; ctx.beginPath(); ctx.ellipse(x - r * .2 + Math.cos(a) * r * .4, y - r * .3 + Math.sin(a) * r * .3, r * .18, r * .1, a, 0, Math.PI * 2); ctx.fill(); } }
   }
   const groundPat = {};
+  // Ground tile: 160 world units square, painted at full screen resolution so the zoomed-in grass stays crisp.
   function groundTex(th) {
     if (groundPat[th.name]) return groundPat[th.name];
-    const S = 160, cv2 = document.createElement('canvas'); cv2.width = cv2.height = S; const c = cv2.getContext('2d');
+    const S = 160, PX = Math.round(S * ZOOM * DPR), cv2 = document.createElement('canvas'); cv2.width = cv2.height = PX;
+    const c = cv2.getContext('2d'); c.scale(PX / S, PX / S);
+    const rnd = (i, k) => A.hash(i, k);
+    // draw something at x,y plus its wrapped copies so the tile repeats with no seams
+    const wrap = (x, y, r, fn) => { for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) { const X = x + ox * S, Y = y + oy * S; if (X > -r && X < S + r && Y > -r && Y < S + r) fn(X, Y); } };
     c.fillStyle = th.g1; c.fillRect(0, 0, S, S);
-    for (let i = 0; i < 40; i++) { c.fillStyle = i % 2 ? th.g2 : A.shade(th.g1, .08); c.globalAlpha = .55; c.beginPath(); c.ellipse(A.hash(i, 1) * S, A.hash(i, 2) * S, 8 + A.hash(i, 3) * 18, 5 + A.hash(i, 4) * 8, A.hash(i, 5) * 3, 0, 7); c.fill(); }
+    // soft light and dark patches
+    for (let i = 0; i < 46; i++) { c.fillStyle = i % 2 ? th.g2 : A.shade(th.g1, .1); c.globalAlpha = .5; const rx = 8 + rnd(i, 3) * 20, ry = 5 + rnd(i, 4) * 9; wrap(rnd(i, 1) * S, rnd(i, 2) * S, 30, (x, y) => { c.beginPath(); c.ellipse(x, y, rx, ry, rnd(i, 5) * 3, 0, 7); c.fill(); }); }
     c.globalAlpha = 1;
-    if (th.name === 'Jungle') { for (let i = 0; i < 260; i++) { const x = A.hash(i, 6) * S, y = A.hash(i, 7) * S; c.strokeStyle = i % 3 ? th.dec : A.shade(th.g1, .25); c.lineWidth = 1.2; c.beginPath(); c.moveTo(x, y + 4); c.lineTo(x + (A.hash(i, 8) - .5) * 4, y - 2); c.stroke(); }
-      for (let i = 0; i < 6; i++) { const x = A.hash(i, 9) * S, y = A.hash(i, 10) * S; c.fillStyle = ['#ffe04a', '#ff7aa8', '#ffffff'][i % 3]; for (let k = 0; k < 4; k++) { c.beginPath(); c.arc(x + Math.cos(k * 1.57) * 2, y + Math.sin(k * 1.57) * 2, 1.6, 0, 7); c.fill(); } } }
-    else if (th.name === 'Desert') { for (let k = 0; k < 14; k++) { c.strokeStyle = 'rgba(140,100,50,.25)'; c.lineWidth = 1.2; c.beginPath(); for (let x = 0; x <= S; x += 8) { const y = k * 12 + Math.sin(x / 18 + k) * 3; x ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); }
-      for (let i = 0; i < 160; i++) { c.fillStyle = i % 2 ? 'rgba(120,80,40,.35)' : 'rgba(255,240,200,.5)'; c.fillRect(A.hash(i, 11) * S, A.hash(i, 12) * S, 1.4, 1.4); } }
-    else { for (let i = 0; i < 200; i++) { c.fillStyle = i % 3 ? 'rgba(160,190,220,.35)' : 'rgba(255,255,255,.95)'; c.fillRect(A.hash(i, 13) * S, A.hash(i, 14) * S, 1.5, 1.5); }
-      for (let k = 0; k < 8; k++) { c.strokeStyle = 'rgba(150,180,210,.3)'; c.lineWidth = 2; c.beginPath(); c.arc(A.hash(k, 15) * S, A.hash(k, 16) * S, 14 + A.hash(k, 17) * 20, .3, 2.2); c.stroke(); } }
-    return (groundPat[th.name] = ctx.createPattern(cv2, 'repeat'));
+    if (th.name === 'Jungle') {
+      const greens = [A.shade(th.g1, -.32), A.shade(th.g1, -.18), th.dec, A.shade(th.g1, .18), A.shade(th.g1, .32), '#7cc04a', '#3d6e24'];
+      // soil specks between the blades
+      for (let i = 0; i < 220; i++) { c.fillStyle = i % 2 ? 'rgba(70,50,25,.35)' : 'rgba(40,60,20,.4)'; c.fillRect(rnd(i, 20) * S, rnd(i, 21) * S, .6, .6); }
+      // grass blades: thin curved strokes in many shades, darker ones first so light tips sit on top
+      for (let pass = 0; pass < 2; pass++) for (let i = 0; i < 900; i++) {
+        const x = rnd(i + pass * 999, 6) * S, y = rnd(i + pass * 999, 7) * S, len = 2.5 + rnd(i, 8) * 4.5, lean = (rnd(i, 9) - .5) * 3.2;
+        c.strokeStyle = greens[pass ? 3 + (i % 4) : i % 3]; c.lineWidth = .35 + rnd(i, 10) * .45; c.lineCap = 'round';
+        wrap(x, y, 8, (X, Y) => { c.beginPath(); c.moveTo(X, Y); c.quadraticCurveTo(X + lean * .3, Y - len * .6, X + lean, Y - len); c.stroke(); });
+      }
+      // tufts: little fans of blades
+      for (let i = 0; i < 26; i++) { const x = rnd(i, 30) * S, y = rnd(i, 31) * S; wrap(x, y, 10, (X, Y) => { for (let k = 0; k < 7; k++) { const ang = -Math.PI / 2 + (k - 3) * .28; c.strokeStyle = k % 2 ? greens[5] : greens[0]; c.lineWidth = .55; c.beginPath(); c.moveTo(X, Y); c.quadraticCurveTo(X + Math.cos(ang) * 3, Y + Math.sin(ang) * 3, X + Math.cos(ang) * 7, Y + Math.sin(ang) * 7); c.stroke(); } }); }
+      // clover patches
+      for (let i = 0; i < 14; i++) { const x = rnd(i, 40) * S, y = rnd(i, 41) * S; wrap(x, y, 8, (X, Y) => { for (let k = 0; k < 4; k++) { const cx = X + (rnd(i * 4 + k, 42) - .5) * 9, cy = Y + (rnd(i * 4 + k, 43) - .5) * 6; for (let l = 0; l < 3; l++) { const la = l * 2.1 + k; c.fillStyle = l ? '#5fa83a' : '#4c9030'; c.beginPath(); c.arc(cx + Math.cos(la) * .9, cy + Math.sin(la) * .9, 1, 0, 7); c.fill(); } } }); }
+      // flowers with stems and centers
+      for (let i = 0; i < 10; i++) { const x = rnd(i, 9) * S, y = rnd(i, 10) * S, col = ['#ffe04a', '#ff7aa8', '#ffffff', '#b98cff'][i % 4]; wrap(x, y, 6, (X, Y) => { c.strokeStyle = '#3d6e24'; c.lineWidth = .4; c.beginPath(); c.moveTo(X, Y + 3.5); c.lineTo(X, Y); c.stroke(); c.fillStyle = col; for (let k = 0; k < 5; k++) { c.beginPath(); c.arc(X + Math.cos(k * 1.257) * 1.3, Y + Math.sin(k * 1.257) * 1.3, .95, 0, 7); c.fill(); } c.fillStyle = '#e8a020'; c.beginPath(); c.arc(X, Y, .6, 0, 7); c.fill(); }); }
+      // pebbles
+      for (let i = 0; i < 8; i++) { const x = rnd(i, 50) * S, y = rnd(i, 51) * S, r = .8 + rnd(i, 52) * 1.2; wrap(x, y, 4, (X, Y) => { c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(X + .4, Y + .4, r, r * .7, 0, 0, 7); c.fill(); c.fillStyle = '#9a968c'; c.beginPath(); c.ellipse(X, Y, r, r * .7, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.4)'; c.beginPath(); c.arc(X - r * .3, Y - r * .25, r * .3, 0, 7); c.fill(); }); }
+    } else if (th.name === 'Desert') {
+      for (let k = 0; k < 14; k++) { c.strokeStyle = 'rgba(140,100,50,.25)'; c.lineWidth = 1.2; c.beginPath(); for (let x = 0; x <= S; x += 4) { const y = k * 12 + Math.sin(x / S * Math.PI * 2 * 3 + k) * 3; x ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); }
+      for (let i = 0; i < 420; i++) { c.fillStyle = i % 2 ? 'rgba(120,80,40,.35)' : 'rgba(255,240,200,.5)'; c.fillRect(rnd(i, 11) * S, rnd(i, 12) * S, .7, .7); }
+      // dry grass clumps
+      for (let i = 0; i < 18; i++) { const x = rnd(i, 60) * S, y = rnd(i, 61) * S; wrap(x, y, 8, (X, Y) => { for (let k = 0; k < 6; k++) { const ang = -Math.PI / 2 + (k - 2.5) * .32; c.strokeStyle = k % 2 ? '#a88a4a' : '#8a6e34'; c.lineWidth = .45; c.beginPath(); c.moveTo(X, Y); c.lineTo(X + Math.cos(ang) * 5, Y + Math.sin(ang) * 5); c.stroke(); } }); }
+    } else {
+      for (let i = 0; i < 420; i++) { c.fillStyle = i % 3 ? 'rgba(160,190,220,.35)' : 'rgba(255,255,255,.95)'; c.fillRect(rnd(i, 13) * S, rnd(i, 14) * S, .8, .8); }
+      for (let k = 0; k < 8; k++) { c.strokeStyle = 'rgba(150,180,210,.3)'; c.lineWidth = 1.5; const r = 14 + rnd(k, 17) * 20, st = .3; wrap(rnd(k, 15) * S, rnd(k, 16) * S, 40, (X, Y) => { c.beginPath(); c.arc(X, Y, r, st, 2.2); c.stroke(); }); }
+      // grass poking through the snow
+      for (let i = 0; i < 14; i++) { const x = rnd(i, 70) * S, y = rnd(i, 71) * S; wrap(x, y, 6, (X, Y) => { for (let k = 0; k < 4; k++) { c.strokeStyle = '#5a7a5a'; c.lineWidth = .4; c.beginPath(); c.moveTo(X + k, Y); c.lineTo(X + k + (k - 1.5) * .6, Y - 3); c.stroke(); } }); }
+    }
+    return (groundPat[th.name] = { pat: ctx.createPattern(cv2, 'repeat'), px: PX });
   }
   function draw(now) {
     const th = TH();
-    ctx.save(); ctx.translate(0, -((camY % 160) + 160) % 160); ctx.scale(1, 1); ctx.fillStyle = groundTex(th); ctx.fillRect(0, 0, W, H + 320); ctx.restore();
+    { const g = groundTex(th), k = g.px / 160; ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.translate(0, -Math.round((((camY % 160) + 160) % 160) * k)); ctx.fillStyle = g.pat; ctx.fillRect(0, 0, cv.width, cv.height + g.px); ctx.restore(); }
     if (th.name === 'Jungle') { // muddy track up the middle
       ctx.fillStyle = 'rgba(110,80,40,.35)'; ctx.beginPath(); for (let y = -20; y <= H + 20; y += 20) { const wy = y + camY; const x = W / 2 + Math.sin(wy / 140) * W * .18; y === -20 ? ctx.moveTo(x - 26 * U, y) : ctx.lineTo(x - 26 * U, y); } for (let y = H + 20; y >= -20; y -= 20) { const wy = y + camY; ctx.lineTo(W / 2 + Math.sin(wy / 140) * W * .18 + 26 * U, y); } ctx.fill(); }
     const ts = 60 * U, j0 = Math.floor(camY / ts);
@@ -522,7 +554,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   let last = performance.now();
   function frame(now) {
     requestAnimationFrame(frame);
-    if (field.clientWidth !== W || field.clientHeight !== H) { const first = !W; resize(); if (first) { goalY = -99999; genY = H; genTo(-H); } }
+    if (field.clientWidth !== SW || field.clientHeight !== SH) { const first = !W; resize(); if (first) { goalY = -99999; genY = H; genTo(-H); } }
     if (!W || !H) return;
     const dt = Math.min(.033, (now - last) / 1000); last = now;
     update(dt); draw(now);
