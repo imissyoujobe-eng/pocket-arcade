@@ -47,6 +47,7 @@ main{max-width:1100px;margin:0 auto;padding:0 16px 40px;display:grid;grid-templa
 .close{position:absolute;top:calc(env(safe-area-inset-top,0px) + 6px);left:50%;transform:translateX(-50%);min-height:36px;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.35);background:rgba(18,13,38,.55);color:#fff;font-family:var(--display);font-size:12px;cursor:pointer;opacity:.75;backdrop-filter:blur(4px)}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:0 16px 28px}
 footer a{color:var(--muted)}
+@media (orientation:landscape) and (max-height:560px){.close{left:calc(env(safe-area-inset-left,0px) + 12px);transform:none}}
 </style>
 </head>
 <body>

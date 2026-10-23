@@ -9,83 +9,122 @@
 <script src="../lib/kit.js"></script>
 <script src="../lib/art.js"></script>
 <script>
-// Lunar Rover: drive a six-wheel moon buggy, hop craters and boulders, and blast saucers overhead.
+// Lunar Rover: drive a six-wheel moon buggy over rolling, bumpy ground, hop craters and boulders,
+// lob cannon shells ahead and blast saucers overhead.
 K.theme({ bg: '#0b0a1e', ink: '#eef0ff', accent: '#b98bff', accentInk: '#14062a' });
-const W = 320, H = 200, GY = 168;
+const W = 240, H = 380, GB = 300, RS = 1.6; // GB = average ground height, RS = rover size
 K.screen(W, H);
 K.hud(['score', 'post', 'lives']);
 K.pad({ dpad: 'lr', buttons: [{ id: 'b', label: 'FIRE' }, { id: 'a', label: 'JUMP' }] });
 
 let state = 'title', score, lives, dist, speed, car, shots, foes, bombs, obs, parts, post, nextSpawn, nextFoe, best = K.best('lunarrover'), invul;
-const stars = Array.from({ length: 60 }, () => ({ x: K.rnd(0, W), y: K.rnd(0, 110), b: K.rnd(0.3, 1) }));
+const stars = Array.from({ length: 90 }, () => ({ x: K.rnd(0, W), y: K.rnd(0, 220), b: K.rnd(0.3, 1) }));
 const POSTLEN = 1400;
-function title() { K.card({ title: 'LUNAR ROVER', text: '◀ ▶ slow down or speed up. JUMP over craters and boulders. FIRE shoots ahead and straight up at the saucers. Reach checkpoint Z!', best: best ? 'BEST ' + best : '', button: 'Drive', onStart: start }); }
-function start() { score = 0; lives = 3; dist = 0; speed = 70; post = 0; car = { x: 70, y: GY, vy: 0, air: false }; shots = []; foes = []; bombs = []; obs = []; parts = []; nextSpawn = 220; nextFoe = 4; invul = 1.5; state = 'play'; }
-function boom(x, y, c, n) { for (let i = 0; i < (n || 12); i++) parts.push({ x, y, vx: K.rnd(-60, 60), vy: K.rnd(-90, 10), t: K.rnd(0.4, 0.9), c }); }
+// the ground: rolling hills with small bumps on top (wx = world x)
+function gy(wx) { return GB + 16 * Math.sin(wx / 95) + 7 * Math.sin(wx / 41 + 1.3) + 2.5 * Math.sin(wx / 13 + 0.4); }
+const sx2w = sx => sx + dist;          // screen x -> world x
+const groundAt = sx => gy(sx2w(sx));
+function title() { K.card({ title: 'LUNAR ROVER', text: '◀ ▶ slow down or speed up. JUMP over craters and boulders on the bumpy moon. FIRE lobs a cannon shell ahead in an arc and shoots straight up at the saucers. Reach checkpoint Z!', best: best ? 'BEST ' + best : '', button: 'Drive', onStart: start }); }
+function start() { score = 0; lives = 3; dist = 0; speed = 70; post = 0; car = { x: 60, y: 0, vy: 0, air: false, tilt: 0 }; car.y = groundAt(car.x); shots = []; foes = []; bombs = []; obs = []; parts = []; nextSpawn = 220; nextFoe = 4; invul = 1.5; state = 'play'; }
+function boom(x, y, c, n) { for (let i = 0; i < (n || 12); i++) parts.push({ x, y, vx: K.rnd(-70, 70), vy: K.rnd(-100, 10), t: K.rnd(0.4, 0.9), c }); }
 function die() {
-  boom(car.x, car.y - 6, '#ffb24a', 24); K.noise(0.5, 0.4); lives--; invul = 2;
-  obs = obs.filter(o => o.x > car.x + 80 || o.x < car.x - 30); bombs = [];
+  boom(car.x, car.y - 10, '#ffb24a', 28); K.noise(0.5, 0.4); lives--; invul = 2;
+  obs = obs.filter(o => o.x > car.x + 90 || o.x < car.x - 40); bombs = [];
   if (lives <= 0) { state = 'over'; best = K.saveBest('lunarrover', score); K.card({ title: 'ROVER LOST', text: 'You reached checkpoint ' + String.fromCharCode(65 + post) + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); }
 }
 function update(dt) {
   if (state !== 'play') return;
   if (K.down('right')) speed = Math.min(120, speed + 80 * dt); else if (K.down('left')) speed = Math.max(40, speed - 80 * dt); else speed += (70 - speed) * dt;
-  car.x = 50 + (speed - 40) * 0.5;
-  if (K.hit('a') && !car.air) { car.vy = -175; car.air = true; K.beep(300, 0.15, { to: 600 }); }
-  if (car.air) { car.vy += 380 * dt; car.y += car.vy * dt; if (car.y >= GY) { car.y = GY; car.air = false; car.vy = 0; } }
-  if (K.hit('b') && shots.length < 6) { shots.push({ x: car.x + 14, y: car.y - 8, vx: 260, vy: 0 }); shots.push({ x: car.x - 4, y: car.y - 14, vx: 0, vy: -240 }); K.beep(900, 0.06, { to: 400 }); }
+  car.x = 46 + (speed - 40) * 0.4;
   const mv = speed * dt; dist += mv; score += Math.round(mv * 0.2);
+  // follow the ground; bumps can toss the rover a little
+  const g = groundAt(car.x), slope = (groundAt(car.x + 6) - groundAt(car.x - 6)) / 12;
+  if (K.hit('a') && !car.air) { car.vy = -190; car.air = true; K.beep(300, 0.15, { to: 600 }); }
+  if (car.air) { car.vy += 400 * dt; car.y += car.vy * dt; if (car.y >= g) { car.y = g; car.air = false; car.vy = 0; K.noise(0.05, 0.08); } car.tilt += (Math.atan(slope) * 0.5 - car.tilt) * dt * 3; }
+  else {
+    const prev = car.y; car.y = g;
+    const climbV = (car.y - prev) / Math.max(dt, 0.001);
+    if (climbV < -95 && speed > 85) { car.air = true; car.vy = climbV * 0.6; } // launched off a crest
+    car.tilt += (Math.atan(slope) - car.tilt) * Math.min(1, dt * 12);
+  }
+  if (K.hit('b') && shots.length < 8) {
+    const a = car.tilt, mx = car.x + Math.cos(a) * 14 * RS, my = car.y - 13 * RS + Math.sin(a) * 14 * RS;
+    shots.push({ x: mx, y: my, vx: 150 + speed * 0.6, vy: -150, lob: true });     // cannon shell: arcs up and drops
+    shots.push({ x: car.x - 4 * RS, y: car.y - 22 * RS, vx: 0, vy: -260 });          // anti-saucer shot
+    K.beep(160, 0.12, { to: 70, type: 'sawtooth' }); K.beep(900, 0.05, { to: 400 });
+  }
   const np = Math.min(25, Math.floor(dist / POSTLEN));
   if (np > post) { post = np; score += 500; K.tune([523, 659, 784], 0.08); if (post >= 25) { state = 'over'; score += 5000; best = K.saveBest('lunarrover', score); K.card({ title: 'MISSION DONE', text: 'You crossed checkpoint Z! Final score ' + score + '.', best: 'BEST ' + best, button: 'Again', onStart: start }); return; } }
   nextSpawn -= mv;
-  if (nextSpawn <= 0) { const t = Math.random(); obs.push(t < 0.5 ? { k: 'crater', x: W + 20, w: K.ri(16, 26 + post) } : { k: 'rock', x: W + 20, w: 12, hp: 1 + (post > 8 ? 1 : 0) }); nextSpawn = K.rnd(90, 190) - post * 2; }
-  obs.forEach(o => o.x -= mv); obs = obs.filter(o => o.x > -40);
+  if (nextSpawn <= 0) { const t = Math.random(); obs.push(t < 0.5 ? { k: 'crater', x: W + 20, w: K.ri(22, 34 + post) } : { k: 'rock', x: W + 20, w: 18, hp: 1 + (post > 8 ? 1 : 0) }); nextSpawn = K.rnd(110, 210) - post * 2; }
+  obs.forEach(o => o.x -= mv); obs = obs.filter(o => o.x > -50);
   nextFoe -= dt;
-  if (nextFoe <= 0 && foes.length < 2 + Math.floor(post / 6)) { foes.push({ x: W + 10, y: K.rnd(30, 80), ph: K.rnd(0, 6), cd: K.rnd(1, 2), hp: 1 }); nextFoe = K.rnd(2.5, 5) - post * 0.06; }
-  foes.forEach(f => { f.ph += dt * 2; f.x += (car.x + 60 - f.x) * dt * 0.6 + Math.cos(f.ph) * 40 * dt; f.y += Math.sin(f.ph * 1.3) * 30 * dt; f.cd -= dt; if (f.cd <= 0) { bombs.push({ x: f.x, y: f.y + 6, vx: (car.x - f.x) * 0.25, vy: 30 }); f.cd = K.rnd(1.2, 2.4) - post * 0.03; K.beep(200, 0.1, { to: 120 }); } });
-  bombs.forEach(b => { b.vy += 120 * dt; b.x += b.vx * dt - mv * 0.2; b.y += b.vy * dt; if (b.y >= GY + 2) { b.dead = true; boom(b.x, GY, '#888', 5); obs.push({ k: 'crater', x: b.x - 7, w: 14 }); } });
-  shots.forEach(s => { s.x += s.vx * dt; s.y += s.vy * dt; });
+  if (nextFoe <= 0 && foes.length < 2 + Math.floor(post / 6)) { foes.push({ x: W + 14, y: K.rnd(60, 170), ph: K.rnd(0, 6), cd: K.rnd(1, 2), hp: 1 }); nextFoe = K.rnd(2.5, 5) - post * 0.06; }
+  foes.forEach(f => { f.ph += dt * 2; f.x += (car.x + 70 - f.x) * dt * 0.6 + Math.cos(f.ph) * 40 * dt; f.y += Math.sin(f.ph * 1.3) * 30 * dt; f.cd -= dt; if (f.cd <= 0) { bombs.push({ x: f.x, y: f.y + 8, vx: (car.x - f.x) * 0.25, vy: 30 }); f.cd = K.rnd(1.2, 2.4) - post * 0.03; K.beep(200, 0.1, { to: 120 }); } });
+  bombs.forEach(b => { b.vy += 130 * dt; b.x += b.vx * dt - mv * 0.2; b.y += b.vy * dt; if (b.y >= groundAt(b.x) + 2) { b.dead = true; boom(b.x, groundAt(b.x), '#888', 6); obs.push({ k: 'crater', x: b.x - 10, w: 20 }); } });
+  shots.forEach(s => { if (s.lob) { s.vy += 300 * dt; s.x -= mv * 0.3; s.spin = (s.spin || 0) + dt * 12; } s.x += s.vx * dt; s.y += s.vy * dt;
+    if (s.lob && s.y >= groundAt(s.x)) { s.dead = true; boom(s.x, groundAt(s.x), '#d8c8a0', 7); K.noise(0.08, 0.12); } });
   shots.forEach(s => {
-    foes.forEach(f => { if (!f.dead && Math.abs(s.x - f.x) < 10 && Math.abs(s.y - f.y) < 7) { f.dead = s.dead = true; score += 150; boom(f.x, f.y, '#b98bff'); K.beep(500, 0.2, { to: 80 }); } });
-    bombs.forEach(b => { if (!b.dead && Math.abs(s.x - b.x) < 6 && Math.abs(s.y - b.y) < 6) { b.dead = s.dead = true; score += 50; boom(b.x, b.y, '#fff', 5); } });
-    obs.forEach(o => { if (o.k === 'rock' && !o.dead && s.vy === 0 && s.x > o.x && s.x < o.x + o.w && s.y > GY - 12) { s.dead = true; if (--o.hp <= 0) { o.dead = true; score += 100; boom(o.x + 6, GY - 6, '#a98', 8); K.noise(0.15, 0.2); } } });
+    if (s.dead) return;
+    foes.forEach(f => { if (!f.dead && Math.abs(s.x - f.x) < 15 && Math.abs(s.y - f.y) < 10) { f.dead = s.dead = true; score += 150; boom(f.x, f.y, '#b98bff', 16); K.beep(500, 0.2, { to: 80 }); } });
+    bombs.forEach(b => { if (!b.dead && Math.abs(s.x - b.x) < 8 && Math.abs(s.y - b.y) < 8) { b.dead = s.dead = true; score += 50; boom(b.x, b.y, '#fff', 5); } });
+    obs.forEach(o => { if (o.k === 'rock' && !o.dead && s.lob && s.x > o.x - 2 && s.x < o.x + o.w + 2 && s.y > groundAt(o.x + o.w / 2) - 18) { s.dead = true; if (--o.hp <= 0) { o.dead = true; score += 100; boom(o.x + 9, groundAt(o.x + 9) - 8, '#a98', 12); K.noise(0.15, 0.2); } else boom(s.x, s.y, '#a98', 4); } });
   });
-  obs = obs.filter(o => !o.dead); foes = foes.filter(f => !f.dead && f.x > -20); bombs = bombs.filter(b => !b.dead); shots = shots.filter(s => !s.dead && s.x < W + 10 && s.y > -10);
+  obs = obs.filter(o => !o.dead); foes = foes.filter(f => !f.dead && f.x > -20); bombs = bombs.filter(b => !b.dead); shots = shots.filter(s => !s.dead && s.x < W + 10 && s.x > -10 && s.y > -10);
   parts.forEach(p => { p.t -= dt; p.vy += 150 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
   if (invul > 0) invul -= dt;
   else {
+    const half = 10 * RS;
     for (const o of obs) {
-      if (o.k === 'crater' && !car.air && car.x + 4 > o.x + 3 && car.x - 4 < o.x + o.w - 3) { die(); break; }
-      if (o.k === 'rock' && car.y > GY - 12 && car.x + 10 > o.x && car.x - 10 < o.x + o.w) { die(); break; }
+      if (o.k === 'crater' && !car.air && car.x + 6 > o.x + 4 && car.x - 6 < o.x + o.w - 4) { die(); break; }
+      if (o.k === 'rock' && car.y > groundAt(o.x + o.w / 2) - 16 && car.x + half > o.x + 2 && car.x - half < o.x + o.w - 2) { die(); break; }
     }
-    for (const b of bombs) if (invul <= 0 && Math.abs(b.x - car.x) < 11 && Math.abs(b.y - (car.y - 6)) < 8) { b.dead = true; die(); break; }
+    for (const b of bombs) if (invul <= 0 && Math.abs(b.x - car.x) < 16 && Math.abs(b.y - (car.y - 10)) < 12) { b.dead = true; die(); break; }
   }
   K.set('score', score); K.set('post', 'POINT ' + String.fromCharCode(65 + post)); K.set('lives', '♥'.repeat(Math.max(0, lives)));
 }
+function groundPath(c, off, amp, base, step) {
+  c.beginPath(); c.moveTo(-4, H + 4);
+  for (let x = -4; x <= W + 4; x += step) c.lineTo(x, base + (gy(x + off) - GB) * amp);
+  c.lineTo(W + 4, H + 4); c.closePath();
+}
+function drawRover(c, t) {
+  const x = car.x, y = car.y, bob = car.air ? 0 : Math.sin(t / 60) * 0.6;
+  A.shadow(c, x, groundAt(x) + 1, car.air ? 10 : 20);
+  c.save(); c.translate(x, y); c.rotate(car.tilt); c.scale(RS, RS);
+  A.part(c, 10, -12 + bob, 7, 2.5, '#9a9aa8');                   // cannon
+  A.part(c, -13, -13 + bob, 26, 7, '#d8dcff'); c.fillStyle = '#9a8ad8'; c.fillRect(-13, -8 + bob, 26, 2);
+  c.fillStyle = '#7a6ab8'; c.fillRect(-11, -12 + bob, 3, 3); c.fillRect(6, -12 + bob, 3, 3);
+  A.part(c, -6, -20 + bob, 11, 7, '#b98bff'); c.fillStyle = '#7fe0ff'; c.fillRect(-3, -19 + bob, 7, 4); c.fillStyle = 'rgba(255,255,255,.7)'; c.fillRect(-2, -19 + bob, 2, 1.5);
+  c.fillStyle = '#ccc'; c.fillRect(-9, -26 + bob, 1, 7); c.fillStyle = Math.floor(t / 300) % 2 ? '#ff4a4a' : '#5a1a1a'; c.fillRect(-10, -27 + bob, 3, 2);
+  for (let i = 0; i < 3; i++) { const wx = -9 + i * 9, wy = -3; c.fillStyle = '#555'; c.fillRect(wx - 0.5, -7, 1, 4); A.ball(c, wx, wy, 3.8, '#444'); c.fillStyle = '#aaa'; c.save(); c.translate(wx, wy); c.rotate(dist / 4); c.fillRect(-0.6, -3, 1.2, 6); c.fillRect(-3, -0.6, 6, 1.2); c.restore(); }
+  c.restore();
+  if (!car.air) A.dust(x - 14 * RS, groundAt(x - 14 * RS) - 1, 1, 'rgba(210,195,165,');
+}
 function draw(c, t) {
-  const sk = c.createLinearGradient(0, 0, 0, GY); sk.addColorStop(0, '#05030f'); sk.addColorStop(1, '#1a1440'); c.fillStyle = sk; c.fillRect(0, 0, W, H);
+  const sk = c.createLinearGradient(0, 0, 0, GB); sk.addColorStop(0, '#05030f'); sk.addColorStop(1, '#1a1440'); c.fillStyle = sk; c.fillRect(0, 0, W, H);
   stars.forEach(s2 => { c.fillStyle = 'rgba(255,255,255,' + s2.b * (0.7 + 0.3 * Math.sin(t / 400 + s2.x)) + ')'; c.fillRect((s2.x - dist * 0.02 % W + W) % W, s2.y, 1, 1); });
-  A.glow(c, 262, 42, 40, '90,160,255', 0.35); A.ball(c, 262, 42, 17, '#3a7ad8'); c.fillStyle = '#5ab04a'; c.beginPath(); c.ellipse(256, 38, 6, 4, 0.4, 0, 7); c.ellipse(268, 48, 5, 3, -0.3, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(262, 34, 9, 2, 0, 0, 7); c.fill();
-  A.ridge(c, dist, { factor: 0.12, base: 145, amp: 60, col: '#2e2858', edge: 'rgba(160,140,255,.35)', seed: 3, fog: 'rgba(120,100,200,.15)' });
-  A.ridge(c, dist, { factor: 0.35, base: 165, amp: 32, col: '#443a7a', bands: ['rgba(255,255,255,.06)'], edge: 'rgba(0,0,0,.4)', seed: 8 });
-  const gg = c.createLinearGradient(0, GY, 0, H); gg.addColorStop(0, '#a8987a'); gg.addColorStop(1, '#6a5a44'); c.fillStyle = gg; c.fillRect(0, GY, W, H - GY);
-  c.fillStyle = A.INK; c.fillRect(0, GY - 1, W, 2); c.fillStyle = '#c8b898'; c.fillRect(0, GY + 1, W, 1.5);
-  for (let k = 0; k < 40; k++) { const x = ((A.hash(k, 1) * 600 - dist) % 600 + 600) % 600 - 40, y = GY + 4 + A.hash(k, 2) * (H - GY - 6); if (k % 5 === 0) { c.fillStyle = 'rgba(60,50,40,.45)'; c.beginPath(); c.ellipse(x, y, 7, 2, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(255,240,210,.25)'; c.beginPath(); c.ellipse(x, y + 1, 7, 1.2, 0, 0, Math.PI); c.fill(); } else { c.fillStyle = k % 2 ? 'rgba(70,60,45,.5)' : 'rgba(230,215,185,.45)'; c.fillRect(x, y, 2, 1.5); } }
-  obs.forEach(o => { if (o.k === 'crater') { c.fillStyle = '#0b0a1e'; c.beginPath(); c.moveTo(o.x, GY); c.lineTo(o.x + 4, GY + 12); c.lineTo(o.x + o.w - 4, GY + 12); c.lineTo(o.x + o.w, GY); c.fill(); } else { c.fillStyle = o.hp > 1 ? '#a08060' : '#b8a080'; c.beginPath(); c.arc(o.x + 6, GY - 5, 7, Math.PI, 0); c.fill(); c.fillRect(o.x - 1, GY - 5, 14, 5); } });
-  if (state === 'play' && !(invul > 0 && Math.floor(t / 100) % 2)) {
-    const x = car.x, y = car.y, bob = car.air ? 0 : Math.sin(t / 60) * 0.6;
-    A.shadow(c, x, GY + 1, car.air ? 8 : 13);
-    A.part(c, x + 10, y - 12 + bob, 6, 2.5, '#9a9aa8'); A.part(c, x - 13, y - 13 + bob, 26, 7, '#d8dcff'); c.fillStyle = '#9a8ad8'; c.fillRect(x - 13, y - 8 + bob, 26, 2);
-    A.part(c, x - 6, y - 20 + bob, 11, 7, '#b98bff'); c.fillStyle = '#7fe0ff'; c.fillRect(x - 3, y - 19 + bob, 7, 4); c.fillStyle = 'rgba(255,255,255,.7)'; c.fillRect(x - 2, y - 19 + bob, 2, 1.5);
-    c.fillStyle = '#ccc'; c.fillRect(x - 9, y - 26 + bob, 1, 7); c.fillStyle = Math.floor(t / 300) % 2 ? '#ff4a4a' : '#5a1a1a'; c.fillRect(x - 10, y - 27 + bob, 3, 2);
-    for (let i = 0; i < 3; i++) { const wx = x - 9 + i * 9, wy = y - 3; A.ball(c, wx, wy, 3.8, '#444'); c.fillStyle = '#aaa'; c.save(); c.translate(wx, wy); c.rotate(dist / 4); c.fillRect(-0.6, -3, 1.2, 6); c.fillRect(-3, -0.6, 6, 1.2); c.restore(); }
-    if (!car.air) A.dust(x - 14, GY - 1, 1, 'rgba(210,195,165,');
-  }
-  foes.forEach(f => { A.glow(c, f.x, f.y + 4, 14, '255,100,220', 0.3); c.fillStyle = A.INK; c.beginPath(); c.ellipse(f.x, f.y, 11, 4.8, 0, 0, 7); c.fill(); const fg = c.createLinearGradient(0, f.y - 4, 0, f.y + 4); fg.addColorStop(0, '#ffa0e8'); fg.addColorStop(1, '#b02a9a'); c.fillStyle = fg; c.beginPath(); c.ellipse(f.x, f.y, 10, 4, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(200,240,255,.85)'; c.beginPath(); c.arc(f.x, f.y - 3, 4.5, Math.PI, 0); c.fill(); for (let k = -1; k <= 1; k++) { c.fillStyle = Math.floor(t / 120 + k) % 2 ? '#ffe04a' : '#fff'; c.fillRect(f.x + k * 5 - 0.7, f.y + 0.5, 1.4, 1.4); } });
-  c.fillStyle = '#ff5050'; bombs.forEach(b => c.fillRect(b.x - 2, b.y - 2, 4, 4));
-  c.fillStyle = '#fff36a'; shots.forEach(s => c.fillRect(s.x - 1, s.y - 1, s.vx ? 5 : 2, s.vx ? 2 : 5));
-  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2, 2); });
-  if (state === 'play') { const f = (dist % POSTLEN) / POSTLEN; c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(10, H - 8, W - 20, 3); c.fillStyle = '#b98bff'; c.fillRect(10, H - 8, (W - 20) * f, 3); }
+  A.glow(c, 180, 70, 50, '90,160,255', 0.35); A.ball(c, 180, 70, 22, '#3a7ad8'); c.fillStyle = '#5ab04a'; c.beginPath(); c.ellipse(172, 65, 8, 5, 0.4, 0, 7); c.ellipse(188, 78, 6, 4, -0.3, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(180, 59, 12, 2.5, 0, 0, 7); c.fill();
+  A.ridge(c, dist, { factor: 0.12, base: 255, amp: 75, col: '#2e2858', edge: 'rgba(160,140,255,.35)', seed: 3, fog: 'rgba(120,100,200,.15)' });
+  A.ridge(c, dist, { factor: 0.35, base: 285, amp: 40, col: '#443a7a', bands: ['rgba(255,255,255,.06)'], edge: 'rgba(0,0,0,.4)', seed: 8 });
+  // bumpy foreground ground
+  groundPath(c, dist, 1, GB, 3);
+  const gg = c.createLinearGradient(0, GB - 30, 0, H); gg.addColorStop(0, '#b0a07e'); gg.addColorStop(1, '#5e4f3a'); c.fillStyle = gg; c.fill();
+  c.save(); groundPath(c, dist, 1, GB, 3); c.clip();
+  for (let k = 0; k < 60; k++) { const x = ((A.hash(k, 1) * 600 - dist) % 600 + 600) % 600 - 40, y = groundAt(x) + 6 + A.hash(k, 2) * (H - GB - 10); if (k % 5 === 0) { c.fillStyle = 'rgba(60,50,40,.45)'; c.beginPath(); c.ellipse(x, y, 9, 2.5, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(255,240,210,.25)'; c.beginPath(); c.ellipse(x, y + 1, 9, 1.4, 0, 0, Math.PI); c.fill(); } else { c.fillStyle = k % 2 ? 'rgba(70,60,45,.5)' : 'rgba(230,215,185,.45)'; c.fillRect(x, y, 2, 1.5); } }
+  c.restore();
+  c.strokeStyle = A.INK; c.lineWidth = 2; c.beginPath(); for (let x = -4; x <= W + 4; x += 3) { const yy = groundAt(x); x < -3 ? c.moveTo(x, yy) : c.lineTo(x, yy); } c.stroke();
+  c.strokeStyle = '#d8c8a4'; c.lineWidth = 1; c.beginPath(); for (let x = -4; x <= W + 4; x += 3) { const yy = groundAt(x) + 2; x < -3 ? c.moveTo(x, yy) : c.lineTo(x, yy); } c.stroke();
+  obs.forEach(o => {
+    if (o.k === 'crater') { const y0 = groundAt(o.x), y1 = groundAt(o.x + o.w); c.fillStyle = '#0b0a1e'; c.beginPath(); c.moveTo(o.x, y0); c.lineTo(o.x + 5, Math.max(y0, y1) + 16); c.lineTo(o.x + o.w - 5, Math.max(y0, y1) + 16); c.lineTo(o.x + o.w, y1); c.fill(); c.fillStyle = 'rgba(200,185,150,.5)'; c.fillRect(o.x - 3, y0 - 2, 5, 2); c.fillRect(o.x + o.w - 2, y1 - 2, 5, 2); }
+    else { const by = groundAt(o.x + 9); c.fillStyle = A.INK; c.beginPath(); c.arc(o.x + 9, by - 6, 11, Math.PI, 0); c.fill(); c.fillStyle = o.hp > 1 ? '#a08060' : '#b8a080'; c.beginPath(); c.arc(o.x + 9, by - 6, 10, Math.PI, 0); c.fill(); c.fillRect(o.x - 1, by - 6, 20, 7); c.fillStyle = 'rgba(255,255,255,.25)'; c.beginPath(); c.arc(o.x + 6, by - 10, 4, 0, 7); c.fill(); }
+  });
+  if (state === 'play' && !(invul > 0 && Math.floor(t / 100) % 2)) drawRover(c, t);
+  foes.forEach(f => { c.save(); c.translate(f.x, f.y); c.scale(1.4, 1.4); A.glow(c, 0, 4, 14, '255,100,220', 0.3); c.fillStyle = A.INK; c.beginPath(); c.ellipse(0, 0, 11, 4.8, 0, 0, 7); c.fill(); const fg = c.createLinearGradient(0, -4, 0, 4); fg.addColorStop(0, '#ffa0e8'); fg.addColorStop(1, '#b02a9a'); c.fillStyle = fg; c.beginPath(); c.ellipse(0, 0, 10, 4, 0, 0, 7); c.fill(); c.fillStyle = 'rgba(200,240,255,.85)'; c.beginPath(); c.arc(0, -3, 4.5, Math.PI, 0); c.fill(); for (let k = -1; k <= 1; k++) { c.fillStyle = Math.floor(t / 120 + k) % 2 ? '#ffe04a' : '#fff'; c.fillRect(k * 5 - 0.7, 0.5, 1.4, 1.4); } c.restore(); });
+  c.fillStyle = '#ff5050'; bombs.forEach(b => c.fillRect(b.x - 2.5, b.y - 2.5, 5, 5));
+  shots.forEach(s => { if (s.lob) { c.fillStyle = A.INK; c.beginPath(); c.arc(s.x, s.y, 3.4, 0, 7); c.fill(); c.fillStyle = '#ffd24a'; c.beginPath(); c.arc(s.x, s.y, 2.4, 0, 7); c.fill(); c.fillStyle = 'rgba(255,220,120,.35)'; c.beginPath(); c.arc(s.x - s.vx * 0.02, s.y - s.vy * 0.02, 2, 0, 7); c.fill(); } else { c.fillStyle = '#fff36a'; c.fillRect(s.x - 1, s.y - 3, 2.4, 7); } });
+  parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x, p.y, 2.5, 2.5); });
+  if (state === 'play') { const f = (dist % POSTLEN) / POSTLEN; c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(10, H - 10, W - 20, 4); c.fillStyle = '#b98bff'; c.fillRect(10, H - 10, (W - 20) * f, 4); }
 }
 { const _u = update; update = function (dt) { _u(dt); A.stepFx(dt); }; const _draw = draw; draw = function (c, t) { _draw(c, t); A.drawFx(c); A.vignette(c, W, H, 0.35); }; }
 start(); state = 'title'; title(); K.run(update, draw);

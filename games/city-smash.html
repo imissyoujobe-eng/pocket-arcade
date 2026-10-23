@@ -12,7 +12,7 @@
 // City Smash: you are a giant lizard. Climb the towers, punch out the windows until each one crumbles, grab the people waving from the windows,
 // squash the ones running in the street, and swat the soldiers, tanks and choppers. A giant ape stomps around the city too, smashing whatever he likes.
 K.theme({ bg: '#1a1030', ink: '#fff2e0', accent: '#7aff4a', accentInk: '#0a2400' });
-const W = 360, H = 280, GY = 252, FW = 15, FH = 15, SC = 2.0;
+const W = 300, H = 500, GY = 468, FW = 15, FH = 15, SC = 2.4;
 K.screen(W, H);
 K.hud(['score', 'city', 'hp']);
 K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'JUMP' }, { id: 'a', label: 'PUNCH' }] });
@@ -22,10 +22,10 @@ function title() { K.card({ title: 'CITY SMASH', text: '◀ ▶ walk. Walk into 
 function start() { score = 0; apeScore = 0; hp = 100; city = 1; buildCity(); state = 'play'; }
 const PAL = [['#5a6a8a', '#3a4868'], ['#8a5a4a', '#6a3a2c'], ['#6a7a5a', '#4a5a3a'], ['#8a7a5a', '#6a5a3a'], ['#6a5a8a', '#4a3a6a'], ['#4a7a7a', '#2a5a5a']];
 function buildCity() {
-  blds = []; const n = city > 2 ? 5 : 4, gap = (W - 80) / n;
+  blds = []; const n = city > 2 ? 4 : 3, gap = (W - 60) / n;
   for (let i = 0; i < n; i++) {
-    const cols = city > 2 ? 3 : K.ri(3, 4), rows = K.ri(9, 14), w = cols * FW + 8, p = PAL[(i + city) % PAL.length];
-    const b = { x: 40 + i * gap + (gap - w) / 2, w, cols, rows, h: rows * FH + 22, col: p[0], dark: p[1], wins: [], fall: 0, down: false, tilt: 0, roof: K.ri(0, 2), sign: Math.random() < 0.5, crack: 0 };
+    const cols = city > 2 ? 3 : K.ri(3, 4), rows = K.ri(16, 24), w = cols * FW + 8, p = PAL[(i + city) % PAL.length];
+    const b = { x: 30 + i * gap + (gap - w) / 2, w, cols, rows, h: rows * FH + 22, col: p[0], dark: p[1], wins: [], fall: 0, down: false, tilt: 0, roof: K.ri(0, 2), sign: Math.random() < 0.5, crack: 0 };
     for (let r = 0; r < rows; r++) for (let cc = 0; cc < cols; cc++) b.wins.push({ r, c: cc, hp: 2, person: Math.random() < 0.16 ? { kind: K.ri(0, 3), ph: Math.random() * 6, lean: Math.random() < 0.4 } : null, lit: Math.random() < 0.7 });
     blds.push(b);
   }
@@ -43,7 +43,7 @@ function bldAt(x) { return blds.find(b => !b.down && !b.fall && x > b.x - 4 && x
 function moveMonster(m, dx, climb, jump, dt) {
   if (m.cling) {
     const b = m.cling; if (b.down || b.fall > 0) { m.cling = null; m.air = true; return; }
-    m.y = K.clamp(m.y + climb * 55 * dt, GY - b.h + b.fall + 30, GY);
+    m.y = K.clamp(m.y + climb * 85 * dt, GY - b.h + b.fall + 30, GY);
     if (m.y >= GY && climb > 0) m.cling = null;
     if (jump) { m.cling = null; m.vx = -m.face * 70; m.vy = -140; m.air = true; m.face = -m.face; }
     if (dx && dx !== m.face) { m.cling = null; m.vx = dx * 50; m.air = true; m.face = dx; }
@@ -110,7 +110,7 @@ function update(dt) {
   // the army fights back: soldiers, tanks from city 2, choppers
   spawnT -= dt;
   if (spawnT <= 0 && foes.length < 3 + city) { const side = Math.random() < 0.5, k = Math.random();
-    if (k < 0.3 + city * 0.04) foes.push({ k: 'heli', x: side ? -24 : W + 24, y: K.rnd(50, 130), vx: side ? 32 : -32, cd: 2 });
+    if (k < 0.3 + city * 0.04) foes.push({ k: 'heli', x: side ? -24 : W + 24, y: K.rnd(70, GY - 200), vx: side ? 32 : -32, cd: 2 });
     else if (city > 1 && k < 0.5) foes.push({ k: 'tank', x: side ? -24 : W + 24, y: GY, vx: side ? 18 : -18, cd: 2.5 });
     else foes.push({ k: 'sol', x: side ? -10 : W + 10, y: GY, vx: side ? 26 : -26, cd: K.rnd(1, 2) });
     spawnT = Math.max(0.9, K.rnd(1.5, 3) - city * 0.12); }
@@ -246,9 +246,9 @@ function drawApe(c, m, t) {
 function drawRunner(c, r, t) { const x = r.x, y = GY, k = r.kind, st = Math.sin(r.ph); c.save(); c.translate(x, y); c.scale(Math.sign(r.vx) || 1, 1); c.strokeStyle = '#2a2a3a'; c.lineWidth = 1.4; c.lineCap = 'round'; c.beginPath(); c.moveTo(0, -5); c.lineTo(-2 + st * 2, 0); c.moveTo(0, -5); c.lineTo(2 - st * 2, 0); c.stroke(); c.fillStyle = SHIRT[(k * 3) % SHIRT.length]; c.beginPath(); c.roundRect(-2.4, -11, 4.8, 6.5, 1.4); c.fill(); c.strokeStyle = SKIN[k]; c.beginPath(); c.moveTo(-1, -10); c.lineTo(-3, -15 + st); c.moveTo(1, -10); c.lineTo(3, -15 - st); c.stroke(); c.fillStyle = SKIN[k]; c.beginPath(); c.arc(0.5, -13.5, 2.2, 0, 7); c.fill(); c.fillStyle = '#111'; c.beginPath(); c.ellipse(1.4, -13, 0.6, 0.9, 0, 0, 7); c.fill(); c.restore(); }
 function draw(c, t) {
   if (shake > 0) c.translate(K.rnd(-2, 2) * Math.min(1, shake * 2), K.rnd(-2, 2) * Math.min(1, shake * 2));
-  A.sky(c, W, H, { top: '#1a1040', mid: '#8a3a6a', bottom: '#ff9a5a', sun: '#ffe0a0', sunX: 290, sunY: 150, sunR: 26, clouds: true, cloud: 'rgba(255,190,200,.55)' }, t);
-  A.skyline(c, 0, { factor: 0, base: GY - 20, col: '#2a1a40', amp: 130, win: 'rgba(255,210,120,.45)', W });
-  A.skyline(c, 37, { factor: 0, base: GY, col: '#1a1028', amp: 70, win: 'rgba(255,200,110,.35)', W });
+  A.sky(c, W, H, { top: '#1a1040', mid: '#8a3a6a', bottom: '#ff9a5a', sun: '#ffe0a0', sunX: 230, sunY: 300, sunR: 30, clouds: true, cloud: 'rgba(255,190,200,.55)' }, t);
+  A.skyline(c, 0, { factor: 0, base: GY - 20, col: '#2a1a40', amp: 280, win: 'rgba(255,210,120,.45)', W });
+  A.skyline(c, 37, { factor: 0, base: GY, col: '#1a1028', amp: 150, win: 'rgba(255,200,110,.35)', W });
   if (!blds) return;
   blds.forEach(b => drawBuilding(c, b, t));
   // street: sidewalk, curb, road with lane lines, a fire hydrant and lamp posts
@@ -273,7 +273,7 @@ function draw(c, t) {
   A.vignette(c, W, H, 0.25);
   if (msgT > 0) K.text(c, msg, W / 2, 60, 18, '#fff');
 }
-drawLizard = A.ink(drawLizard); drawApe = A.ink(drawApe);
+drawLizard = A.ink(drawLizard, 110); drawApe = A.ink(drawApe, 110);
 start(); state = 'title'; title(); K.run(update, draw);
 </script>
 </body>

@@ -112,17 +112,20 @@ function drawSnack(c, x, y, k, tt) {
     case 7: c.fillStyle = '#d9a35b'; c.beginPath(); c.moveTo(x - 5, y); c.lineTo(x + 5, y); c.lineTo(x, y + 10); c.fill(); c.fillStyle = ['#ff8fc7', '#fff0d6', '#7ee0b0'][((Math.floor(x / 40) % 3) + 3) % 3]; c.beginPath(); c.arc(x, y - 3, 6, 0, 7); c.fill(); break;
   }
 }
-function draw(c, now) {
-  // cafeteria at night: checkered floor in perspective, lit windows, nebula glow
+function paintBackground(c) {
   const bgG = c.createLinearGradient(0, 0, 0, H); bgG.addColorStop(0, '#120a28'); bgG.addColorStop(0.55, '#2a1440'); bgG.addColorStop(1, '#3a1a3a'); c.fillStyle = bgG; c.fillRect(0, 0, W, H);
   A.glow(c, 60, 80, 90, '255,90,170', 0.18); A.glow(c, 190, 150, 100, '90,140,255', 0.16);
-  for (const s of stars) { c.fillStyle = 'rgba(255,255,255,' + (0.3 + s.s * 0.4) * (0.7 + 0.3 * Math.sin(now / 400 + s.x)) + ')'; c.fillRect(s.x, s.y, s.s > 0.7 ? 1.5 : 1, s.s > 0.7 ? 1.5 : 1); }
   const HZ = 250; c.save(); c.beginPath(); c.rect(0, HZ, W, H - HZ); c.clip();
   const fg = c.createLinearGradient(0, HZ, 0, H); fg.addColorStop(0, '#2a1a3a'); fg.addColorStop(1, '#4a2a4a'); c.fillStyle = fg; c.fillRect(0, HZ, W, H - HZ);
   for (let r = 0; r < 8; r++) { const y0 = HZ + Math.pow(r / 8, 1.8) * (H - HZ), y1 = HZ + Math.pow((r + 1) / 8, 1.8) * (H - HZ);
     for (let k = -8; k < 8; k++) { if ((k + r) % 2) continue; const sx = (v, y) => W / 2 + v * (24 + (y - HZ) * 1.6);
       c.fillStyle = 'rgba(255,240,220,.08)'; c.beginPath(); c.moveTo(sx(k, y0), y0); c.lineTo(sx(k + 1, y0), y0); c.lineTo(sx(k + 1, y1), y1); c.lineTo(sx(k, y1), y1); c.fill(); } }
   c.restore(); c.fillStyle = 'rgba(255,140,200,.35)'; c.fillRect(0, HZ, W, 1);
+}
+function draw(c, now) {
+  // cafeteria at night: checkered floor in perspective, lit windows, nebula glow
+  background(c);
+  for (const s of stars) { c.fillStyle = 'rgba(255,255,255,' + (0.3 + s.s * 0.4) * (0.7 + 0.3 * Math.sin(now / 400 + s.x)) + ')'; c.fillRect(s.x, s.y, s.s > 0.7 ? 1.5 : 1, s.s > 0.7 ? 1.5 : 1); }
   if (state === 'title') { for (let k = 0; k < 8; k++) drawSnack(c, 30 + (k % 4) * 60, 110 + Math.floor(k / 4) * 50 + Math.sin(now / 400 + k) * 6, k); return; }
   for (const e of enemies) if (e.alive) drawSnack(c, e.x, e.y, wave % 8, now);
   for (const s of shots) { A.glow(c, s.x, s.y - 4, 9, '255,95,162', 0.5); c.fillStyle = '#ff5fa2'; c.fillRect(s.x - 1.5, s.y - 9, 3, 11); c.fillStyle = '#fff'; c.fillRect(s.x - 0.5, s.y - 8, 1, 9); }
@@ -142,7 +145,18 @@ function draw(c, now) {
   if (dead > 0 && lives > 0) K.text(c, 'GET READY', W / 2, 200, 14, '#fff');
 }
 drawSnack = A.ink(drawSnack);
-{ const _sn = drawSnack; drawSnack = function (c, x, y, k, tt) { c.save(); c.translate(x, y); c.scale(1.25, 1.25); _sn(c, 0, 0, k, tt); c.restore(); }; }
+// Speed fix: the inked outline and glow are slow to draw, so each snack is drawn once into a
+// small picture and that picture is reused every frame.
+{ const _sn = drawSnack, cache = {}, R = 4, SZ = 48;
+  const sprite = k => { if (cache[k]) return cache[k]; const cv = document.createElement('canvas'); cv.width = cv.height = SZ * R; const g = cv.getContext('2d');
+    g.scale(R, R); g.translate(SZ / 2, SZ / 2); g.scale(1.25, 1.25); _sn(g, 0, 0, k, 0); return (cache[k] = cv); };
+  drawSnack = function (c, x, y, k) { c.drawImage(sprite(k), Math.round(x) - SZ / 2, Math.round(y) - SZ / 2, SZ, SZ); }; }
+// the cafeteria background never changes, so draw it once too
+let bgPic = null;
+function background(c) {
+  if (!bgPic) { const R = 3; bgPic = document.createElement('canvas'); bgPic.width = W * R; bgPic.height = H * R; const g = bgPic.getContext('2d'); g.scale(R, R); paintBackground(g); }
+  c.drawImage(bgPic, 0, 0, W, H);
+}
 title();
 { const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.4); }; }
 K.run(update, draw);

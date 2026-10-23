@@ -11,7 +11,7 @@
 <script>
 // Lost Mine: explore a deep cavern for gold bars and the lost relic. Climb ladders, swim the underground river, dodge bats and scorpions.
 K.theme({ bg: '#0e0a06', ink: '#fff4e0', accent: '#ffd23f', accentInk: '#2a1d00' });
-const W = 320, H = 240, T = 16, SX = 20, SY = 15;
+const W = 150, H = 240, T = 16, SX = 20, SY = 15; // tall, zoomed-in view that follows the explorer
 K.screen(W, H);
 K.hud(['score', 'gold', 'room']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'JUMP' }] });
@@ -101,20 +101,21 @@ function win() {
 
 function draw(c, t) {
   if (!g) { c.fillStyle = '#1a120c'; c.fillRect(0, 0, W, H); return; }
-  const sc = Math.floor((p.x + 5) / (SX * T)), sr = Math.floor((p.y + 7) / (SY * T)), ox = sc * SX * T, oy = sr * SY * T;
+  const ox = Math.round(K.clamp(p.x + 5 - W / 2, 0, WT * T - W)), oy = Math.round(K.clamp(p.y + 7 - H / 2 - 10, 0, HT * T - H)), sc = Math.floor((ox + W / 2) / (SX * T)), sr = Math.floor((oy + H / 2) / (SY * T));
   const bgc = c.createLinearGradient(0, 0, 0, H); bgc.addColorStop(0, '#120a06'); bgc.addColorStop(1, '#2a1a10'); c.fillStyle = bgc; c.fillRect(0, 0, W, H);
-  for (let i = 0; i < 14; i++) { c.fillStyle = 'rgba(80,55,35,' + (0.2 + A.hash(i, sc + sr * 9) * 0.2) + ')'; c.beginPath(); c.ellipse(A.hash(i, sc, 1) * W, A.hash(i, sr, 2) * H, 14 + A.hash(i, 3) * 20, 8 + A.hash(i, 4) * 10, A.hash(i, 5) * 3, 0, 7); c.fill(); }
-  if (sr === 0) { c.save(); c.beginPath(); c.rect(0, 0, W, 7 * T); c.clip(); A.sky(c, W, 7 * T, { top: '#2a7ae0', mid: '#8ad0ff', bottom: '#e0f6ff', sun: '#fff6c0', sunY: 24 }, t); A.ridge(c, sc * 300, { factor: 1, base: 90, amp: 30, col: '#5a9a6a', edge: 'rgba(0,0,0,.2)', seed: 3 }); A.trees(c, sc * 300, { factor: 1, base: 112, col: '#1e6a2a', hi: '#3a8a3a', kind: 'round', spacing: 30, size: 1.6 }); c.restore(); }
-  const solidM = (x, y) => { const r = g[sr * SY + y]; if (!r) return true; const q = r[sc * SX + x]; return q === undefined || q === '#'; };
-  for (let y = 0; y < SY; y++) for (let x = 0; x < SX; x++) {
-    const ch = g[sr * SY + y] ? g[sr * SY + y][sc * SX + x] : '#', X = x * T, Y = y * T;
-    if (ch === '#') A.tile(c, 'lm', X, Y, A.edges(solidM, x, y), sc * SX + x, sr * SY + y, sr === 0 && y === 7 ? A.PAL.earth : Object.assign({}, A.PAL.earth, { base: '#6b4a2e', hi: '#8a6440', lo: '#4a321e', mortar: '#24160c', grass: null }));
+  for (let i = 0; i < 14; i++) { c.fillStyle = 'rgba(80,55,35,' + (0.2 + A.hash(i, sc + sr * 9) * 0.2) + ')'; c.beginPath(); c.ellipse(((A.hash(i, 1) * W * 3 - ox * 0.5) % (W * 3) + W * 3) % (W * 3) - W, ((A.hash(i, 2) * H * 3 - oy * 0.5) % (H * 3) + H * 3) % (H * 3) - H, 14 + A.hash(i, 3) * 20, 8 + A.hash(i, 4) * 10, A.hash(i, 5) * 3, 0, 7); c.fill(); }
+  if (oy < 7 * T) { c.save(); c.translate(0, -oy); c.beginPath(); c.rect(0, 0, W, 7 * T); c.clip(); A.sky(c, W, 7 * T, { top: '#2a7ae0', mid: '#8ad0ff', bottom: '#e0f6ff', sun: '#fff6c0', sunY: 24 }, t); A.ridge(c, ox, { factor: 1, base: 90, amp: 30, col: '#5a9a6a', edge: 'rgba(0,0,0,.2)', seed: 3 }); A.trees(c, ox, { factor: 1, base: 112, col: '#1e6a2a', hi: '#3a8a3a', kind: 'round', spacing: 30, size: 1.6 }); c.restore(); }
+  const solidM = (x, y) => { const r = g[y]; if (!r) return y >= 0; const q = r[x]; return q === undefined || q === '#'; };
+  const tx0 = Math.floor(ox / T), ty0 = Math.floor(oy / T);
+  for (let y = ty0; y <= ty0 + Math.ceil(H / T); y++) for (let x = tx0; x <= tx0 + Math.ceil(W / T); x++) {
+    const ch = g[y] ? (g[y][x] === undefined ? '#' : g[y][x]) : '#', X = x * T - ox, Y = y * T - oy;
+    if (ch === '#') A.tile(c, 'lm', X, Y, A.edges(solidM, x, y), x, y, y === 7 ? A.PAL.earth : Object.assign({}, A.PAL.earth, { base: '#6b4a2e', hi: '#8a6440', lo: '#4a321e', mortar: '#24160c', grass: null }));
     else if (ch === '=') A.ledge(c, X, Y, T, A.PAL.wood);
     else if (ch === 'H') { c.fillStyle = '#c99a57'; c.fillRect(X + 2, Y, 2, T); c.fillRect(X + 12, Y, 2, T); for (let k = 2; k < T; k += 5) c.fillRect(X + 2, Y + k, 12, 2); }
-    else if (ch === '~') { c.fillStyle = 'rgba(42,111,219,.6)'; c.fillRect(X, Y, T, T); if (y === 0 || g[sr * SY + y - 1][sc * SX + x] !== '~') { c.fillStyle = '#9ad8ff'; c.fillRect(X, Y + Math.sin(t / 300 + x) * 1.5, T, 2); } }
+    else if (ch === '~') { c.fillStyle = 'rgba(42,111,219,.6)'; c.fillRect(X, Y, T, T); if (!g[y - 1] || g[y - 1][x] !== '~') { c.fillStyle = '#9ad8ff'; c.fillRect(X, Y + Math.sin(t / 300 + x) * 1.5, T, 2); } }
     else if (ch === '^') A.spikes(c, X, Y, T);
     else if (ch === '$') { const b = Math.sin(t / 250 + x) * 1.5; c.fillStyle = '#ffd23f'; c.fillRect(X + 3, Y + 7 + b, 10, 6); c.fillStyle = '#fff3a0'; c.fillRect(X + 4, Y + 8 + b, 4, 2); }
-    else if (ch === '+') { c.fillStyle = '#ffffff'; c.fillRect(X + 7, Y + 2, 2, 14); c.fillRect(X + 3, Y + 6, 10, 2); c.fillStyle = check && check.x === (sc * SX + x) * T + 3 && check.y === (sr * SY + y) * T ? '#7cff6b' : '#ccc'; c.fillRect(X + 7, Y + 2, 2, 2); }
+    else if (ch === '+') { c.fillStyle = '#ffffff'; c.fillRect(X + 7, Y + 2, 2, 14); c.fillRect(X + 3, Y + 6, 10, 2); c.fillStyle = check && check.x === x * T + 3 && check.y === y * T ? '#7cff6b' : '#ccc'; c.fillRect(X + 7, Y + 2, 2, 2); }
     else if (ch === 'R') { const glow = 0.5 + Math.sin(t / 200) * 0.3; c.fillStyle = 'rgba(255,210,63,' + glow * 0.4 + ')'; c.beginPath(); c.arc(X + 8, Y + 8, 12, 0, 7); c.fill(); c.fillStyle = '#7cffda'; c.beginPath(); c.moveTo(X + 8, Y + 1); c.lineTo(X + 14, Y + 8); c.lineTo(X + 8, Y + 15); c.lineTo(X + 2, Y + 8); c.fill(); c.fillStyle = '#fff'; c.fillRect(X + 6, Y + 5, 2, 3); }
   }
   for (const m of mobs) {
