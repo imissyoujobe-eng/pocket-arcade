@@ -185,8 +185,41 @@ function draw(){ctx.drawImage(vfloor(),0,0);
  for(const b of rbul){A.glow(ctx,b.x,b.y,8,'255,90,90',.7);ctx.fillStyle='#fff';ctx.fillRect(b.x-1.5,b.y-1.5,3,3)}
  drawPlayer();
  if(seeker){const s=9+Math.sin(seeker.t*12)*2;ctx.save();ctx.translate(seeker.x,seeker.y);ctx.rotate(seeker.t*5);ctx.fillStyle='#ff3df2';ctx.shadowColor='#ff3df2';ctx.shadowBlur=16;ctx.beginPath();for(let i=0;i<10;i++){const a=i/10*TAU,rad=i%2?s*.45:s;ctx.lineTo(Math.cos(a)*rad,Math.sin(a)*rad)}ctx.fill();ctx.restore();ctx.shadowBlur=0}
+ noirLight();
  const alive=robots.filter(r=>!r.dead).length;ctx.fillStyle='#8f9bbd';ctx.font='11px Rubik, sans-serif';ctx.textAlign='left';ctx.fillText('ROBOTS LEFT '+alive,X0,H-22);ctx.textAlign='right';
  ctx.fillText(seeker?'SEEKER HUNTING':'SEEKER IN '+Math.max(0,Math.ceil(seekT))+'s',X1,H-22);ctx.textAlign='center';ctx.fillStyle='#55627f';ctx.fillText('Hold fire to stand and aim',W/2,H-6)}
+
+// noir lighting: the room is dark except for your flashlight beam, a hanging lamp swinging overhead,
+// thin light through venetian blinds and the glow of the electric walls; robots' eyes shine in the dark
+let _dk=null;
+function noirLight(){
+ if(!_dk){_dk=document.createElement('canvas');_dk.width=W;_dk.height=H}
+ const d=_dk.getContext('2d');d.globalCompositeOperation='source-over';d.clearRect(0,0,W,H);d.fillStyle='rgba(2,3,8,.78)';d.fillRect(X0,Y0,X1-X0,Y1-Y0);
+ d.globalCompositeOperation='destination-out';
+ const hole=(x,y,r,a)=>{const g=d.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(0,0,0,'+a+')');g.addColorStop(1,'rgba(0,0,0,0)');d.fillStyle=g;d.fillRect(x-r,y-r,r*2,r*2)};
+ if(deadT<=0){hole(pl.x,pl.y,46,.95);const ang=Math.atan2(pl.fy||0,pl.fx||1),len=170;d.save();d.translate(pl.x,pl.y);d.rotate(ang);const g=d.createLinearGradient(0,0,len,0);g.addColorStop(0,'rgba(0,0,0,.95)');g.addColorStop(1,'rgba(0,0,0,0)');d.fillStyle=g;d.beginPath();d.moveTo(4,-5);d.lineTo(len,-len*.42);d.lineTo(len,len*.42);d.lineTo(4,5);d.closePath();d.fill();d.restore()}
+ const lx=(X0+X1)/2+Math.sin(T*.9)*40,ly=(Y0+Y1)*.45;hole(lx,ly,95,.55);
+ for(const w of walls){const cx=w.x+w.w/2,cy=w.y+w.h/2;hole(cx,cy,Math.max(w.w,w.h)*.6+10,.25)}
+ for(const b of bul)hole(b.x,b.y,18,.6);for(const b of rbul)hole(b.x,b.y,16,.5);
+ if(seeker)hole(seeker.x,seeker.y,40,.6);
+ d.globalCompositeOperation='source-over';
+ ctx.drawImage(_dk,0,0);
+ // blinds: slanted bars of light across the floor
+ ctx.save();ctx.beginPath();ctx.rect(X0,Y0,X1-X0,Y1-Y0);ctx.clip();ctx.globalCompositeOperation='lighter';ctx.fillStyle='rgba(180,200,255,.05)';for(let k=0;k<7;k++){const y=Y0+40+k*14;ctx.beginPath();ctx.moveTo(X1,y);ctx.lineTo(X1-150,y+60);ctx.lineTo(X1-150,y+66);ctx.lineTo(X1,y+6);ctx.fill()}
+ // the flashlight beam itself, a pale cone through the haze
+ if(deadT<=0){const ang=Math.atan2(pl.fy||0,pl.fx||1);ctx.save();ctx.translate(pl.x,pl.y);ctx.rotate(ang);const bg=ctx.createLinearGradient(0,0,170,0);bg.addColorStop(0,'rgba(220,235,255,.22)');bg.addColorStop(1,'rgba(220,235,255,0)');ctx.fillStyle=bg;ctx.beginPath();ctx.moveTo(4,-4);ctx.lineTo(170,-60);ctx.lineTo(170,60);ctx.lineTo(4,4);ctx.closePath();ctx.fill();ctx.restore()}
+ // warm lamp tint and drifting cigarette smoke
+ const lg=ctx.createRadialGradient(lx,ly,0,lx,ly,95);lg.addColorStop(0,'rgba(255,200,120,.12)');lg.addColorStop(1,'rgba(255,200,120,0)');ctx.fillStyle=lg;ctx.fillRect(lx-95,ly-95,190,190);ctx.globalCompositeOperation='source-over';
+ for(let i=0;i<6;i++){const x=X0+((A.hash(i,1)*(X1-X0)+T*8*(1+i*.2))%(X1-X0)),y=Y0+A.hash(i,2)*(Y1-Y0)+Math.sin(T*.5+i)*10,r=30+A.hash(i,3)*30,g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(160,170,190,.07)');g.addColorStop(1,'rgba(160,170,190,0)');ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2)}
+ // the lamp itself and its cord
+ ctx.strokeStyle='rgba(40,40,50,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo((X0+X1)/2,Y0);ctx.lineTo(lx,ly-6);ctx.stroke();ctx.fillStyle='#2a2a32';ctx.beginPath();ctx.moveTo(lx-6,ly-2);ctx.lineTo(lx+6,ly-2);ctx.lineTo(lx+3,ly-7);ctx.lineTo(lx-3,ly-7);ctx.fill();A.glow(ctx,lx,ly,14,'255,210,140',.7);
+ // robot eyes glow through the dark
+ for(const r of robots)if(!r.dead){A.glow(ctx,r.x-3,r.y-4,6,'255,60,60',.55);A.glow(ctx,r.x+3,r.y-4,6,'255,60,60',.55)}
+ ctx.restore();
+ // film grain and vignette
+ for(let i=0;i<120;i++){ctx.fillStyle=Math.random()<.5?'rgba(255,255,255,.05)':'rgba(0,0,0,.12)';ctx.fillRect(X0+Math.random()*(X1-X0),Y0+Math.random()*(Y1-Y0),1,1)}
+ const v=ctx.createRadialGradient(W/2,(Y0+Y1)/2,(Y1-Y0)*.3,W/2,(Y0+Y1)/2,(Y1-Y0)*.75);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.5)');ctx.fillStyle=v;ctx.fillRect(X0,Y0,X1-X0,Y1-Y0);
+}
 
 reset();requestAnimationFrame(frame);
 </script>
