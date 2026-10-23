@@ -1,7 +1,7 @@
 // The game list for the arcade menu.
 // To add a new game: put its file in the games/ folder (games/<id>.html),
 // then add one line below and raise ARCADE_TOTAL to match.
-window.ARCADE_TOTAL = 54;
+window.ARCADE_TOTAL = 51;
 window.ARCADE_GAMES = [
   { id: 'gloom-dungeon',   name: 'Gloom Dungeon',   genre: 'Arcade',  tag: 'Hunt the creatures by radar' },
   { id: 'rotor-strike',    name: 'Rotor Strike',    genre: 'Shooter', tag: 'Fly cover for a desert convoy' },
@@ -27,11 +27,9 @@ window.ARCADE_GAMES = [
   { id: 'ping',            name: 'Ping',            genre: 'Sports',  tag: 'Table tennis, first to seven' },
   { id: 'kablam',          name: 'Kablam',          genre: 'Arcade',  tag: 'Catch the raccoon’s bombs' },
   { id: 'spore-patrol',    name: 'Spore Patrol',    genre: 'Shooter', tag: 'Blast the crawler in the mushrooms' },
-  { id: 'barn-buzzer', name: 'Barn Buzzer', genre: 'Racing', tag: 'Fly a biplane through the barns' },
   { id: 'lake-showdown', name: 'Lake Showdown', genre: 'Sports', tag: 'Fishing race to 99 lbs' },
   { id: 'box-out',         name: 'Box Out',         genre: 'Arcade',  tag: 'Trap your rival with your trail' },
   { id: 'snow-siege',      name: 'Snow Siege',      genre: 'Shooter', tag: 'Stop the Stompers at the base' },
-  { id: 'track-ten', name: 'Track Ten', genre: 'Sports', tag: 'Ten track and field events' },
   { id: 'jungle-dash',     name: 'Jungle Dash',     genre: 'Arcade',  tag: 'Treasure run to the temple' },
   { id: 'sky-shield',      name: 'Sky Shield',      genre: 'Shooter', tag: 'Guard six cities from rockets' },
   { id: 'spy-guy',         name: 'Spy Guy',         genre: 'Arcade',  tag: 'Top-secret road chase' },
@@ -46,7 +44,6 @@ window.ARCADE_GAMES = [
   { id: 'lunchbox-laser', name: 'Lunchbox Laser', genre: 'Shooter', tag: 'Zap waves of runaway snacks' },
   { id: 'saucer-sweep', name: 'Saucer Sweep', genre: 'Shooter', tag: 'Zap the ground cannons below' },
   { id: 'wing-knights', name: 'Wing Knights', genre: 'Arcade', tag: 'Fly high, joust, grab the eggs' },
-  { id: 'brush-blaster', name: 'Brush Blaster', genre: 'Shooter', tag: 'Defend the teeth from junk food' },
   { id: 'copter-pack', name: 'Copter Pack', genre: 'Arcade', tag: 'Heli-pack mine rescue' },
   { id: 'lost-mine', name: 'Lost Mine', genre: 'Arcade', tag: 'Explore the cavern for the relic' },
   { id: 'apex-grand-prix', name: "Apex Grand Prix", genre: 'Racing', tag: "Qualify, then race the pack" },

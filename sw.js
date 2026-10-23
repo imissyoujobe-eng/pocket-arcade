@@ -1,16 +1,14 @@
 // Offline cache for Pocket Arcade. Bump VERSION whenever you add or change a game.
-const VERSION = "arcade-v11";
+const VERSION = "arcade-v12";
 const FILES = [
  "./",
  "./games.js",
  "./games/aero-assault.html",
  "./games/apex-grand-prix.html",
- "./games/barn-buzzer.html",
  "./games/block-builder.html",
  "./games/boot-camp-blitz.html",
  "./games/bounce-breaker.html",
  "./games/box-out.html",
- "./games/brush-blaster.html",
  "./games/bug-bloom.html",
  "./games/city-smash.html",
  "./games/coast-rush.html",
@@ -53,7 +51,6 @@ const FILES = [
  "./games/spy-guy.html",
  "./games/star-trench.html",
  "./games/sundown-showdown.html",
- "./games/track-ten.html",
  "./games/tread-storm.html",
  "./games/volt-maze.html",
  "./games/wing-knights.html",
