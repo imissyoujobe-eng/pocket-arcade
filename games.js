@@ -52,6 +52,6 @@ window.ARCADE_GAMES = [
   { id: 'fortress-flight', name: "Fortress Flight", genre: 'Shooter', tag: "Thread the floating fortress" },
   { id: 'bounce-breaker', name: "Bounce Breaker", genre: 'Arcade', tag: "Bust bricks, catch power-ups" },
   { id: 'marble-run', name: "Marble Run", genre: 'Puzzle', tag: "Roll to the goal against the clock" },
-  { id: 'city-smash', name: "City Smash", genre: 'Arcade', tag: "Giant lizard vs the city" },
+  { id: 'city-smash', name: "City Smash", genre: 'Arcade', tag: "Giant lizard and ape vs the city" },
   { id: 'sundown-showdown', name: "Sundown Showdown", genre: 'Shooter', tag: "Old West gunfight, first to 10" }
 ];
