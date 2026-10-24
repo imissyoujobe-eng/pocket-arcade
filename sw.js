@@ -1,5 +1,5 @@
 // Offline cache for Pocket Arcade. Bump VERSION whenever you add or change a game.
-const VERSION = "arcade-v18";
+const VERSION = "arcade-v19";
 const FILES = [
  "./",
  "./games.js",
@@ -84,7 +84,8 @@ self.addEventListener('fetch', e => {
     })));
     return;
   }
-  e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(res => {
+  // (a fresh Request is built from the address: page loads can't be re-fetched with extra options)
+  e.respondWith(fetch(new Request(e.request.url, { cache: 'no-cache', credentials: 'same-origin' })).then(res => {
     if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put(e.request, copy)); }
     return res;
   }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(hit => hit || caches.match('./index.html'))));
