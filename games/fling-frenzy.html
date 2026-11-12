@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fling Frenzy</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/planck.min.js"></script>
+<script>
+// Fling Frenzy: pull back the slingshot and fling round Puffs at wobbly forts to knock out every Gloomy hiding inside. Real physics: towers topple, glass shatters, stone holds.
+K.theme({ bg: '#0e1a2a', ink: '#fff', accent: '#ff7a2a', accentInk: '#fff' });
+// tall portrait view with a zooming camera: close-up on the slingshot while aiming (big Puffs), pulls back to chase the Puff, shows the whole fort on arrival.
+// S = pixels per meter, changes with the camera zoom every frame
+let W = 240; const H = 330, GROUND = H - 46, ZSLING = 46, ZFLY = 28, ZWATCH = 30;
+let S = ZSLING;
+const cam = { x: 0, y: 0, z: ZSLING };
+K.screen(W, H, { smooth: true });
+// phone on its side: the screen stretches across the whole width and the camera pulls back so you see the
+// slingshot and the whole fort at once
+let FAR = false;
+K.fullLand();
+function setView() {
+  const land = innerWidth > innerHeight * 1.15, st = K.stageSize();
+  const w = land ? Math.round(K.clamp(H * st.w / Math.max(1, st.h), 240, 900)) : 240;
+  FAR = land;
+  if (w !== W) { W = w; K.screen(W, H, { smooth: true }); }
+}
+setView(); addEventListener('resize', () => setTimeout(setView, 60));
+K.hud(['score', 'level', 'puffs']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'FLING' }] });
+const pl = planck, V = pl.Vec2;
+const SLING = { x: 4.2, y: 2.6 };
+const MAT = { wood: { d: 0.8, hp: 7, col: '#c08a4a', edge: '#7a5226', pts: 500 }, glass: { d: 0.5, hp: 2.2, col: '#9ad8ff', edge: '#5aa0d0', pts: 300 }, stone: { d: 2.2, hp: 18, col: '#9a9aa6', edge: '#5a5a66', pts: 800 } };
+const PUFF = { red: { col: '#ff4a4a', r: 0.36, tip: 'normal' }, dash: { col: '#ffd23a', r: 0.32, tip: 'TAP: speed burst' }, split: { col: '#4ab0ff', r: 0.26, tip: 'TAP: split in three' }, boom: { col: '#2a2a3a', r: 0.42, tip: 'TAP: explode' } };
+
+// ---- level helpers (meters, ground is y = 0) ----
+function hutAt(L, x, y, mat, roofMat, gloom) { L.push(['b', x - 0.75, y + 0.7, 0.15, 0.7, mat], ['b', x + 0.75, y + 0.7, 0.15, 0.7, mat], ['b', x, y + 1.55, 1.05, 0.15, roofMat || mat]); if (gloom) L.push(['g', x, y + 0.36, 0.34, gloom]); return y + 1.7; }
+function tower(L, x, mats, gl) { let y = 0; mats.forEach((m, i) => { y = hutAt(L, x, y, m, m, gl[i] || 0); }); return y; }
+const LEVELS = [
+  { puffs: ['red', 'red', 'red'], build: L => { const y = hutAt(L, 18, 0, 'wood', 'wood', 1); L.push(['g', 18, y + 0.36, 0.34, 1]); } },
+  { puffs: ['red', 'red', 'red'], build: L => { hutAt(L, 16, 0, 'wood', 'wood', 1); hutAt(L, 20.5, 0, 'glass', 'glass', 1); } },
+  { puffs: ['red', 'dash', 'red'], build: L => { const y = tower(L, 18, ['glass', 'glass', 'glass'], [1, 1, 0]); L.push(['g', 18, y + 0.36, 0.34, 1]); } },
+  { puffs: ['red', 'split', 'dash', 'red'], build: L => { tower(L, 15.5, ['wood', 'wood'], [1, 1]); tower(L, 19, ['glass', 'wood'], [1, 0]); L.push(['b', 17.25, 3.55, 2.4, 0.15, 'wood']); L.push(['g', 17.25, 4.06, 0.34, 1]); } },
+  { puffs: ['dash', 'red', 'boom', 'red'], build: L => { tower(L, 16, ['stone', 'wood'], [2, 1]); tower(L, 20, ['stone', 'wood', 'glass'], [2, 1, 1]); } },
+  { puffs: ['split', 'boom', 'dash', 'red'], build: L => { for (let i = 0; i < 4; i++) hutAt(L, 14.5 + i * 2.1, 0, i % 2 ? 'glass' : 'wood', 'wood', 1); hutAt(L, 15.55, 1.7, 'wood', 'wood', 1); hutAt(L, 19.75, 1.7, 'wood', 'wood', 1); L.push(['g', 17.65, 2.06, 0.38, 2]); } },
+  { puffs: ['boom', 'dash', 'split', 'red', 'red'], build: L => { const y = tower(L, 18.5, ['stone', 'stone', 'wood', 'glass'], [2, 2, 1, 1]); L.push(['g', 18.5, y + 0.4, 0.4, 3]); hutAt(L, 15, 0, 'glass', 'glass', 1); hutAt(L, 22, 0, 'wood', 'stone', 2); } },
+  { puffs: ['split', 'dash', 'boom', 'boom', 'red'], build: L => { tower(L, 14.5, ['wood', 'glass'], [1, 1]); tower(L, 17.5, ['stone', 'wood', 'wood'], [2, 1, 1]); tower(L, 20.5, ['stone', 'stone', 'glass'], [2, 2, 1]); L.push(['g', 23, 0.4, 0.4, 3]); } },
+];
+let intro = 0, watchT = 0, watchAt = null, shake = 0;
+let world, bodies, puffList, cur, state = 'title', lvl, score, levelScore, aim, settleT, flightT, restT, endT, fx, pops, abilityUsed, best = K.best('flingfrenzy'), unlocked = Math.max(1, K.best('flingfrenzy_lvl'));
+function title() { K.card({ title: 'FLING FRENZY', text: 'Drag back anywhere on the screen and let go to fling a Puff (or aim with the arrows and press FLING). Knock out every Gloomy hiding in the forts. Glass breaks easily, wood takes a few hits, stone is tough. Every Puff explodes when it lands, with a bigger blast on a direct hit. Special Puffs: yellow speeds up, blue splits in three, black is a super bomb. Tap the screen while it flies!', best: best ? 'BEST ' + best : '', button: 'Level ' + unlocked, onStart: () => { score = 0; load(unlocked - 1); state = 'play'; } }); }
+function load(i) {
+  lvl = i % LEVELS.length; world = pl.World({ gravity: V(0, -10) }); bodies = []; fx = []; pops = []; levelScore = 0; settleT = 1.2; cur = null; aim = { ang: 0.6, pow: 0.75, drag: null }; endT = 0; intro = 2.4; watchT = 0; cam.y = 0;
+  const g = world.createBody(); g.createFixture(pl.Edge(V(-20, 0), V(80, 0)), { friction: 0.9 }); g.setUserData({ kind: 'ground' });
+  const L = []; LEVELS[lvl].build(L);
+  L.forEach(it => {
+    if (it[0] === 'b') { const [, x, y, hw, hh, m] = it; const b = world.createBody({ type: 'dynamic', position: V(x, y) }); b.createFixture(pl.Box(hw, hh), { density: MAT[m].d, friction: 0.7, restitution: 0.05 }); b.setUserData({ kind: 'block', mat: m, hw, hh, hp: MAT[m].hp * (hw * hh * 4 > 0.5 ? 1.3 : 1), max: 0 }); b.getUserData().max = b.getUserData().hp; bodies.push(b); }
+    else { const [, x, y, r, tough] = it; const b = world.createBody({ type: 'dynamic', position: V(x, y) }); b.createFixture(pl.Circle(r), { density: 0.6, friction: 0.6, restitution: 0.2 }); b.setUserData({ kind: 'gloom', r, hp: tough === 3 ? 6 : tough === 2 ? 3.5 : 1.6, max: 0, tough }); b.getUserData().max = b.getUserData().hp; bodies.push(b); }
+  });
+  // a Puff explodes the moment it touches anything: a fort piece or Gloomy is a direct hit (bigger blast)
+  world.on('begin-contact', c => { const a = c.getFixtureA().getBody(), b = c.getFixtureB().getBody(); [[a, b], [b, a]].forEach(([me, other]) => { const u = me.getUserData(), o = other.getUserData(); if (u && u.kind === 'puff' && !u.hit) u.hit = o && (o.kind === 'block' || o.kind === 'gloom') ? 'direct' : 'ground'; }); });
+  world.on('post-solve', (c, imp) => { if (settleT > 0) return; const f = imp.normalImpulses[0] || 0; if (f < 0.6) return; [c.getFixtureA().getBody(), c.getFixtureB().getBody()].forEach(b => { const u = b.getUserData(); if (u && (u.kind === 'block' || u.kind === 'gloom')) u.hp -= (f - 0.4) * (u.kind === 'gloom' ? 0.9 : 0.6); }); });
+  puffList = LEVELS[lvl].puffs.slice(); nextPuff();
+  const fs = fortSpan(); cam.z = S = fortZoom(fs); cam.x = (fs[0] + fs[1]) / 2 - W / S / 2;
+}
+function nextPuff() { if (!puffList.length) { cur = null; return; } cur = { kind: puffList.shift(), body: null, state: 'ready' }; abilityUsed = false; flightT = 0; restT = 0; }
+function gloomsLeft() { return bodies.filter(b => b.getUserData().kind === 'gloom').length; }
+function launchVec() { const sp = 8 + aim.pow * 15; return V(Math.cos(aim.ang) * sp, Math.sin(aim.ang) * sp); }
+function fling() {
+  const P = PUFF[cur.kind], b = world.createBody({ type: 'dynamic', position: V(SLING.x, SLING.y), bullet: true });
+  b.createFixture(pl.Circle(P.r), { density: 3, friction: 0.5, restitution: 0.35 }); b.setUserData({ kind: 'puff', type: cur.kind, r: P.r }); b.setLinearVelocity(launchVec()); b.setAngularVelocity(-4);
+  cur.body = b; cur.extra = []; cur.state = 'fly'; intro = 0; watchT = 0; K.beep(300, 0.25, { to: 900, type: 'triangle' }); K.noise(0.15, 0.15);
+}
+function ability() {
+  if (abilityUsed || !cur || cur.state !== 'fly' || !cur.body) return; const b = cur.body, v = b.getLinearVelocity(), p = b.getPosition(); abilityUsed = true;
+  if (cur.kind === 'dash') { b.setLinearVelocity(V(v.x * 2.2 + 4, v.y * 1.2)); K.beep(600, 0.2, { to: 1400 }); addFx(p.x, p.y, '#ffd23a', 10); }
+  else if (cur.kind === 'split') { [-0.25, 0.25].forEach(da => { const a = Math.atan2(v.y, v.x) + da, sp = Math.hypot(v.x, v.y); const n = world.createBody({ type: 'dynamic', position: V(p.x, p.y), bullet: true }); n.createFixture(pl.Circle(PUFF.split.r), { density: 3, friction: 0.5, restitution: 0.35 }); n.setUserData({ kind: 'puff', type: 'split', r: PUFF.split.r }); n.setLinearVelocity(V(Math.cos(a) * sp, Math.sin(a) * sp)); cur.extra.push(n); }); K.beep(900, 0.1); }
+  else if (cur.kind === 'boom') { blowPuff(b, 'boom'); }
+}
+// blast: pushes and damages everything within the radius
+function explode(x, y, rad, pow, dmg) {
+  K.noise(0.35 + rad * 0.1, 0.3 + rad * 0.08); K.beep(110 - rad * 10, 0.4, { to: 40, type: 'sawtooth' }); addFx(x, y, '#ff9a2a', 12 + rad * 8); addFx(x, y, '#ffe07a', 6 + rad * 3); fx.push({ ring: 1, x, y, t: 0.4, rad }); fx.push({ flash: 1, x, y, t: 0.18, rad });
+  for (let i = 0; i < 6 + rad * 3; i++) fx.push({ smoke: 1, x: x + K.rnd(-0.4, 0.4) * rad, y: y + K.rnd(-0.2, 0.5) * rad, vx: K.rnd(-0.6, 0.6), vy: K.rnd(0.3, 1.2), t: K.rnd(0.8, 1.6), r: K.rnd(0.25, 0.5) * rad });
+  shake = Math.max(shake, 0.12 + rad * 0.06);
+  bodies.forEach(b => { const p = b.getPosition(), dx = p.x - x, dy = p.y - y, d = Math.hypot(dx, dy); if (d < rad) { const k = (rad - d) / rad; b.applyLinearImpulse(V(dx / (d || 1) * pow * k * b.getMass() ** 0.5, dy / (d || 1) * pow * k * b.getMass() ** 0.5 + 2 * k), p, true); b.getUserData().hp -= dmg * k; } });
+  watchAt = { x, y }; watchT = 1.3;
+}
+// blow up one Puff body: direct hits and the black bomb Puff make a bigger blast
+function blowPuff(b, how) {
+  const p = b.getPosition(), u = b.getUserData(), sm = u.type === 'split' ? 0.75 : 1;
+  if (how === 'boom' || u.type === 'boom') explode(p.x, p.y, 4.2, 16, 9);
+  else if (how === 'direct') explode(p.x, p.y, 2.6 * sm, 10 * sm, 5 * sm);
+  else explode(p.x, p.y, 1.8 * sm, 7 * sm, 3 * sm);
+  world.destroyBody(b);
+  if (cur) { if (cur.body === b) cur.body = null; cur.extra = (cur.extra || []).filter(e => e !== b); }
+}
+function fortSpan() { let x0 = 99, x1 = 0; bodies.forEach(b => { const x = b.getPosition().x; x0 = Math.min(x0, x); x1 = Math.max(x1, x); }); return x1 ? [x0, x1] : [16, 20]; }
+function fortZoom(fs) { return K.clamp(W / (fs[1] - fs[0] + 3.6), 17, 34); }
+function fortX() { let x0 = 99, x1 = 0; bodies.forEach(b => { const x = b.getPosition().x; x0 = Math.min(x0, x); x1 = Math.max(x1, x); }); return x1 ? (x0 + x1) / 2 : 18; }
+function addFx(x, y, c, n) { for (let i = 0; i < n; i++) fx.push({ x, y, vx: K.rnd(-5, 5), vy: K.rnd(-1, 7), t: K.rnd(0.4, 0.9), c }); }
+function sx(x) { return (x - cam.x) * S; } function sy(y) { return GROUND - (y - cam.y) * S; }
+// camera: shows the fort at the start, sits on the slingshot while aiming, then chases the Puff and lingers on the crash
+function moveCam(dt) {
+  let ax, ay = null, fx = 0.5, tz = ZSLING;
+  if (intro > 0.9) { const fs = fortSpan(); tz = fortZoom(fs); ax = (fs[0] + fs[1]) / 2; }
+  else if (cur && cur.state === 'fly') {
+    tz = ZFLY; const all = [cur.body, ...(cur.extra || [])].filter(Boolean);
+    if (all.length) { const p = all[0].getPosition(); ax = p.x; fx = 0.38; ay = p.y; tz = K.clamp(GROUND / (p.y + 3.2), 17, ZFLY); }
+    else if (watchAt) { tz = ZWATCH; ax = watchAt.x; ay = watchAt.y; }
+    else ax = cam.x + W / S / 2;
+  } else if (watchT > 0 && watchAt) { tz = ZWATCH; ax = watchAt.x; ay = watchAt.y; }
+  else { ax = SLING.x; fx = 0.42; }
+  if (FAR) {
+    // far view: slingshot on the left, whole fort on the right; rises to keep a high-flying Puff in sight
+    const fs = fortSpan(), x0 = SLING.x - 7, x1 = fs[1] + 3; tz = K.clamp(Math.min(W / (x1 - x0), GROUND / 9), 8, 40);
+    const flying = cur && cur.state === 'fly' && cur.body; ax = (x0 + x1) / 2; fx = 0.5; ay = flying ? cur.body.getPosition().y : null;
+  }
+  const fast = cur && cur.state === 'fly' && cur.body;
+  cam.z += (tz - cam.z) * (1 - Math.pow(fast ? 0.02 : 0.03, dt)); S = cam.z;
+  const vw = W / S, vh = GROUND / S;
+  let tx = FAR ? ax - vw * fx : K.clamp(ax - vw * fx, -1, 34 - vw), ty = ay == null ? 0 : Math.max(0, ay - vh * 0.55);
+  const k = fast ? 1 - Math.pow(0.0005, dt) : 1 - Math.pow(0.04, dt);
+  cam.x += (tx - cam.x) * k; cam.y += (ty - cam.y) * k;
+}
+function update(dt) {
+  if (state !== 'play') return;
+  const step = Math.min(dt, 1 / 30); world.step(step, 8, 3); if (settleT > 0) settleT -= dt;
+  if (cur && cur.state === 'fly') [cur.body, ...(cur.extra || [])].filter(Boolean).forEach(b => { const u = b.getUserData(); if (u.hit) blowPuff(b, u.hit); });
+  if (shake > 0) shake -= dt; if (intro > 0) intro -= dt; if (watchT > 0) watchT -= dt;
+  // remove broken things
+  bodies = bodies.filter(b => { const u = b.getUserData(), p = b.getPosition(); if (u.hp <= 0 || p.y < -3 || p.x > 40 || p.x < -5) { const pts = u.kind === 'gloom' ? 5000 : MAT[u.mat].pts; levelScore += pts; pops.push({ x: p.x, y: p.y + 0.6, txt: pts, t: 1 }); addFx(p.x, p.y, u.kind === 'gloom' ? '#a06aff' : MAT[u.mat].col, u.kind === 'gloom' ? 16 : 8); if (u.kind === 'gloom') K.tune([523, 392], 0.08, { type: 'square' }); else if (u.mat === 'glass') K.beep(1800, 0.08, { to: 2600 }); else K.noise(0.12, 0.2); world.destroyBody(b); return false; } return true; });
+  // aiming
+  if (cur && cur.state === 'ready') {
+    // the joystick moves the Puff in the sling the same way you push it, like pulling back the band with your thumb:
+    // pull it left (back) for more power, pull it down to aim higher
+    if (K.down('down')) aim.ang = Math.min(1.45, aim.ang + dt * 0.9); if (K.down('up')) aim.ang = Math.max(-0.4, aim.ang - dt * 0.9);
+    if (K.down('left')) aim.pow = Math.min(1, aim.pow + dt * 0.6); if (K.down('right')) aim.pow = Math.max(0.1, aim.pow - dt * 0.6);
+    if (K.ptr.down) { if (!aim.drag) aim.drag = { x: K.ptr.x, y: K.ptr.y }; const dx = aim.drag.x - K.ptr.x, dy = K.ptr.y - aim.drag.y, d = Math.hypot(dx, dy); if (d > 6) { aim.ang = Math.atan2(dy, dx); aim.pow = Math.min(1, d / 90); intro = 0; } }
+    else if (aim.drag) { const moved = aim.pow; aim.drag = null; if (moved > 0.08) fling(); }
+    if (K.hit('a')) fling();
+  } else if (cur && cur.state === 'fly') {
+    flightT += dt; if (K.hit('a') || K.ptr.tapped) ability();
+    const all = [cur.body, ...cur.extra].filter(Boolean); const moving = all.some(b => { const p = b.getPosition(); return b.getLinearVelocity().length() > 0.4 && p.x < 35 && p.y > -2; });
+    if (!moving) restT += dt; else restT = 0;
+    if (!all.length && watchT > 0) restT = 0;
+    if (restT > 1 || flightT > 9) { all.forEach(b => { if (b) world.destroyBody(b); }); cur.state = 'done'; nextPuff(); }
+  }
+  // win / lose
+  if (!endT) { if (gloomsLeft() === 0 && settleT <= 0) endT = 1.5; else if (!cur && gloomsLeft() > 0) endT = -2.5; }
+  if (endT > 0) { endT -= dt; if (endT <= 0) { const left = puffList.length + (cur && cur.state === 'ready' ? 1 : 0); levelScore += left * 10000; score += levelScore; const stars = left >= 2 ? 3 : left === 1 ? 2 : 1; unlocked = Math.max(unlocked, Math.min(LEVELS.length, lvl + 2)); K.saveBest('flingfrenzy_lvl', unlocked); best = K.saveBest('flingfrenzy', score); K.tune([523, 659, 784, 1046], 0.12);
+    state = 'over'; const last = lvl + 1 >= LEVELS.length; K.card({ title: '★'.repeat(stars) + '☆'.repeat(3 - stars), text: 'Level ' + (lvl + 1) + ' cleared! ' + levelScore + ' points' + (left ? ' (' + left + ' Puff' + (left > 1 ? 's' : '') + ' left = bonus)' : '') + '. Total ' + score + '.' + (last ? ' You beat every fort! Play them again for a higher score.' : ''), best: 'BEST ' + best, button: last ? 'Start Over' : 'Next Level', onStart: () => { load(last ? 0 : lvl + 1); state = 'play'; } }); return; } }
+  if (endT < 0) { endT += dt; if (gloomsLeft() === 0) endT = 1; else if (endT >= 0) { state = 'over'; K.beep(300, 0.6, { to: 120, type: 'triangle' }); K.card({ title: 'OUT OF PUFFS', text: gloomsLeft() + ' Gloom' + (gloomsLeft() > 1 ? 'ies are' : 'y is') + ' still standing. Try a different angle!', best: '', button: 'Retry Level ' + (lvl + 1), onStart: () => { load(lvl); state = 'play'; } }); return; } }
+  fx.forEach(e => { e.t -= dt; if (!e.ring && !e.flash) { if (!e.smoke) e.vy -= 12 * dt; e.x += e.vx * dt; e.y += e.vy * dt; } }); fx = fx.filter(e => e.t > 0);
+  pops.forEach(p => { p.t -= dt; p.y += dt; }); pops = pops.filter(p => p.t > 0);
+  moveCam(dt);
+  K.set('score', score + levelScore); K.set('level', 'LEVEL ' + (lvl + 1)); K.set('puffs', (cur && cur.state === 'ready' ? '●' : '') + puffList.map(() => '●').join(''));
+}
+// a round fluffy Puff with feather tufts, big eyes, angry brows and a beak
+function drawPuff(c, x, y, r, kind, rot) {
+  const P = PUFF[kind], R = r * S; c.save(); c.translate(x, y); c.rotate(rot || 0);
+  c.fillStyle = 'rgba(20,12,8,.85)'; c.beginPath(); c.arc(0, 0, R + 1.4, 0, 7); c.fill();
+  for (let k = 0; k < 3; k++) { c.fillStyle = P.col; c.beginPath(); c.ellipse(-R * 0.15 + k * R * 0.18, -R * 0.95, R * 0.12, R * 0.32, -0.4 + k * 0.35, 0, 7); c.fill(); }
+  const g = c.createRadialGradient(-R * 0.35, -R * 0.4, R * 0.1, 0, 0, R); g.addColorStop(0, '#fff'); g.addColorStop(0.18, P.col); g.addColorStop(1, shadeCol(P.col)); c.fillStyle = g; c.beginPath(); c.arc(0, 0, R, 0, 7); c.fill();
+  c.fillStyle = kind === 'boom' ? '#5a5a6a' : 'rgba(255,240,220,.85)'; c.beginPath(); c.ellipse(R * 0.1, R * 0.5, R * 0.55, R * 0.38, 0, 0, 7); c.fill();
+  c.fillStyle = shadeCol(P.col); c.beginPath(); c.ellipse(-R * 0.75, R * 0.1, R * 0.25, R * 0.45, 0.4, 0, 7); c.fill();
+  c.fillStyle = '#fff'; c.beginPath(); c.ellipse(R * 0.18, -R * 0.15, R * 0.28, R * 0.32, 0, 0, 7); c.ellipse(R * 0.62, -R * 0.12, R * 0.22, R * 0.27, 0, 0, 7); c.fill();
+  c.fillStyle = '#111'; c.beginPath(); c.arc(R * 0.27, -R * 0.1, R * 0.13, 0, 7); c.arc(R * 0.67, -R * 0.08, R * 0.11, 0, 7); c.fill();
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(R * 0.31, -R * 0.15, R * 0.04, 0, 7); c.fill();
+  c.strokeStyle = '#1a1010'; c.lineWidth = Math.max(1.2, R * 0.1); c.lineCap = 'round'; c.beginPath(); c.moveTo(-R * 0.08, -R * 0.52); c.lineTo(R * 0.42, -R * 0.36); c.moveTo(R * 0.86, -R * 0.44); c.lineTo(R * 0.52, -R * 0.34); c.stroke();
+  c.fillStyle = '#ffb02a'; c.beginPath(); c.moveTo(R * 0.5, R * 0.08); c.lineTo(R * 1.12, R * 0.24); c.lineTo(R * 0.5, R * 0.44); c.fill(); c.fillStyle = '#d8801a'; c.beginPath(); c.moveTo(R * 0.5, R * 0.26); c.lineTo(R * 1.12, R * 0.24); c.lineTo(R * 0.5, R * 0.44); c.fill();
+  if (kind === 'boom') { c.strokeStyle = '#aaa'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, -R); c.quadraticCurveTo(R * 0.3, -R * 1.3, R * 0.15, -R * 1.5); c.stroke(); const f = 2 + Math.random() * 2; c.fillStyle = '#ffd23a'; c.beginPath(); c.arc(R * 0.15, -R * 1.55, f, 0, 7); c.fill(); c.fillStyle = '#ff5a1a'; c.beginPath(); c.arc(R * 0.15, -R * 1.55, f * 0.5, 0, 7); c.fill(); }
+  c.restore();
+}
+function shadeCol(hex) { const n = parseInt(hex.slice(1), 16); return 'rgb(' + ((n >> 16) * 0.6 | 0) + ',' + (((n >> 8) & 255) * 0.6 | 0) + ',' + ((n & 255) * 0.6 | 0) + ')'; }
+function hsh(i, k) { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); }
+function drawBlock(c, u, t) {
+  const M = MAT[u.mat], w = u.hw * 2 * S, h = u.hh * 2 * S, x = -w / 2, y = -h / 2, dmg = 1 - u.hp / u.max;
+  c.fillStyle = 'rgba(20,12,8,.85)'; c.fillRect(x - 1.2, y - 1.2, w + 2.4, h + 2.4);
+  if (u.mat === 'wood') {
+    const g = c.createLinearGradient(x, y, w > h ? x : x + w, w > h ? y + h : y); g.addColorStop(0, '#e0aa68'); g.addColorStop(0.5, '#c08a4a'); g.addColorStop(1, '#8a5a2a'); c.fillStyle = g; c.fillRect(x, y, w, h);
+    c.strokeStyle = 'rgba(90,50,20,.45)'; c.lineWidth = 0.8; const n = Math.max(2, Math.round((w > h ? h : w) / 5));
+    for (let k = 1; k < n; k++) { c.beginPath(); if (w > h) { const yy = y + k * h / n; c.moveTo(x + 2, yy); c.bezierCurveTo(x + w * 0.3, yy + 1, x + w * 0.6, yy - 1, x + w - 2, yy); } else { const xx = x + k * w / n; c.moveTo(xx, y + 2); c.bezierCurveTo(xx + 1, y + h * 0.3, xx - 1, y + h * 0.6, xx, y + h - 2); } c.stroke(); }
+    c.fillStyle = '#6a3a1a'; [[x + 3, y + 3], [x + w - 3, y + 3], [x + 3, y + h - 3], [x + w - 3, y + h - 3]].forEach(q => { c.beginPath(); c.arc(q[0], q[1], 1.1, 0, 7); c.fill(); });
+  } else if (u.mat === 'glass') {
+    const g = c.createLinearGradient(x, y, x + w, y + h); g.addColorStop(0, 'rgba(210,240,255,.9)'); g.addColorStop(0.5, 'rgba(130,200,250,.7)'); g.addColorStop(1, 'rgba(80,150,220,.85)'); c.fillStyle = g; c.fillRect(x, y, w, h);
+    c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(x + w * 0.15, y + h * 0.85); c.lineTo(x + w * 0.45, y + h * 0.15); c.moveTo(x + w * 0.35, y + h * 0.85); c.lineTo(x + w * 0.55, y + h * 0.4); c.stroke();
+    c.strokeStyle = '#5aa0d0'; c.lineWidth = 1; c.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+  } else {
+    c.fillStyle = '#8a8a96'; c.fillRect(x, y, w, h);
+    const bw = w > h ? 14 : w, bh = w > h ? h : 12; for (let yy = 0, r = 0; yy < h; yy += bh, r++) for (let xx = (r % 2) * -bw / 2; xx < w; xx += bw) { const v = hsh(xx + u.hw * 7, yy + r); c.fillStyle = v < 0.33 ? '#a4a4b0' : v < 0.66 ? '#8e8e9a' : '#7a7a86'; c.fillRect(x + Math.max(0, xx) + 0.8, y + yy + 0.8, Math.min(bw, w - Math.max(0, xx)) - 1.6, Math.min(bh, h - yy) - 1.6); }
+    c.fillStyle = 'rgba(255,255,255,.2)'; c.fillRect(x, y, w, 1.5);
+  }
+  if (dmg > 0.25) { c.strokeStyle = u.mat === 'glass' ? 'rgba(255,255,255,.9)' : 'rgba(0,0,0,.55)'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + w * 0.2, y + h * 0.2); c.lineTo(x + w * 0.5, y + h * 0.5); c.lineTo(x + w * 0.7, y + h * 0.85); c.moveTo(x + w * 0.5, y + h * 0.5); c.lineTo(x + w * 0.85, y + h * 0.3); if (dmg > 0.55) { c.moveTo(x + w * 0.5, y + h * 0.5); c.lineTo(x + w * 0.25, y + h * 0.8); c.moveTo(x + w * 0.6, y + h * 0.1); c.lineTo(x + w * 0.5, y + h * 0.5); } c.stroke(); }
+}
+// Gloomy: grumpy purple blob with ears, a frown, and a helmet or crown if tough
+function drawGloom(c, u, t) {
+  const R = u.r * S, hurt = u.hp < u.max * 0.5, bob = Math.sin(t / 400 + u.r * 9) * 0.6;
+  c.fillStyle = 'rgba(20,12,8,.85)'; c.beginPath(); c.arc(0, 0, R + 1.4, 0, 7); c.fill();
+  for (const sd of [-1, 1]) { c.fillStyle = '#7a4adf'; c.beginPath(); c.ellipse(sd * R * 0.62, -R * 0.78 + bob, R * 0.3, R * 0.34, sd * 0.4, 0, 7); c.fill(); c.fillStyle = '#c8a0ff'; c.beginPath(); c.ellipse(sd * R * 0.62, -R * 0.74 + bob, R * 0.14, R * 0.17, sd * 0.4, 0, 7); c.fill(); }
+  const g = c.createRadialGradient(-R * 0.3, -R * 0.4, R * 0.1, 0, 0, R); g.addColorStop(0, '#d8c0ff'); g.addColorStop(0.3, '#9a6aff'); g.addColorStop(1, '#4a2aa0'); c.fillStyle = g; c.beginPath(); c.arc(0, 0, R, 0, 7); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.12)'; for (let k = 0; k < 4; k++) { c.beginPath(); c.arc(-R * 0.4 + k * R * 0.3, R * 0.45, R * 0.07, 0, 7); c.fill(); }
+  const blink = Math.floor(t / 2200 + u.r * 7) % 6 === 0 && t % 2200 < 130;
+  c.fillStyle = '#fff'; c.beginPath(); c.ellipse(-R * 0.32, -R * 0.1, R * 0.25, blink ? R * 0.04 : R * 0.28, 0, 0, 7); c.ellipse(R * 0.32, -R * 0.1, R * 0.25, blink ? R * 0.04 : R * 0.28, 0, 0, 7); c.fill();
+  if (!blink) { c.fillStyle = hurt ? '#ff5a5a' : '#222'; c.beginPath(); c.arc(-R * 0.36, -R * 0.06, R * 0.12, 0, 7); c.arc(R * 0.26, -R * 0.06, R * 0.12, 0, 7); c.fill(); }
+  c.strokeStyle = '#2a0a5a'; c.lineWidth = Math.max(1.2, R * 0.09); c.lineCap = 'round'; c.beginPath(); c.moveTo(-R * 0.55, -R * 0.48); c.lineTo(-R * 0.15, -R * 0.36); c.moveTo(R * 0.55, -R * 0.48); c.lineTo(R * 0.15, -R * 0.36); c.stroke();
+  c.beginPath(); c.arc(0, R * 0.55, R * 0.28, 1.15 * Math.PI, 1.85 * Math.PI); c.stroke();
+  c.fillStyle = '#fff'; c.fillRect(-R * 0.12, R * 0.29, R * 0.08, R * 0.1); c.fillRect(R * 0.04, R * 0.29, R * 0.08, R * 0.1);
+  if (u.tough === 2) { const hg = c.createLinearGradient(0, -R * 1.2, 0, -R * 0.3); hg.addColorStop(0, '#d0d0dc'); hg.addColorStop(1, '#6a6a7a'); c.fillStyle = hg; c.beginPath(); c.arc(0, -R * 0.35, R * 0.98, Math.PI, 0); c.fill(); c.fillStyle = '#4a4a5a'; c.fillRect(-R, -R * 0.38, R * 2, R * 0.14); c.fillStyle = 'rgba(255,255,255,.4)'; c.beginPath(); c.ellipse(-R * 0.35, -R * 0.95, R * 0.3, R * 0.1, -0.3, 0, 7); c.fill(); }
+  if (u.tough === 3) { c.fillStyle = '#ffd23a'; c.beginPath(); c.moveTo(-R * 0.7, -R * 0.55); c.lineTo(-R * 0.75, -R * 1.25); c.lineTo(-R * 0.35, -R * 0.9); c.lineTo(0, -R * 1.4); c.lineTo(R * 0.35, -R * 0.9); c.lineTo(R * 0.75, -R * 1.25); c.lineTo(R * 0.7, -R * 0.55); c.fill(); c.fillStyle = '#e63946'; c.beginPath(); c.arc(0, -R * 0.78, R * 0.1, 0, 7); c.fill(); c.fillStyle = '#4ab0ff'; c.beginPath(); c.arc(-R * 0.42, -R * 0.7, R * 0.07, 0, 7); c.arc(R * 0.42, -R * 0.7, R * 0.07, 0, 7); c.fill(); }
+  if (hurt) { c.fillStyle = 'rgba(80,40,160,.6)'; c.beginPath(); c.ellipse(R * 0.5, R * 0.15, R * 0.18, R * 0.1, 0.4, 0, 7); c.fill(); }
+}
+function draw(c, t) {
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#4aa8f0'); g.addColorStop(0.7, '#a8dcff'); g.addColorStop(1, '#e8f6ff'); c.fillStyle = g; c.fillRect(0, 0, W, H);
+  const camPx = cam.x * S, camPy = cam.y * S;
+  c.save(); if (shake > 0) c.translate(K.rnd(-1, 1) * shake * 20, K.rnd(-1, 1) * shake * 20);
+  // sun, clouds, far mountains, rolling hills with trees: each layer scrolls at its own speed
+  c.fillStyle = 'rgba(255,250,210,.9)'; c.beginPath(); c.arc(W - 60 - camPx * 0.02, 60 + camPy * 0.1, 22, 0, 7); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.85)'; for (let i = 0; i < 6; i++) { const ox = ((i * 170 + t / (70 + i * 25) - camPx * 0.1) % (W + 160) + W + 160) % (W + 160) - 80, y = 30 + (i % 3) * 40 + camPy * 0.15; c.beginPath(); c.arc(ox, y, 16, 0, 7); c.arc(ox + 18, y - 8, 20, 0, 7); c.arc(ox + 40, y, 15, 0, 7); c.ellipse(ox + 20, y + 5, 30, 9, 0, 0, 7); c.fill(); }
+  const layer = (f, base, amp, col, freq) => { c.fillStyle = col; c.beginPath(); c.moveTo(0, H); for (let x = 0; x <= W + 10; x += 8) { const wx = x + camPx * f; c.lineTo(x, base + camPy * f - amp * (0.6 * Math.sin(wx / freq) + 0.4 * Math.sin(wx / (freq * 0.43) + 1))); } c.lineTo(W, H); c.fill(); };
+  layer(0.15, GROUND - 70, 40, '#9ab8d8', 140); layer(0.3, GROUND - 40, 26, '#7ab87a', 110);
+  // tree line on the near hills
+  for (let i = Math.floor(camPx * 0.5 / 46) - 1; i < Math.floor((camPx * 0.5 + W) / 46) + 2; i++) { const x = i * 46 - camPx * 0.5 + hsh(i, 1) * 20, base = GROUND - 14 + camPy * 0.5, s = 0.8 + hsh(i, 2) * 0.5; c.fillStyle = '#5a3a1e'; c.fillRect(x - 2 * s, base - 16 * s, 4 * s, 16 * s); c.fillStyle = '#3a8a3a'; c.beginPath(); c.arc(x, base - 22 * s, 11 * s, 0, 7); c.arc(x - 7 * s, base - 16 * s, 8 * s, 0, 7); c.arc(x + 7 * s, base - 16 * s, 8 * s, 0, 7); c.fill(); c.fillStyle = '#5aaa4a'; c.beginPath(); c.arc(x - 3 * s, base - 26 * s, 5 * s, 0, 7); c.fill(); }
+  layer(0.5, GROUND - 6, 8, '#6aaa5a', 90);
+  // ground: grass strip and dirt with stones
+  const gy = sy(0); c.fillStyle = '#7a5a3a'; c.fillRect(0, gy, W, H - gy + 40); c.fillStyle = '#5aa04a'; c.fillRect(0, gy - 2, W, 8); c.fillStyle = '#7ac85a'; c.fillRect(0, gy - 2, W, 2);
+  for (let i = Math.floor(camPx / 12) - 1; i < Math.floor((camPx + W) / 12) + 2; i++) { const x = i * 12 - camPx; c.fillStyle = '#4a8a3a'; c.beginPath(); c.moveTo(x, gy); c.lineTo(x + 2, gy - 5 - hsh(i, 3) * 4); c.lineTo(x + 4, gy); c.fill(); if (hsh(i, 4) < 0.25) { c.fillStyle = '#9a8a7a'; c.beginPath(); c.ellipse(x + 6, gy + 12 + hsh(i, 5) * 10, 3, 2, 0, 0, 7); c.fill(); } if (hsh(i, 6) < 0.08) { c.fillStyle = ['#ffd23a', '#ff6a8a', '#fff'][i % 3]; c.beginPath(); c.arc(x + 3, gy - 6, 1.6, 0, 7); c.fill(); } }
+  if (!world) { c.restore(); return; }
+  // slingshot: a Y of wood wrapped in rope
+  const bx = sx(SLING.x), by = sy(SLING.y), q = S / 36;
+  const wood = (x0, y0, x1, y1, wdt) => { c.strokeStyle = 'rgba(20,12,8,.85)'; c.lineWidth = wdt + 2.4; c.lineCap = 'round'; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.strokeStyle = '#8a5a2a'; c.lineWidth = wdt; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke(); c.strokeStyle = '#b07a42'; c.lineWidth = wdt * 0.35; c.beginPath(); c.moveTo(x0 - wdt * 0.2, y0); c.lineTo(x1 - wdt * 0.2, y1); c.stroke(); };
+  wood(bx, gy, bx, by + 24 * q, 11 * q); wood(bx, by + 26 * q, bx - 18 * q, by - 6 * q, 8 * q);
+  c.fillStyle = '#d8c090'; for (let k = 0; k < 3; k++) c.fillRect(bx - 6 * q, by + (24 + k * 3.5) * q, 12 * q, 2 * q);
+  c.fillStyle = '#6a4020'; c.beginPath(); c.arc(bx - 18 * q, by - 6 * q, 3 * q, 0, 7); c.arc(bx + 16 * q, by - 6 * q, 3 * q, 0, 7); c.fill();
+  // trajectory preview
+  if (cur && cur.state === 'ready' && state === 'play') { const v = launchVec(); for (let i = 1; i < 16; i++) { const tt = i * 0.055; const x = SLING.x + v.x * tt, y = SLING.y + v.y * tt - 5 * tt * tt; c.fillStyle = 'rgba(255,255,255,' + (0.95 - i * 0.05) + ')'; c.beginPath(); c.arc(sx(x), sy(y), (3.6 - i * 0.16) * Math.min(1.3, q), 0, 7); c.fill(); }
+    const pull = 1 + aim.pow * 1.4, px = bx - Math.cos(aim.ang) * pull * S * 0.6, py = by + Math.sin(aim.ang) * pull * S * 0.6;
+    c.strokeStyle = '#3a2210'; c.lineWidth = 4 * q; c.beginPath(); c.moveTo(bx - 18 * q, by - 4 * q); c.lineTo(px, py); c.stroke();
+    c.fillStyle = '#5a3418'; c.beginPath(); c.ellipse(px - Math.cos(aim.ang) * 5 * q, py + Math.sin(aim.ang) * 5 * q, 6 * q, 9 * q, -aim.ang, 0, 7); c.fill();
+    drawPuff(c, px, py, PUFF[cur.kind].r, cur.kind, 0);
+    c.strokeStyle = '#3a2210'; c.lineWidth = 4 * q; c.beginPath(); c.moveTo(px, py); c.lineTo(bx + 16 * q, by - 4 * q); c.stroke(); c.lineWidth = 1;
+    if (PUFF[cur.kind].tip !== 'normal') K.text(c, PUFF[cur.kind].tip, W / 2, 22, 11, '#1a2a3a');
+    if (intro <= 0.9) { const fxp = sx(fortX()); if (fxp > W - 10) { const ay = sy(1.6) - 30, bob = Math.sin(t / 200) * 3; c.fillStyle = 'rgba(20,30,50,.55)'; c.beginPath(); c.roundRect ? c.roundRect(W - 62 + bob, ay - 12, 56, 24, 8) : c.rect(W - 62 + bob, ay - 12, 56, 24); c.fill(); K.text(c, 'FORT ▶', W - 34 + bob, ay, 10, '#fff'); } } }
+  // fort pieces and Gloomies
+  bodies.forEach(b => { const u = b.getUserData(), p = b.getPosition(), a = b.getAngle(), X = sx(p.x), Y = sy(p.y); if (X < -80 || X > W + 80) return; c.save(); c.translate(X, Y); c.rotate(-a); if (u.kind === 'block') drawBlock(c, u, t); else drawGloom(c, u, t); c.restore(); });
+  if (cur && cur.body) { const p = cur.body.getPosition(), v = cur.body.getLinearVelocity(); for (let k = 1; k < 5; k++) { c.fillStyle = 'rgba(255,255,255,' + (0.35 - k * 0.07) + ')'; c.beginPath(); c.arc(sx(p.x - v.x * k * 0.025), sy(p.y - v.y * k * 0.025), PUFF[cur.kind].r * S * (1 - k * 0.15), 0, 7); c.fill(); } drawPuff(c, sx(p.x), sy(p.y), PUFF[cur.kind].r, cur.kind, -cur.body.getAngle()); }
+  if (cur && cur.extra) cur.extra.forEach(b => { const p = b.getPosition(); drawPuff(c, sx(p.x), sy(p.y), PUFF.split.r, 'split', -b.getAngle()); });
+  // slingshot front arm
+  wood(bx, by + 26 * q, bx + 16 * q, by - 6 * q, 8 * q);
+  // waiting Puffs line up behind the slingshot
+  puffList.forEach((k, i) => drawPuff(c, bx - 1.1 * S - i * 0.8 * S, gy - PUFF[k].r * S, PUFF[k].r, k, Math.sin(t / 300 + i) * 0.1));
+  fx.forEach(e => {
+    if (e.ring) { c.strokeStyle = 'rgba(255,200,90,' + e.t * 2 + ')'; c.lineWidth = 5; c.beginPath(); c.arc(sx(e.x), sy(e.y), (0.4 - e.t) * (e.rad || 3) * S * 2.2 + 8, 0, 7); c.stroke(); c.lineWidth = 1; }
+    else if (e.flash) { const r = (e.rad || 2) * S * 0.8, gg = c.createRadialGradient(sx(e.x), sy(e.y), 0, sx(e.x), sy(e.y), r); gg.addColorStop(0, 'rgba(255,255,220,' + e.t * 5 + ')'); gg.addColorStop(0.4, 'rgba(255,190,60,' + e.t * 4 + ')'); gg.addColorStop(1, 'rgba(255,120,40,0)'); c.fillStyle = gg; c.beginPath(); c.arc(sx(e.x), sy(e.y), r, 0, 7); c.fill(); }
+    else if (e.smoke) { c.fillStyle = 'rgba(110,104,100,' + Math.min(0.3, e.t * 0.25) + ')'; c.beginPath(); c.arc(sx(e.x), sy(e.y), (e.r + (1.6 - e.t) * 0.5) * S, 0, 7); c.fill(); }
+    else { c.fillStyle = e.c; c.fillRect(sx(e.x) - 2.5, sy(e.y) - 2.5, 5, 5); }
+  });
+  pops.forEach(p => K.text(c, String(p.txt), sx(p.x), sy(p.y), 13, '#fff'));
+  c.restore();
+}
+title(); K.run(update, draw);
+</script>
+</body>
+</html>

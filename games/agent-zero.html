@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Agent Zero</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Agent Zero: a first-person spy mission. Sneak through three secret bases, grab the data disks and reach the exit pad.
+K.theme({ bg: '#0a0c10', ink: '#e8f0ff', accent: '#ffd23f', accentInk: '#2a1d00' });
+let W = 240, H = 330, VIEWH = 226, LAND = false; // tall portrait view: 3D view on top, instrument panel + big map below
+// phone on its side: the 3D view fills the whole screen and the panel shrinks to a small overlay in the corners
+K.screen(W, H); K.fullLand();
+function layout() {
+  const land = innerWidth > innerHeight * 1.15, st = K.stageSize();
+  const nH = land ? 240 : 330, nW = land ? Math.round(K.clamp(nH * st.w / Math.max(1, st.h), 240, 640)) : 240;
+  LAND = land;
+  if (nW !== W || nH !== H) { W = nW; H = nH; VIEWH = land ? H : 226; K.screen(W, H); }
+  PROJ = (W / 2) / Math.tan(FOV / 2); zbuf = new Array(W);
+  MAPBOX = land ? { x: W - 86, y: 6, w: 80, h: 70 } : { x: W - 104, y: VIEWH + 6, w: 100, h: H - VIEWH - 10 };
+}
+addEventListener('resize', () => { layout(); setTimeout(layout, 150); });
+K.hud(['mission', 'disks', 'ammo']);
+K.pad({ dpad: '4', buttons: [{ id: 'sl', label: '◀', top: true }, { id: 'sr', label: '▶', top: true }, { id: 'b', label: 'USE' }, { id: 'a', label: 'FIRE' }] });
+// keyboard: Q / E strafe
+addEventListener('keydown', e => { if (e.key === 'q' || e.key === 'Q') K.press('sl'); if (e.key === 'e' || e.key === 'E') K.press('sr'); });
+addEventListener('keyup', e => { if (e.key === 'q' || e.key === 'Q') K.release('sl'); if (e.key === 'e' || e.key === 'E') K.release('sr'); });
+const MAPS = [["########################", "#P.....#.....#.....g..d#", "#......#.....#.........#", "#..a...D..g..D....###..#", "#......#.....#....#h#..#", "####D###.....#....#.#..#", "#......####D###...#D#..#", "#..g...#......#........#", "#......#..h...#..g.....#", "#......D......####D#####", "#..d...#..g...#........#", "#......#......#..a..g..#", "###D####......#........#", "#......########.....####", "#..g...........g....#..#", "#......#####........D.E#", "#..a...#...#........#..#", "#......#.d.D..g.....####", "#......#...#...........#", "########################"], ["########################", "#P....#........#......d#", "#.....#..g.....D..g....#", "#.....D........#.......#", "#.....#####D####.......#", "##D####.....#..####K####", "#.....#..a..#..#.......#", "#..g..#.....#..#..g..k.#", "#.....D..g..D..#.......#", "#.....#.....#..###D#####", "#.h...#######..........#", "####D##.d....#..g......#", "#.....#......D.....a...#", "#..g..#..g...#.........#", "#.....#......#####D#####", "#.....D......#.........#", "#.a...#......#..g....E.#", "#######......D.........#", "#.d..........#....h....#", "########################"], ["########################", "#P..#.....g.....#.....d#", "#...D...........D..g...#", "#...#..######...#......#", "##D##..#....#...####D###", "#......#.d..K...#......#", "#..g...#....#...#..g...#", "#......######...#..h...#", "#.a.......g.....D......#", "####D#####..#####.....##", "#........#..#...#...g..#", "#..g..k..#..D.a.#......#", "#........#..#...###D####", "#####D####..#..........#", "#........#..####..g....#", "#.h...g..D..#..#.......#", "#........#..#..D...E...#", "#..d.....#..#..#...g...#", "#........#.....#.......#", "########################"]];
+const BRIEFS = ['Mission 1: Harbor Warehouse. Recover 3 data disks, then reach the green exit pad.', 'Mission 2: Mountain Lab. A keycard opens the red security door. 3 disks, then exit.', 'Mission 3: Satellite Base. The final 3 disks are behind a locked vault. Then get out!'];
+let bigMap = false, state = 'title', mi, g, pl, sprites, doors, shots, disks, ammo, hp, keycard, flash, hurtT, msg, msgT, gunT, zbuf = new Array(W), time, kills, best = K.best('agentzero');
+function title() { K.card({ title: 'AGENT ZERO', text: 'Move with ▲ ▼, turn with ◀ ▶. FIRE shoots, USE opens doors in front of you. Tap the map for a big map. Guards spot you if they can see you, so pick your moment. Collect 3 data disks per mission and reach the green exit pad.', best: best ? 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0') : '', button: 'Accept mission', onStart: () => { mi = 0; time = 0; kills = 0; hp = 100; ammo = 40; load(); state = 'play'; } }); }
+function load() {
+  g = MAPS[mi].map(r => r.split('')); sprites = []; doors = {}; shots = []; disks = 0; keycard = false; flash = 0; hurtT = 0; gunT = 0;
+  for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) {
+    const ch = g[y][x];
+    if (ch === 'P') { pl = { x: x + 0.5, y: y + 0.5, a: 0 }; g[y][x] = '.'; }
+    if (ch === 'g') { sprites.push({ k: 'guard', v: K.ri(0, 4), skin: K.ri(0, 3), x: x + 0.5, y: y + 0.5, hp: 3 + mi, st: 'idle', t: K.rnd(0.5, 2), a: Math.random() * 6.28, seen: 0 }); g[y][x] = '.'; }
+    if ('dahk'.includes(ch)) { sprites.push({ k: ch, x: x + 0.5, y: y + 0.5 }); g[y][x] = '.'; }
+    if (ch === 'D' || ch === 'K') doors[x + ',' + y] = { open: 0, opening: false, locked: ch === 'K' };
+  }
+  msg = BRIEFS[mi]; msgT = 4; hud();
+}
+function hud() { K.set('mission', 'MISSION ' + (mi + 1) + ' ♥' + Math.max(0, Math.ceil(hp))); K.set('disks', 'DISKS ' + disks + '/3' + (keycard ? ' ⚿' : '')); K.set('ammo', 'AMMO ' + ammo); }
+function cell(x, y) { const r = g[Math.floor(y)]; return r ? r[Math.floor(x)] || '#' : '#'; }
+function solidAt(x, y) { const ch = cell(x, y); if (ch === '#' || ch === 'E' && false) return true; if (ch === 'D' || ch === 'K') { const d = doors[Math.floor(x) + ',' + Math.floor(y)]; return !d || d.open < 0.9; } return false; }
+
+let MAPBOX = { x: W - 104, y: VIEWH + 6, w: 100, h: H - VIEWH - 10 };
+function update(dt) {
+  if (state !== 'play') return;
+  // tap the minimap to open the full-screen map (the mission pauses while it is open); tap again to close
+  if (K.ptr.tapped) { const p = K.ptr; if (bigMap) { bigMap = false; K.beep(500, 0.05, { vol: 0.03 }); } else if (p.x >= MAPBOX.x - 4 && p.y >= MAPBOX.y - 4 && p.y <= MAPBOX.y + MAPBOX.h + 4) { bigMap = true; K.beep(700, 0.05, { vol: 0.03 }); } }
+  if (bigMap) return;
+  time += dt; if (msgT > 0) msgT -= dt; if (flash > 0) flash -= dt; if (hurtT > 0) hurtT -= dt; if (gunT > 0) gunT -= dt;
+  const turn = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0), mv = (K.down('up') ? 1 : 0) - (K.down('down') ? 1 : 0);
+  pl.a += turn * 2.6 * dt;
+  // strafe: step sideways (crab walk) while still facing forward
+  const st = (K.down('sr') ? 1 : 0) - (K.down('sl') ? 1 : 0), sp = 2.6 * dt * mv, ss = 2.2 * dt * st;
+  const nx = pl.x + Math.cos(pl.a) * sp - Math.sin(pl.a) * ss, ny = pl.y + Math.sin(pl.a) * sp + Math.cos(pl.a) * ss, r = 0.22;
+  if (!solidAt(nx + Math.sign(nx - pl.x) * r, pl.y)) pl.x = nx;
+  if (!solidAt(pl.x, ny + Math.sign(ny - pl.y) * r)) pl.y = ny;
+  if ((mv || st) && Math.random() < dt * 4) K.beep(90, 0.03, { vol: 0.02 });
+  // doors
+  for (const k in doors) { const d = doors[k]; if (d.opening) d.open = Math.min(1, d.open + dt * 1.6); }
+  if (K.hit('b')) {
+    const fx = Math.floor(pl.x + Math.cos(pl.a) * 0.9), fy = Math.floor(pl.y + Math.sin(pl.a) * 0.9), d = doors[fx + ',' + fy];
+    if (d) { if (d.locked && !keycard) { msg = 'LOCKED. FIND THE KEYCARD.'; msgT = 1.5; K.beep(150, 0.15, { vol: 0.05 }); } else if (!d.opening) { d.opening = true; K.beep(220, 0.4, { type: 'sawtooth', to: 440, vol: 0.04 }); } }
+  }
+  // fire
+  if (K.hit('a') && gunT <= 0) {
+    if (ammo <= 0) { K.beep(120, 0.05, { vol: 0.04 }); msg = 'OUT OF AMMO'; msgT = 1; }
+    else {
+      ammo--; gunT = 0.28; flash = 0.08; K.noise(0.12, 0.35); hud();
+      // hit the guard nearest the centre of the screen that is in view
+      let best = null, bd = 1e9;
+      for (const s of sprites) if (s.k === 'guard' && s.hp > 0) { const dx = s.x - pl.x, dy = s.y - pl.y, dist = Math.hypot(dx, dy); let ang = Math.atan2(dy, dx) - pl.a; while (ang > Math.PI) ang -= 6.283; while (ang < -Math.PI) ang += 6.283; if (Math.abs(ang) < 0.12 + 0.25 / dist && dist < bd && los(pl.x, pl.y, s.x, s.y)) { best = s; bd = dist; } }
+      if (best) { best.hp -= bd < 3 ? 2 : 1; best.st = 'alert'; best.hit = 0.2; if (best.hp <= 0) { kills++; K.beep(200, 0.3, { type: 'square', to: 60, vol: 0.05 }); if (Math.random() < 0.6) sprites.push({ k: 'a', x: best.x, y: best.y }); } }
+      for (const s of sprites) if (s.k === 'guard' && s.hp > 0 && Math.hypot(s.x - pl.x, s.y - pl.y) < 8) s.st = 'alert';
+    }
+  }
+  // pickups
+  for (const s of sprites) if (s.k !== 'guard' && !s.got && Math.hypot(s.x - pl.x, s.y - pl.y) < 0.5) {
+    s.got = true;
+    if (s.k === 'd') { disks++; msg = 'DATA DISK ' + disks + '/3'; msgT = 1.5; K.tune([784, 988, 1175], 0.06); }
+    if (s.k === 'a') { ammo += 12; K.beep(600, 0.06, { vol: 0.04 }); }
+    if (s.k === 'h') { hp = Math.min(100, hp + 30); K.beep(900, 0.08, { vol: 0.04 }); }
+    if (s.k === 'k') { keycard = true; msg = 'KEYCARD ACQUIRED'; msgT = 1.5; K.tune([659, 880], 0.07); }
+    hud();
+  }
+  sprites = sprites.filter(s => !s.got);
+  // guards
+  for (const s of sprites) {
+    if (s.k !== 'guard' || s.hp <= 0) continue;
+    if (s.hit > 0) s.hit -= dt;
+    const dx = pl.x - s.x, dy = pl.y - s.y, dist = Math.hypot(dx, dy), see = dist < 9 && los(s.x, s.y, pl.x, pl.y);
+    if (see && dist < 6) s.st = 'alert';
+    s.t -= dt;
+    if (s.st === 'alert') {
+      if (see) {
+        if (dist > 2) { const nx = s.x + dx / dist * 1.1 * dt, ny = s.y + dy / dist * 1.1 * dt; if (!solidAt(nx, s.y)) s.x = nx; if (!solidAt(s.x, ny)) s.y = ny; }
+        if (s.t <= 0) { s.t = K.rnd(0.9, 1.6) - mi * 0.15; s.fire = 0.15; K.beep(300, 0.08, { type: 'square', vol: 0.04 }); if (Math.random() < Math.max(0.25, 0.85 - dist * 0.09)) { hp -= 8 + mi * 3; hurtT = 0.3; hud(); if (hp <= 0) return lose(); } }
+      } else if (s.t <= 0) { s.t = 1; s.st = 'idle'; }
+    } else if (s.t <= 0) { s.t = K.rnd(1, 3); s.a = Math.random() * 6.28; }
+    else { const nx = s.x + Math.cos(s.a) * 0.6 * dt, ny = s.y + Math.sin(s.a) * 0.6 * dt; if (!solidAt(nx, ny)) { s.x = nx; s.y = ny; } else s.t = 0; }
+    if (s.fire > 0) s.fire -= dt;
+  }
+  if (cell(pl.x, pl.y) === 'E') { if (disks >= 3) { mi++; K.tune([523, 659, 784, 1047], 0.1); if (mi >= MAPS.length) return win(); hp = Math.min(100, hp + 40); load(); } else if (msgT <= 0) { msg = 'NEED ' + (3 - disks) + ' MORE DISK' + (3 - disks > 1 ? 'S' : ''); msgT = 1.2; } }
+}
+function los(x0, y0, x1, y1) { const d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d * 4); for (let i = 1; i < n; i++) { const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n; if (solidAt(x, y)) return false; } return true; }
+function lose() { state = 'over'; K.tune([392, 330, 262, 196], 0.18, { type: 'sawtooth' }); K.card({ title: 'AGENT DOWN', text: 'You were caught on mission ' + (mi + 1) + '. Try a quieter approach.', best: best ? 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0') : '', button: 'Retry mission', onStart: () => { hp = 100; ammo = Math.max(ammo, 30); load(); state = 'play'; } }); }
+function win() { state = 'over'; const t = Math.floor(time); best = K.saveBest('agentzero', t, true); K.card({ title: 'MISSION COMPLETE', text: 'All three bases cleared in ' + Math.floor(t / 60) + 'm ' + t % 60 + 's with ' + kills + ' guards down.', best: 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0'), button: 'Play again', onStart: () => { mi = 0; time = 0; kills = 0; hp = 100; ammo = 40; load(); state = 'play'; } }); }
+
+const FOV = 1.15; let PROJ = (W / 2) / Math.tan(FOV / 2); const WALLC = { '#': [90, 100, 120], D: [150, 110, 60], K: [190, 50, 60], E: [40, 200, 90] };
+
+const TEXC = {};
+function wallTex(ch) {
+  if (TEXC[ch]) return TEXC[ch];
+  const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d'), b = WALLC[ch] || WALLC['#'], col = 'rgb(' + b[0] + ',' + b[1] + ',' + b[2] + ')';
+  const lite = 'rgb(' + Math.min(255, b[0] + 40) + ',' + Math.min(255, b[1] + 40) + ',' + Math.min(255, b[2] + 40) + ')', dark = 'rgb(' + (b[0] * 0.55 | 0) + ',' + (b[1] * 0.55 | 0) + ',' + (b[2] * 0.55 | 0) + ')';
+  g.fillStyle = col; g.fillRect(0, 0, 64, 64);
+  for (let i = 0; i < 400; i++) { g.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.07)'; g.fillRect(Math.random() * 64, Math.random() * 64, 1, 1); }
+  if (ch === 'D' || ch === 'K') {
+    g.fillStyle = dark; g.fillRect(0, 0, 64, 4); g.fillRect(0, 60, 64, 4); g.fillRect(0, 0, 4, 64); g.fillRect(60, 0, 4, 64);
+    g.fillStyle = lite; for (let y = 10; y < 56; y += 8) g.fillRect(8, y, 48, 2);
+    g.fillStyle = dark; for (let y = 12; y < 58; y += 8) g.fillRect(8, y, 48, 1);
+    if (ch === 'K') { for (let x = -64; x < 64; x += 12) { g.fillStyle = '#ffd23a'; g.beginPath(); g.moveTo(x, 64); g.lineTo(x + 6, 64); g.lineTo(x + 70, 0); g.lineTo(x + 64, 0); g.fill(); } g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#e63946'; g.fillRect(26, 26, 12, 12); g.fillStyle = '#fff'; g.fillRect(29, 30, 6, 4); }
+    g.fillStyle = '#111'; g.fillRect(31, 4, 2, 56);
+  } else {
+    // concrete panels with seams, bolts, vents and stains
+    g.fillStyle = dark; g.fillRect(0, 31, 64, 2); g.fillRect(31, 0, 2, 64);
+    g.fillStyle = lite; g.fillRect(0, 33, 64, 1); g.fillRect(33, 0, 1, 64);
+    g.fillStyle = dark; [[4, 4], [27, 4], [4, 27], [27, 27], [37, 37], [59, 37], [37, 59], [59, 59], [37, 4], [59, 4], [4, 37], [4, 59]].forEach(p => { g.fillRect(p[0], p[1], 2, 2); });
+    g.fillStyle = dark; g.fillRect(40, 12, 16, 10); g.fillStyle = 'rgba(0,0,0,.6)'; for (let y = 13; y < 22; y += 2) g.fillRect(41, y, 14, 1);
+    const st = g.createLinearGradient(0, 40, 0, 64); st.addColorStop(0, 'rgba(0,0,0,0)'); st.addColorStop(1, 'rgba(0,0,0,.3)'); g.fillStyle = st; g.fillRect(0, 40, 64, 24);
+    g.fillStyle = 'rgba(40,30,20,.25)'; g.fillRect(10, 44, 3, 16); g.fillRect(14, 48, 2, 12);
+  }
+  return (TEXC[ch] = cv);
+}
+// ---- detailed guard sprite: drawn in a 100-unit-tall box (0 = top of head, 100 = boots), x centred on 0 ----
+const SKINS = [[226, 178, 140], [196, 140, 100], [150, 100, 70], [100, 66, 46]];
+const UNI = [[[78, 96, 58], [56, 70, 40]], [[52, 66, 98], [36, 46, 72]], [[44, 44, 50], [28, 28, 32]]]; // olive, navy, black ops per mission
+function drawGuard(c, s, sx, fy, size, shade, t) {
+  const h = size * 0.92, u = h / 100, hit = s.hit > 0;
+  const P = (r, g, b, a) => hit ? 'rgba(255,255,255,' + (a == null ? 1 : a) + ')' : 'rgba(' + (r * shade | 0) + ',' + (g * shade | 0) + ',' + (b * shade | 0) + ',' + (a == null ? 1 : a) + ')';
+  const A = (rgb, k) => P(rgb[0] * k, rgb[1] * k, rgb[2] * k);
+  c.save(); c.translate(sx, fy - h); c.scale(u, u);
+  const R = (x, y, w, hh, col) => { c.fillStyle = col; c.fillRect(x, y, w, hh); };
+  const skin = SKINS[s.skin || 0], uni = UNI[Math.min(2, mi)][0], uniD = UNI[Math.min(2, mi)][1];
+  if (s.hp <= 0) { // knocked out on the floor
+    c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(0, 97, 40, 4, 0, 0, 7); c.fill();
+    R(-34, 86, 12, 9, A(skin, 0.9)); R(-34, 84, 12, 4, P(30, 30, 30)); // head + hair
+    c.strokeStyle = P(20, 20, 20); c.lineWidth = 1.2; c.beginPath(); c.moveTo(-31, 88); c.lineTo(-28, 91); c.moveTo(-28, 88); c.lineTo(-31, 91); c.stroke();
+    R(-22, 85, 26, 11, A(uni, 1)); R(-22, 85, 26, 2, A(uni, 1.2)); R(4, 87, 6, 8, P(20, 20, 20)); R(10, 87, 22, 4, A(uniD, 1)); R(10, 91, 22, 4, A(uniD, 0.85)); R(32, 86, 5, 9, P(15, 15, 15));
+    c.restore(); return;
+  }
+  const alert = s.st === 'alert', firing = s.fire > 0, step = Math.sin(t / 140 + s.x * 3) * (alert ? 0 : 1.2);
+  // floor shadow
+  c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(0, 99, 22, 3, 0, 0, 7); c.fill();
+  // boots
+  R(-15, 92 + step * 0.3, 12, 8, P(22, 20, 18)); R(3, 92 - step * 0.3, 12, 8, P(22, 20, 18)); R(-14, 93, 5, 1.2, P(70, 66, 60)); R(4, 93, 5, 1.2, P(70, 66, 60)); R(-15, 98.6, 12, 1.4, P(8, 8, 8)); R(3, 98.6, 12, 1.4, P(8, 8, 8));
+  // trousers with knee pads / creases and cargo pockets
+  R(-14, 60, 12, 33, A(uniD, 1)); R(2, 60, 12, 33, A(uniD, 1)); R(-2, 60, 4, 12, A(uniD, 0.8));
+  R(-9, 62, 1, 30, A(uniD, 0.75)); R(8, 62, 1, 30, A(uniD, 0.75));
+  R(-15, 70, 5, 9, A(uniD, 0.85)); R(10, 70, 5, 9, A(uniD, 0.85)); R(-15, 70, 5, 1.5, A(uniD, 1.2)); R(10, 70, 5, 1.5, A(uniD, 1.2));
+  R(-13, 80, 10, 3, A(uniD, 1.25)); R(3, 80, 10, 3, A(uniD, 1.25)); // knee pads
+  // belt + buckle + holster
+  R(-16, 56, 32, 5, P(26, 22, 18)); R(-3, 56.5, 6, 4, P(210, 170, 60)); R(-1.5, 57.5, 3, 2, P(26, 22, 18)); R(11, 57, 6, 10, P(34, 28, 22));
+  // torso: jacket with collar, zip/buttons, chest pockets, badge, epaulettes
+  R(-18, 29, 36, 28, A(uni, 1)); R(8, 29, 10, 28, A(uni, 0.85)); R(-18, 29, 3, 28, A(uni, 1.15));
+  R(-7, 29, 14, 4, A(uni, 0.7)); c.fillStyle = mi === 2 ? P(20, 20, 24) : P(225, 225, 215); c.beginPath(); c.moveTo(-5, 29); c.lineTo(0, 37); c.lineTo(5, 29); c.fill(); // shirt V
+  R(-0.8, 34, 1.6, 22, A(uni, 0.65)); for (let y = 38; y < 56; y += 5) R(-1.3, y, 2.6, 2, P(200, 180, 120));
+  R(-15, 37, 11, 9, A(uni, 0.9)); R(4, 37, 11, 9, A(uni, 0.9)); R(-15, 37, 11, 2.5, A(uni, 1.15)); R(4, 37, 11, 2.5, A(uni, 1.15)); R(-10.5, 39.5, 2, 1.5, P(200, 180, 120)); R(8.5, 39.5, 2, 1.5, P(200, 180, 120));
+  c.fillStyle = P(240, 200, 70); c.beginPath(); for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr = k % 2 ? 1.2 : 2.8; c.lineTo(-9.5 + Math.cos(a) * rr, 33.5 + Math.sin(a) * rr); } c.fill(); // badge star
+  R(-20, 29, 8, 3, A(uni, 1.3)); R(12, 29, 8, 3, A(uni, 1.3)); R(-19, 29.5, 1, 2, P(220, 190, 80)); R(18, 29.5, 1, 2, P(220, 190, 80));
+  R(-18, 50, 36, 1.5, A(uni, 0.7));
+  // arms
+  if (alert) { // pistol raised in both hands, pointed at you
+    R(-22, 31, 7, 14, A(uni, 0.95)); R(15, 31, 7, 14, A(uni, 0.8));
+    c.fillStyle = A(uni, 0.9); c.beginPath(); c.moveTo(-22, 42); c.lineTo(-15, 45); c.lineTo(-3, 46); c.lineTo(-3, 51); c.lineTo(-18, 50); c.fill();
+    c.fillStyle = A(uni, 0.78); c.beginPath(); c.moveTo(22, 42); c.lineTo(15, 45); c.lineTo(3, 46); c.lineTo(3, 51); c.lineTo(18, 50); c.fill();
+    R(-5, 44, 10, 8, A(skin, 0.95)); R(-5, 44, 10, 1.5, A(skin, 1.1)); R(-1, 48, 2, 4, A(skin, 0.75)); // hands
+    R(-3.5, 38, 7, 7, P(30, 30, 34)); R(-2.2, 39.3, 4.4, 4.4, P(8, 8, 8)); R(-3.5, 38, 7, 1, P(90, 90, 100)); // gun muzzle facing you
+    if (firing) { c.fillStyle = P(255, 230, 90, 0.95); c.beginPath(); for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6, rr = k % 2 ? 4 : 10; c.lineTo(Math.cos(a) * rr, 41.5 + Math.sin(a) * rr); } c.fill(); c.fillStyle = P(255, 255, 230); c.beginPath(); c.arc(0, 41.5, 3, 0, 7); c.fill(); }
+  } else {
+    R(-23, 31, 6, 26, A(uni, 0.95)); R(17, 31, 6, 26, A(uni, 0.8)); R(-23, 46, 6, 2, A(uni, 0.7)); R(17, 46, 6, 2, A(uni, 0.65));
+    R(-23, 57, 6, 6, A(skin, 0.95)); R(17, 57, 6, 6, A(skin, 0.8)); R(-23, 61.5, 6, 1.5, A(skin, 0.7)); R(17, 61.5, 6, 1.5, A(skin, 0.6));
+    R(18, 52, 3, 16, P(28, 28, 30)); // radio / baton at the side
+  }
+  // neck
+  R(-5, 24, 10, 6, A(skin, 0.85)); R(-5, 28, 10, 1.5, A(skin, 0.65));
+  // head: ears, face with side shading, jaw
+  R(-13, 10, 3, 7, A(skin, 0.85)); R(10, 10, 3, 7, A(skin, 0.75)); R(-12.3, 12, 1.2, 3, A(skin, 0.6)); R(11.1, 12, 1.2, 3, A(skin, 0.55));
+  c.fillStyle = A(skin, 1); c.beginPath(); c.moveTo(-10, 2); c.lineTo(10, 2); c.lineTo(11, 16); c.lineTo(8, 23); c.lineTo(3, 26); c.lineTo(-3, 26); c.lineTo(-8, 23); c.lineTo(-11, 16); c.closePath(); c.fill();
+  c.fillStyle = A(skin, 0.82); c.beginPath(); c.moveTo(5, 2); c.lineTo(10, 2); c.lineTo(11, 16); c.lineTo(8, 23); c.lineTo(3, 26); c.lineTo(5, 18); c.closePath(); c.fill(); // shadow side
+  R(-9, 4, 4, 3, A(skin, 1.12)); // forehead highlight
+  // cheekbones
+  R(-9, 16, 3, 1.2, A(skin, 0.88)); R(6, 16, 3, 1.2, A(skin, 0.75));
+  const v = s.v || 0, look = K.clamp((pl.x - s.x) * 0.2, -0.8, 0.8);
+  // stubble / beard shadow (variants 0, 2)
+  if (v === 0 || v === 2) { c.fillStyle = P(skin[0] * 0.55, skin[1] * 0.5, skin[2] * 0.48, 0.55); c.beginPath(); c.moveTo(-10, 17); c.lineTo(-8, 23); c.lineTo(-3, 26); c.lineTo(3, 26); c.lineTo(8, 23); c.lineTo(10, 17); c.lineTo(6, 19); c.lineTo(-6, 19); c.closePath(); c.fill(); c.fillStyle = P(30, 24, 20, 0.5); for (let k = 0; k < 14; k++) { const hx = -8 + ((k * 37) % 16), hy = 19 + ((k * 13) % 6); c.fillRect(hx, hy, 0.7, 0.7); } }
+  // eyes / sunglasses
+  if (v === 2) {
+    R(-9, 10, 18, 1.4, P(20, 20, 24)); R(-9, 10, 8, 5, P(12, 12, 16)); R(1, 10, 8, 5, P(12, 12, 16)); R(-8, 10.8, 3, 1.2, P(120, 160, 200, 0.8)); R(2, 10.8, 3, 1.2, P(120, 160, 200, 0.8));
+  } else {
+    R(-8, 11, 6, 3.4, P(240, 238, 230)); R(2, 11, 6, 3.4, P(240, 238, 230));
+    const ex = look * 1.5; R(-6.2 + ex, 11.2, 2.6, 3, P(60, 44, 30)); R(3.8 + ex, 11.2, 2.6, 3, P(60, 44, 30)); R(-5.5 + ex, 11.8, 1.3, 1.8, P(5, 5, 5)); R(4.5 + ex, 11.8, 1.3, 1.8, P(5, 5, 5));
+    R(-5 + ex, 11.5, 0.6, 0.6, P(255, 255, 255)); R(5 + ex, 11.5, 0.6, 0.6, P(255, 255, 255)); // catchlights
+    R(-8, 14.2, 6, 0.8, A(skin, 0.7)); R(2, 14.2, 6, 0.8, A(skin, 0.7)); // lower lids / bags
+    R(-8, 10.6, 6, 0.7, P(40, 30, 25)); R(2, 10.6, 6, 0.7, P(40, 30, 25)); // upper lids
+  }
+  // eyebrows: flat when calm, angled down to the nose when alert
+  const hairC = v === 3 ? P(150, 60, 30) : P(38, 30, 24); c.fillStyle = hairC;
+  if (alert) { c.beginPath(); c.moveTo(-9, 7.5); c.lineTo(-2, 9.6); c.lineTo(-2, 11); c.lineTo(-9, 9.2); c.fill(); c.beginPath(); c.moveTo(9, 7.5); c.lineTo(2, 9.6); c.lineTo(2, 11); c.lineTo(9, 9.2); c.fill(); R(-1.2, 9.5, 0.6, 1.6, A(skin, 0.7)); R(0.6, 9.5, 0.6, 1.6, A(skin, 0.7)); }
+  else { R(-9, 8.3, 7, 1.6, hairC); R(2, 8.3, 7, 1.6, hairC); }
+  // nose: bridge, shadow side, nostrils
+  R(-1, 12, 2, 6, A(skin, 1.08)); c.fillStyle = A(skin, 0.72); c.beginPath(); c.moveTo(1, 12); c.lineTo(2.5, 18.5); c.lineTo(0.5, 19); c.fill(); R(-2.6, 18.4, 5.2, 1.5, A(skin, 0.8)); R(-2, 19, 1.2, 0.8, P(60, 30, 25)); R(0.8, 19, 1.2, 0.8, P(60, 30, 25));
+  // mustache (variant 3) / scar (variant 1)
+  if (v === 3) { c.fillStyle = P(150, 60, 30); c.beginPath(); c.moveTo(-6, 22.5); c.lineTo(-3, 20.4); c.lineTo(3, 20.4); c.lineTo(6, 22.5); c.lineTo(3, 21.6); c.lineTo(-3, 21.6); c.fill(); }
+  if (v === 1) { c.strokeStyle = P(150, 70, 70); c.lineWidth = 0.6; c.beginPath(); c.moveTo(5, 13); c.lineTo(8, 19); c.stroke(); for (let k = 0; k < 3; k++) { c.beginPath(); c.moveTo(5.4 + k, 14.6 + k * 1.8); c.lineTo(7.2 + k, 14 + k * 1.8); c.stroke(); } }
+  // mouth: firm line, a snarl when alert, open when shouting/firing
+  if (firing) { R(-3.5, 21.5, 7, 3, P(70, 20, 20)); R(-3, 21.5, 6, 0.8, P(240, 240, 230)); }
+  else if (alert) { R(-4, 22, 8, 1, P(90, 40, 35)); R(-4.5, 22.8, 1.2, 0.8, P(90, 40, 35)); R(3.3, 22.8, 1.2, 0.8, P(90, 40, 35)); }
+  else { R(-3.5, 22, 7, 1, P(120, 60, 50)); R(-2.5, 23, 5, 0.6, A(skin, 0.75)); }
+  R(-2, 25, 4, 0.8, A(skin, 0.8)); // chin dimple shadow
+  // headgear by variant
+  if (v === 0) { // peaked officer cap with badge
+    R(-12, -3, 24, 7, A(uniD, 1.05)); R(-13, -4, 26, 2.5, A(uniD, 1.25)); R(-11, 3, 22, 1.5, P(200, 170, 60)); c.fillStyle = P(10, 10, 12); c.beginPath(); c.moveTo(-11, 4); c.lineTo(11, 4); c.lineTo(9, 7.5); c.lineTo(-9, 7.5); c.fill(); R(-8, 4.6, 6, 0.8, P(80, 80, 90)); c.fillStyle = P(230, 200, 80); c.beginPath(); c.arc(0, 0, 2.2, 0, 7); c.fill(); R(-11, 6.5, 2, 3, P(38, 30, 24)); R(9, 6.5, 2, 3, P(38, 30, 24));
+  } else if (v === 1) { // tilted beret with flash
+    const bc = mi === 1 ? [60, 60, 70] : [150, 28, 34]; c.fillStyle = P(bc[0], bc[1], bc[2]); c.beginPath(); c.ellipse(-2, 2, 13, 5, -0.18, 0, 7); c.fill(); c.fillStyle = P(bc[0] * 0.7, bc[1] * 0.7, bc[2] * 0.7); c.beginPath(); c.ellipse(-7, 3, 7, 3.2, -0.3, 0, 7); c.fill(); R(-11, 4.8, 22, 1.6, P(25, 20, 18)); R(-8, 1, 4, 4, P(230, 200, 80)); R(-7.2, 1.8, 2.4, 2.4, P(40, 90, 160));
+    R(-11, 6, 2, 5, P(38, 30, 24)); R(9, 6, 2, 5, P(38, 30, 24));
+  } else if (v === 2) { // buzz cut + earpiece
+    R(-10.5, 0.5, 21, 4.5, P(44, 36, 30)); R(-11, 3, 2, 7, P(44, 36, 30)); R(9, 3, 2, 7, P(44, 36, 30)); c.fillStyle = P(70, 60, 50, 0.6); for (let k = 0; k < 12; k++) c.fillRect(-9 + (k * 7) % 18, 1 + (k % 3), 0.6, 0.6);
+    R(10.5, 13, 2, 2, P(15, 15, 15)); R(11, 15, 0.8, 9, P(200, 200, 200));
+  } else if (v === 3) { // ginger, slicked hair + tactical headset
+    R(-10.5, 0, 21, 5, P(150, 60, 30)); R(-11, 2, 3, 9, P(150, 60, 30)); R(8, 2, 3, 8, P(130, 50, 25)); R(-6, 0.6, 9, 1.2, P(200, 100, 50));
+    R(-13, 9, 3, 7, P(30, 30, 34)); R(-12, 16, 1, 5, P(30, 30, 34)); R(-12, 21, 6, 1.4, P(30, 30, 34));
+  } else { // combat helmet with goggles strap
+    c.fillStyle = A(uniD, 1.1); c.beginPath(); c.moveTo(-13, 8); c.quadraticCurveTo(-13, -5, 0, -5); c.quadraticCurveTo(13, -5, 13, 8); c.closePath(); c.fill();
+    R(-13, 6.5, 26, 2, A(uniD, 0.75)); R(-11, 1, 22, 3, P(50, 50, 56)); R(-8, 1.4, 6, 2.2, P(120, 170, 200, 0.85)); R(2, 1.4, 6, 2.2, P(120, 170, 200, 0.85)); R(-13, 8, 1.2, 14, P(30, 26, 22)); R(11.8, 8, 1.2, 14, P(30, 26, 22));
+  }
+  // alert "!" above the head
+  if (alert && !firing && Math.floor(t / 300) % 2 === 0) { c.fillStyle = 'rgba(255,60,60,.9)'; R(-1.5, -16, 3, 7, 'rgba(255,60,60,.9)'); R(-1.5, -7.5, 3, 2.5, 'rgba(255,60,60,.9)'); }
+  c.restore();
+}
+function draw(c, t) {
+  c.fillStyle = '#0a0c10'; c.fillRect(0, 0, W, H);
+  if (!g) return;
+  // ceiling + floor
+  const sky = c.createLinearGradient(0, 0, 0, VIEWH / 2); sky.addColorStop(0, '#1a2030'); sky.addColorStop(1, '#3a4258'); c.fillStyle = sky; c.fillRect(0, 0, W, VIEWH / 2);
+  const fl = c.createLinearGradient(0, VIEWH / 2, 0, VIEWH); fl.addColorStop(0, '#16161a'); fl.addColorStop(1, '#4a4a54'); c.fillStyle = fl; c.fillRect(0, VIEWH / 2, W, VIEWH / 2);
+  // floor tiles in perspective
+  c.strokeStyle = 'rgba(255,255,255,.07)'; c.lineWidth = 1; for (let k = 1; k < 9; k++) { const y = VIEWH / 2 + (VIEWH / 2) * Math.pow(k / 9, 1.8); c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  const ph = (pl.a / (Math.PI * 2)) * 8 % 1; for (let k = -8; k <= 8; k++) { c.beginPath(); c.moveTo(W / 2 + (k + ph) * 6, VIEWH / 2); c.lineTo(W / 2 + (k + ph) * 70, VIEWH); c.stroke(); }
+  // ceiling lights
+  for (let k = 0; k < 5; k++) { const x = ((k * 70 - pl.a * 120) % 350 + 350) % 350 - 40; c.fillStyle = 'rgba(255,250,220,.5)'; c.fillRect(x, 8 + (k % 2) * 6, 26, 3); }
+  // walls by DDA raycasting
+  for (let col = 0; col < W; col++) {
+    const ra = pl.a - FOV / 2 + FOV * col / W, dx = Math.cos(ra), dy = Math.sin(ra);
+    let mx = Math.floor(pl.x), my = Math.floor(pl.y); const ddx = Math.abs(1 / dx), ddy = Math.abs(1 / dy);
+    let sx, sy, side = 0, distX, distY;
+    if (dx < 0) { sx = -1; distX = (pl.x - mx) * ddx; } else { sx = 1; distX = (mx + 1 - pl.x) * ddx; }
+    if (dy < 0) { sy = -1; distY = (pl.y - my) * ddy; } else { sy = 1; distY = (my + 1 - pl.y) * ddy; }
+    let ch = '.', dist = 30, hitDoor = 0;
+    for (let i = 0; i < 64; i++) {
+      if (distX < distY) { distX += ddx; mx += sx; side = 0; } else { distY += ddy; my += sy; side = 1; }
+      ch = cell(mx, my);
+      if (ch === '#' || ch === 'D' || ch === 'K' || ch === 'E' && false) {
+        if (ch === 'D' || ch === 'K') { const d = doors[mx + ',' + my]; if (d && d.open >= 0.9) continue; hitDoor = d ? d.open : 0; }
+        dist = side === 0 ? distX - ddx : distY - ddy; break;
+      }
+    }
+    const perp = dist * Math.cos(ra - pl.a), hh = Math.min(VIEWH * 4, PROJ / Math.max(0.05, perp)), top = VIEWH / 2 - hh / 2 + (hitDoor ? hh * hitDoor : 0);
+    const base = WALLC[ch] || WALLC['#'], shade = Math.max(0.2, 1 - perp / 12) * (side ? 0.78 : 1);
+    const wx = side === 0 ? pl.y + perp * dy : pl.x + perp * dx, frac = wx - Math.floor(wx), stripe = frac < 0.06 || frac > 0.94 ? 0.7 : 1;
+    const tex = wallTex(ch), tx = Math.min(63, Math.floor(frac * 64)), vis = hh - (hitDoor ? hh * hitDoor : 0);
+    if (vis > 0) { c.drawImage(tex, tx, hitDoor ? 64 * hitDoor : 0, 1, 64 * (1 - (hitDoor || 0)) || 1, col, top, 1, vis); c.fillStyle = 'rgba(0,0,8,' + (1 - shade * stripe).toFixed(3) + ')'; c.fillRect(col, top, 1, vis); }
+    zbuf[col] = perp;
+  }
+  // exit pad glow on floor (draw as sprite)
+  // sprites, far to near
+  const list = sprites.map(s => ({ s, d: Math.hypot(s.x - pl.x, s.y - pl.y) }));
+  for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) if (g[y][x] === 'E') list.push({ s: { k: 'E', x: x + 0.5, y: y + 0.5 }, d: Math.hypot(x + 0.5 - pl.x, y + 0.5 - pl.y) });
+  list.sort((a, b) => b.d - a.d);
+  for (const { s, d } of list) {
+    let ang = Math.atan2(s.y - pl.y, s.x - pl.x) - pl.a; while (ang > Math.PI) ang -= 6.283; while (ang < -Math.PI) ang += 6.283;
+    if (Math.abs(ang) > FOV / 2 + 0.3 || d < 0.2) continue;
+    const perp = d * Math.cos(ang), size = PROJ / perp, sx = W / 2 + Math.tan(ang) / Math.tan(FOV / 2) * W / 2;
+    const x0 = Math.floor(sx - size / 2), x1 = Math.floor(sx + size / 2);
+    c.save(); c.beginPath(); let any = false;
+    for (let col = Math.max(0, x0); col < Math.min(W, x1); col++) if (zbuf[col] > perp) { c.rect(col, 0, 1, VIEWH); any = true; }
+    if (!any) { c.restore(); continue; }
+    c.clip();
+    const fy = VIEWH / 2 + size / 2, shade = Math.max(0.3, 1 - perp / 12);
+    c.globalAlpha = 1;
+    if (s.k === 'guard') {
+      drawGuard(c, s, sx, fy, size, shade, t);
+    } else if (s.k === 'E') { c.fillStyle = 'rgba(60,255,120,' + (0.35 + Math.sin(t / 200) * 0.15) + ')'; c.fillRect(sx - size * 0.4, fy - size * 0.9, size * 0.8, size * 0.9); }
+    else { const col = { d: '#46d0ff', a: '#c8a050', h: '#ff3b5c', k: '#ffd23f' }[s.k]; const bs = size * 0.22, by = fy - bs - Math.sin(t / 250) * size * 0.04; c.fillStyle = col; c.fillRect(sx - bs / 2, by, bs, bs * (s.k === 'd' ? 1 : 0.7)); c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(sx - bs / 4, by + bs * 0.15, bs / 2, bs * 0.15); }
+    c.restore();
+  }
+  // gun: pistol held in the right hand, bobbing as you walk
+  const bob = Math.sin(t / 120) * ((K.down('up') || K.down('down')) ? 3 : 0.6), kick = gunT > 0.18 ? 8 : 0, gx = W / 2 + 22, gy = VIEWH - 58 + bob + kick;
+  c.fillStyle = '#c8916a'; c.beginPath(); c.moveTo(gx + 2, gy + 40); c.lineTo(gx + 30, gy + 40); c.lineTo(gx + 44, VIEWH); c.lineTo(gx - 6, VIEWH); c.fill(); // forearm
+  c.fillStyle = '#1e2a3a'; c.beginPath(); c.moveTo(gx - 6, VIEWH - 8 + bob * 0.3); c.lineTo(gx + 46, VIEWH - 8 + bob * 0.3); c.lineTo(gx + 50, VIEWH); c.lineTo(gx - 10, VIEWH); c.fill(); // sleeve cuff
+  c.fillStyle = '#26262c'; c.fillRect(gx + 6, gy + 18, 18, 26); c.fillStyle = '#34343c'; c.fillRect(gx + 8, gy + 20, 2, 22); // grip
+  c.fillStyle = '#3a3a44'; c.fillRect(gx + 2, gy, 26, 20); c.fillStyle = '#55555f'; c.fillRect(gx + 2, gy, 26, 4); c.fillStyle = '#1a1a1e'; for (let k = 0; k < 4; k++) c.fillRect(gx + 18 + k * 2.5, gy + 6, 1, 10); // slide + serrations
+  c.fillStyle = '#0a0a0c'; c.fillRect(gx + 11, gy + 3, 8, 7); c.fillStyle = '#ffd23f'; c.fillRect(gx + 14, gy - 2, 2, 3); // muzzle + front sight
+  c.fillStyle = '#d8a478'; c.fillRect(gx, gy + 24, 30, 16); c.fillStyle = '#c08a62'; for (let k = 0; k < 3; k++) c.fillRect(gx + 1, gy + 28 + k * 4, 28, 1); c.fillStyle = '#e8b890'; c.fillRect(gx - 4, gy + 18, 10, 10); // fingers + thumb
+  if (flash > 0) { c.fillStyle = 'rgba(255,220,80,.95)'; c.beginPath(); for (let k = 0; k < 14; k++) { const a = k * Math.PI / 7, rr = k % 2 ? 6 : 16; c.lineTo(gx + 15 + Math.cos(a) * rr, gy - 6 + Math.sin(a) * rr); } c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(gx + 15, gy - 6, 4, 0, 7); c.fill(); }
+  // crosshair
+  c.fillStyle = 'rgba(255,255,255,.75)'; c.fillRect(W / 2 - 1, VIEWH / 2 - 7, 2, 4); c.fillRect(W / 2 - 1, VIEWH / 2 + 3, 2, 4); c.fillRect(W / 2 - 7, VIEWH / 2 - 1, 4, 2); c.fillRect(W / 2 + 3, VIEWH / 2 - 1, 4, 2);
+  if (hurtT > 0) { c.fillStyle = 'rgba(255,0,0,' + hurtT + ')'; c.fillRect(0, 0, W, VIEWH); }
+  // ---- bottom panel: status on the left, big minimap on the right (sideways: small overlay instead) ----
+  if (LAND) {
+    c.fillStyle = 'rgba(8,10,16,.55)'; c.fillRect(4, 4, 112, 40);
+    c.fillStyle = '#2a2e3a'; c.fillRect(8, 8, 104, 7); c.fillStyle = hp > 30 ? '#3df07a' : (Math.floor(t / 200) % 2 ? '#ff3b5c' : '#a01830'); c.fillRect(9, 9, 102 * K.clamp(hp / 100, 0, 1), 5);
+    K.text(c, 'AMMO ' + ammo, 8, 23, 7, '#ffd23f', 'left'); K.text(c, 'DISKS ' + disks + '/3', 62, 23, 7, '#46d0ff', 'left');
+    K.text(c, keycard ? 'KEYCARD ✓' : 'NO KEYCARD', 8, 36, 6, keycard ? '#ffd23f' : '#7a86a0', 'left');
+  } else {
+  const pg = c.createLinearGradient(0, VIEWH, 0, H); pg.addColorStop(0, '#1c2030'); pg.addColorStop(1, '#0c0e16'); c.fillStyle = pg; c.fillRect(0, VIEWH, W, H - VIEWH);
+  c.fillStyle = '#3a4258'; c.fillRect(0, VIEWH, W, 2);
+  const lx = 8; let ly = VIEWH + 14;
+  K.text(c, 'HEALTH', lx, ly, 8, '#9aa6c0', 'left'); ly += 9;
+  c.fillStyle = '#2a2e3a'; c.fillRect(lx, ly, 116, 10); c.fillStyle = hp > 30 ? '#3df07a' : (Math.floor(t / 200) % 2 ? '#ff3b5c' : '#a01830'); c.fillRect(lx + 1, ly + 1, 114 * K.clamp(hp / 100, 0, 1), 8); c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(lx + 1, ly + 1, 114 * K.clamp(hp / 100, 0, 1), 2);
+  ly += 22; K.text(c, 'AMMO ' + ammo, lx, ly, 9, '#ffd23f', 'left');
+  for (let k = 0; k < Math.min(12, ammo); k++) { c.fillStyle = '#c8a050'; c.fillRect(lx + 70 + (k % 6) * 7, ly - 6 + Math.floor(k / 6) * 7, 4, 5); c.fillStyle = '#e8c070'; c.fillRect(lx + 70 + (k % 6) * 7, ly - 6 + Math.floor(k / 6) * 7, 4, 1.5); }
+  ly += 18; K.text(c, 'DISKS', lx, ly, 9, '#46d0ff', 'left');
+  for (let k = 0; k < 3; k++) { const x = lx + 50 + k * 18; c.fillStyle = k < disks ? '#46d0ff' : '#2a2e3a'; c.fillRect(x, ly - 7, 13, 14); c.fillStyle = k < disks ? '#d8f4ff' : '#3a3e4a'; c.fillRect(x + 3, ly - 7, 7, 5); c.fillStyle = '#0c0e16'; c.fillRect(x + 7, ly - 6, 2, 3); }
+  ly += 18; K.text(c, keycard ? 'KEYCARD ✓' : 'NO KEYCARD', lx, ly, 8, keycard ? '#ffd23f' : '#566078', 'left');
+  K.text(c, 'MISSION ' + (mi + 1), lx, H - 7, 7, '#7a86a0', 'left');
+  }
+  // minimap (tap to enlarge)
+  const B = MAPBOX, gw = g[0].length, gh = g.length, ms = Math.min((B.w - 4) / gw, (B.h - 12) / gh), ox = B.x + (B.w - gw * ms) / 2, oy = B.y + 2;
+  c.fillStyle = LAND ? 'rgba(5,7,12,.7)' : '#05070c'; c.fillRect(B.x, B.y, B.w, B.h); c.strokeStyle = '#46d0ff'; c.lineWidth = 1; c.strokeRect(B.x + 0.5, B.y + 0.5, B.w - 1, B.h - 1);
+  drawMap(c, ox, oy, ms, t, false);
+  K.text(c, 'TAP: BIG MAP', B.x + B.w / 2, B.y + B.h - 5, 6, '#46d0ff');
+  if (msgT > 0) { const my = LAND ? 84 : 6, mw = LAND ? Math.min(W, 300) : W, mx = (W - mw) / 2; c.fillStyle = 'rgba(0,0,0,.65)'; c.fillRect(mx, my, mw, 26); c.font = '10px Rubik, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#ffd23f'; wrapText(c, msg, W / 2, my + 13, mw - 12, 11); }
+  // full-screen map
+  if (bigMap) {
+    c.fillStyle = 'rgba(4,6,12,.94)'; c.fillRect(0, 0, W, H);
+    const bm = Math.min((W - 12) / gw, (H - 70) / gh), bx = (W - gw * bm) / 2, by = 34;
+    K.text(c, 'MISSION ' + (mi + 1) + ' MAP', W / 2, 16, 11, '#ffd23f');
+    c.strokeStyle = '#46d0ff'; c.strokeRect(bx - 3.5, by - 3.5, gw * bm + 7, gh * bm + 7);
+    drawMap(c, bx, by, bm, t, true);
+    const ky = by + gh * bm + 16; c.font = '8px Rubik, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle';
+    [['#ffd23f', 'YOU'], ['#46d0ff', 'DISK'], ['#3df07a', 'EXIT'], ['#ff3b5c', 'GUARD'], ['#c88a3a', 'DOOR']].forEach((L, k) => { const x = 10 + k * 46; c.fillStyle = L[0]; c.fillRect(x, ky - 3, 6, 6); c.fillStyle = '#c8d0e0'; c.fillText(L[1], x + 9, ky); });
+    K.text(c, 'PAUSED - TAP TO CLOSE', W / 2, H - 12, 9, '#9aa6c0');
+  }
+}
+function wrapText(c, s, x, y, maxW, lh) {
+  const words = s.split(' '); let line = '', lines = [];
+  for (const w of words) { const tst = line ? line + ' ' + w : w; if (c.measureText(tst).width > maxW && line) { lines.push(line); line = w; } else line = tst; }
+  lines.push(line); lines = lines.slice(0, 2); const y0 = y - (lines.length - 1) * lh / 2;
+  lines.forEach((l, i) => c.fillText(l, x, y0 + i * lh));
+}
+// the map: walls, doors, exit, disks/keycard, guards you can see, and you with a view cone
+function drawMap(c, ox, oy, ms, t, big) {
+  const gw = g[0].length, gh = g.length;
+  c.save(); c.beginPath(); c.rect(ox, oy, gw * ms, gh * ms); c.clip();
+  c.fillStyle = '#141a28'; c.fillRect(ox, oy, gw * ms, gh * ms);
+  for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) {
+    const ch = g[y][x], X = ox + x * ms, Y = oy + y * ms;
+    if (ch === '#') { c.fillStyle = '#4a5a7a'; c.fillRect(X, Y, ms, ms); if (ms > 4) { c.fillStyle = '#5e7096'; c.fillRect(X, Y, ms, 1); } }
+    else if (ch === 'D' || ch === 'K') { const d = doors[x + ',' + y]; c.fillStyle = ch === 'K' ? '#e63946' : '#c88a3a'; if (d && d.open >= 0.9) { c.globalAlpha = 0.35; } c.fillRect(X, Y, ms, ms); c.globalAlpha = 1; }
+    else if (ch === 'E') { c.fillStyle = Math.floor(t / 300) % 2 ? '#3df07a' : '#1f9a4a'; c.fillRect(X, Y, ms, ms); }
+  }
+  for (const s of sprites) {
+    const X = ox + s.x * ms, Y = oy + s.y * ms, r = Math.max(1.2, ms * 0.32);
+    if (s.k === 'd') { c.fillStyle = Math.floor(t / 250) % 2 ? '#46d0ff' : '#a8ecff'; c.fillRect(X - r, Y - r, r * 2, r * 2); }
+    else if (s.k === 'k') { c.fillStyle = '#ffd23f'; c.fillRect(X - r, Y - r * 0.7, r * 2, r * 1.4); }
+    else if (big && (s.k === 'h' || s.k === 'a')) { c.fillStyle = s.k === 'h' ? '#f4f4f4' : '#c8a050'; c.fillRect(X - r * 0.7, Y - r * 0.7, r * 1.4, r * 1.4); }
+    else if (s.k === 'guard' && s.hp > 0 && (Math.hypot(s.x - pl.x, s.y - pl.y) < 3 || los(pl.x, pl.y, s.x, s.y))) { c.fillStyle = s.st === 'alert' ? '#ff3b5c' : '#ff9a6a'; c.beginPath(); c.arc(X, Y, r, 0, 7); c.fill(); }
+  }
+  // you: view cone + arrow
+  const px = ox + pl.x * ms, py = oy + pl.y * ms, L = ms * (big ? 3 : 4);
+  c.fillStyle = 'rgba(255,210,63,.18)'; c.beginPath(); c.moveTo(px, py); c.arc(px, py, L, pl.a - FOV / 2, pl.a + FOV / 2); c.closePath(); c.fill();
+  const ar = Math.max(2.5, ms * 0.6); c.fillStyle = '#ffd23f'; c.beginPath(); c.moveTo(px + Math.cos(pl.a) * ar * 1.4, py + Math.sin(pl.a) * ar * 1.4); c.lineTo(px + Math.cos(pl.a + 2.5) * ar, py + Math.sin(pl.a + 2.5) * ar); c.lineTo(px + Math.cos(pl.a - 2.5) * ar, py + Math.sin(pl.a - 2.5) * ar); c.fill();
+  c.restore();
+}
+layout();
+title();
+K.run(update, draw);
+</script>
+</body>
+</html>

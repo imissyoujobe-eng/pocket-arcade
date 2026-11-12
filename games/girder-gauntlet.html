@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Girder Gauntlet</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/art.js"></script>
+<script src="../lib/roster.js"></script>
+<script>
+// Girder Gauntlet: climb the construction site past the barrels the Wrecker bot keeps rolling down, and rescue the puppy at the top.
+K.theme({ bg: '#0a0a14', ink: '#fff6ea', accent: '#ff5a36', accentInk: '#fff' });
+const W = 240, H = 330;
+// the tower is laid out in a 200x275 space and drawn 1.2x bigger, one girder level shorter than before
+const SCL = 1.2, DW = W / SCL, DH = H / SCL;
+K.screen(W, H);
+K.zoomLand(1.6, () => pl ? pl.y * SCL - 24 : H); // phone on its side: zoomed in, the view follows you up the tower
+K.hud(['score', 'bonus', 'stage', 'lives']);
+K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'JUMP' }] });
+
+// girders: [xLeft, yLeft, xRight, yRight]; barrels roll downhill and drop off the low end
+const FL = [[0, 258, 200, 266], [16, 226, 200, 216], [0, 176, 184, 186], [16, 144, 200, 134], [0, 94, 184, 104], [70, 56, 132, 56]];
+const LAD = [[172, 0, 1], [64, 0, 1, true], [34, 1, 2], [112, 1, 2, true], [162, 2, 3], [92, 2, 3], [40, 3, 4], [132, 3, 4, true], [122, 4, 5]];
+const HAMMERS = [[30, 1], [150, 3]];
+const TOP = FL.length - 1, WRECK = TOP - 1;
+function fy(f, x) { const g = FL[f]; const k = (x - g[0]) / (g[2] - g[0]); return g[1] + (g[3] - g[1]) * Math.max(0, Math.min(1, k)); }
+function downhill(f) { const g = FL[f]; return g[3] > g[1] ? 1 : -1; }
+
+let state = 'title', stage, score, lives, bonus, pl, barrels, fires, hammers, throwT, deadT, winT, parts, best = K.best('girder');
+function title() { K.card({ title: 'GIRDER GAUNTLET', text: 'The Wrecker bot grabbed the puppy! Climb ladders with up and down, JUMP over the rolling barrels, and grab a hammer to smash them. Reach the top girder to win the stage.', best: best ? 'BEST ' + best : '', button: 'Climb', onStart: () => { stage = 1; score = 0; lives = 3; begin(); state = 'play'; } }); }
+function begin() { pl = { f: 0, x: 20, y: fy(0, 20), vy: 0, air: false, climb: null, face: 1, hammer: 0, jumped: [] }; barrels = []; fires = []; parts = []; hammers = HAMMERS.map(h => ({ x: h[0], f: h[1], got: false })); throwT = 1.5; deadT = 0; winT = 0; bonus = 5000; hud(); }
+function hud() { K.set('score', score); K.set('bonus', 'BONUS ' + bonus); K.set('stage', 'STAGE ' + stage); K.set('lives', '♥'.repeat(Math.max(0, lives))); }
+// barrels roll faster and come more often on every stage
+const speed = () => 56 + stage * 14;
+
+function update(dt) {
+  if (state !== 'play') return;
+  for (const q of parts) { q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 300 * dt; q.l -= dt; } parts = parts.filter(q => q.l > 0);
+  if (deadT > 0) { deadT -= dt; if (deadT <= 0) { lives--; hud(); if (lives <= 0) return over(); begin(); } return; }
+  if (winT > 0) { winT -= dt; if (winT <= 0) { stage++; begin(); } return; }
+  pl.bt = (pl.bt || 0) + dt; if (pl.bt >= 1.2) { pl.bt = 0; bonus = Math.max(0, bonus - 100); hud(); if (bonus <= 0) return die(); }
+  // player
+  const ax = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0);
+  if (pl.climb) {
+    const L = pl.climb, dy = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
+    pl.y += dy * 42 * dt;
+    const top = fy(L[2], L[0]), bot = fy(L[1], L[0]);
+    if (pl.y <= top) { pl.y = top; pl.f = L[2]; pl.climb = null; }
+    else if (pl.y >= bot) { pl.y = bot; pl.f = L[1]; pl.climb = null; }
+  } else {
+    if (ax) pl.face = ax;
+    pl.x = K.clamp(pl.x + ax * (pl.hammer > 0 ? 40 : 55) * dt, FL[pl.f][0] + 4, FL[pl.f][2] - 4);
+    if (pl.air) { pl.vy += 420 * dt; pl.y += pl.vy * dt; if (pl.y >= fy(pl.f, pl.x) && pl.vy > 0) { pl.y = fy(pl.f, pl.x); pl.air = false; } }
+    else {
+      pl.y = fy(pl.f, pl.x);
+      if (K.hit('a') && pl.hammer <= 0) { pl.air = true; pl.vy = -150; pl.jumped = []; K.beep(500, 0.06, { to: 750, vol: 0.04 }); }
+      if (pl.hammer <= 0) {
+        if (K.down('up')) { const L = LAD.find(l => l[1] === pl.f && !l[3] && Math.abs(l[0] - pl.x) < 6); if (L) { pl.climb = L; pl.x = L[0]; } }
+        if (K.down('down')) { const L = LAD.find(l => l[2] === pl.f && !l[3] && Math.abs(l[0] - pl.x) < 6); if (L) { pl.climb = L; pl.x = L[0]; } }
+      }
+    }
+    if (ax && !pl.air && Math.random() < 0.15) K.beep(140, 0.02, { vol: 0.02 });
+  }
+  if (pl.hammer > 0) pl.hammer -= dt;
+  for (const h of hammers) if (!h.got && pl.f === h.f && !pl.climb && Math.abs(pl.x - h.x) < 8 && pl.y < fy(h.f, h.x) - 8) { h.got = true; pl.hammer = 9; K.tune([523, 659, 784], 0.06); }
+  if (pl.f === TOP && !pl.climb) { score += bonus; hud(); winT = 2.5; K.tune([523, 659, 784, 1047, 1319], 0.12); return; }
+  // the wrecker throws barrels
+  throwT -= dt;
+  if (throwT <= 0) { barrels.push({ f: WRECK, x: 30, y: fy(WRECK, 30), dir: 1, fall: null, rot: 0, down: null }); throwT = Math.max(0.7, K.rnd(1.5, 2.6) / (1 + stage * 0.22)); K.beep(120, 0.15, { type: 'sawtooth', vol: 0.05 }); }
+  for (const b of barrels) {
+    b.rot += dt * 8 * b.dir;
+    if (b.down) { b.y += 70 * dt; const ty = fy(b.down[1], b.down[0]); if (b.y >= ty) { b.f = b.down[1]; b.down = null; b.dir = downhill(b.f); } }
+    else if (b.fall != null) { b.vy += 400 * dt; b.y += b.vy * dt; b.x += b.dir * 20 * dt; const ty = fy(b.fall, b.x); if (b.y >= ty) { b.f = b.fall; b.fall = null; b.y = ty; b.dir = downhill(b.f); } }
+    else {
+      b.dir = downhill(b.f); b.x += b.dir * speed() * dt; b.y = fy(b.f, b.x);
+      // sometimes take a ladder down, more often if you're below
+      for (const L of LAD) if (L[2] === b.f && Math.abs(L[0] - b.x) < 1.5 && !b.tried) { b.tried = L; if (Math.random() < (pl.f < b.f ? 0.35 : 0.12)) { b.down = L; b.x = L[0]; } }
+      if (b.tried && Math.abs(b.tried[0] - b.x) > 4) b.tried = null;
+      const g = FL[b.f];
+      if (b.x > g[2] || b.x < g[0]) { if (b.f === 0) { b.dead = true; if (stage >= 2 && fires.length < stage) fires.push({ x: 186, f: 0, dir: -1, t: 0 }); } else { b.fall = b.f - 1; b.vy = -40; } }
+    }
+    // hits
+    const dx = Math.abs(b.x - pl.x), dy = Math.abs((b.y - 5) - (pl.y - 7));
+    if (pl.hammer > 0 && dx < 18 && dy < 14) { b.dead = true; score += 300; hud(); smash(b.x, b.y - 5); continue; }
+    if (dx < 8 && dy < 9) return die();
+    if (pl.air && dx < 6 && b.y > pl.y && !pl.jumped.includes(b) && b.f === pl.f) { pl.jumped.push(b); score += 100; hud(); parts.push({ txt: '100', x: pl.x, y: pl.y - 16, vx: 0, vy: -20, l: 0.7 }); K.beep(880, 0.06, { vol: 0.04 }); }
+  }
+  barrels = barrels.filter(b => !b.dead && b.y < DH + 10);
+  for (const f of fires) {
+    f.t += dt; f.x += f.dir * 34 * dt; if (f.x > FL[f.f][2] - 4 || f.x < FL[f.f][0] + 4) f.dir = -f.dir;
+    if (Math.random() < dt * 0.4) { const L = LAD.find(l => l[1] === f.f && Math.abs(l[0] - f.x) < 4 && !l[3]); if (L && f.f < WRECK - 1) { f.f = L[2]; } }
+    f.y = fy(f.f, f.x);
+    if (pl.hammer > 0 && Math.abs(f.x - pl.x) < 16 && Math.abs(f.y - pl.y) < 14) { f.dead = true; score += 500; hud(); smash(f.x, f.y - 5); }
+    else if (Math.abs(f.x - pl.x) < 7 && Math.abs(f.y - pl.y) < 10) return die();
+  }
+  fires = fires.filter(f => !f.dead);
+}
+function smash(x, y) { K.noise(0.2, 0.25); for (let i = 0; i < 10; i++) parts.push({ x, y, vx: K.rnd(-70, 70), vy: K.rnd(-120, -20), l: 0.6, c: i % 2 ? '#c8783a' : '#ffd23f' }); }
+function die() { deadT = 2; K.tune([392, 330, 262, 196], 0.15, { type: 'sawtooth' }); }
+function over() { state = 'over'; best = K.saveBest('girder', score); K.card({ title: 'GAME OVER', text: 'You reached stage ' + stage + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Climb again', onStart: () => { stage = 1; score = 0; lives = 3; begin(); state = 'play'; } }); }
+
+function draw(c, t) {
+  A.sky(c, W, H, { top: '#04040e', mid: '#141a3a', bottom: '#3a2a4a', stars: true, sun: '#fff4d8', moon: true, sunX: 205, sunY: 30, sunR: 12, sunGlow: '200,210,255', clouds: false }, t);
+  A.skyline(c, 0, { factor: 0, base: H, col: '#0e1024', amp: 140, win: 'rgba(255,210,120,.35)' });
+  c.save(); c.scale(SCL, SCL);
+  // construction crane in the background with a blinking warning light
+  c.strokeStyle = 'rgba(255,200,60,.32)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(194, DH); c.lineTo(194, 18); c.lineTo(110, 18); c.moveTo(194, 26); c.lineTo(212, 26); c.stroke();
+  c.lineWidth = 0.8; for (let y = 26; y < DH; y += 12) { c.beginPath(); c.moveTo(190, y); c.lineTo(198, y + 12); c.moveTo(198, y); c.lineTo(190, y + 12); c.stroke(); } for (let x = 114; x < 194; x += 10) { c.beginPath(); c.moveTo(x, 14); c.lineTo(x + 10, 18); c.stroke(); }
+  c.strokeStyle = 'rgba(200,200,220,.35)'; c.beginPath(); c.moveTo(126, 18); c.lineTo(126, 36 + Math.sin(t / 900) * 2); c.stroke();
+  if (Math.floor(t / 600) % 2) { c.fillStyle = '#ff3b3b'; c.beginPath(); c.arc(194, 15, 1.6, 0, 7); c.fill(); A.glow(c, 194, 15, 10, '255,60,60', 0.5); }
+  // ladders
+  for (const L of LAD) { const top = fy(L[2], L[0]), bot = fy(L[1], L[0]); A.part(c, L[0] - 5, top, 1.8, bot - top, '#46d0ff'); A.part(c, L[0] + 3.2, top, 1.8, bot - top, '#46d0ff'); for (let y = top + 3; y < bot; y += 5) { if (L[3] && y > top + 9 && y < bot - 9) continue; c.fillStyle = 'rgba(20,12,8,.9)'; c.fillRect(L[0] - 5, y - 0.5, 10, 2.2); c.fillStyle = '#8ae8ff'; c.fillRect(L[0] - 5, y, 10, 1.2); } }
+  // girders: red I-beams with rivets, holes and a highlight
+  for (const g of FL) { c.save(); c.translate(g[0], g[1]); const len = Math.hypot(g[2] - g[0], g[3] - g[1]); c.rotate(Math.atan2(g[3] - g[1], g[2] - g[0])); c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(2, 7, len, 3); c.fillStyle = 'rgba(20,12,8,.9)'; c.fillRect(-0.7, -0.7, len + 1.4, 8.4); const gg = c.createLinearGradient(0, 0, 0, 7); gg.addColorStop(0, '#ff9a9a'); gg.addColorStop(0.25, '#e63946'); gg.addColorStop(1, '#7a1420'); c.fillStyle = gg; c.fillRect(0, 0, len, 7); c.fillStyle = '#3a0a12'; for (let x = 2; x < len; x += 8) { c.beginPath(); c.moveTo(x, 1.6); c.lineTo(x + 3, 5.4); c.lineTo(x + 6, 1.6); c.fill(); } c.fillStyle = '#ffd0d0'; for (let x = 4; x < len; x += 12) { c.beginPath(); c.arc(x, 1.1, 0.6, 0, 7); c.arc(x, 6, 0.6, 0, 7); c.fill(); } c.fillStyle = 'rgba(255,255,255,.35)'; c.fillRect(0, 0, len, 0.8); c.restore(); }
+  // oil drum at the bottom right: flames once fireballs start
+  const dx = 184, dy = fy(0, 192) - 17; c.fillStyle = 'rgba(20,12,8,.9)'; c.beginPath(); c.roundRect(dx - 0.7, dy - 0.7, 15.4, 17.4, 2); c.fill(); const dg = c.createLinearGradient(dx, 0, dx + 14, 0); dg.addColorStop(0, '#1a4aa8'); dg.addColorStop(0.4, '#4a8aff'); dg.addColorStop(1, '#14327a'); c.fillStyle = dg; c.beginPath(); c.roundRect(dx, dy, 14, 16, 2); c.fill(); c.fillStyle = '#c8d8ff'; c.fillRect(dx, dy + 4, 14, 1.2); c.fillRect(dx, dy + 11, 14, 1.2); c.fillStyle = '#fff'; c.font = 'bold 4px sans-serif'; c.textAlign = 'center'; c.fillText('OIL', dx + 7, dy + 9.5);
+  if (fires && fires.length) { A.glow(c, dx + 7, dy - 6, 22, '255,140,40', 0.5); for (let k = 0; k < 3; k++) { c.fillStyle = k === 1 ? '#ffd23f' : '#ff5a1a'; c.beginPath(); c.moveTo(dx + 1 + k * 4, dy); c.quadraticCurveTo(dx + 3 + k * 4, dy - 12 - Math.sin(t / 60 + k) * 4, dx + 6 + k * 4, dy); c.fill(); } }
+  drawWrecker(c, t); drawPuppy(c, t);
+  if (pl) {
+    for (const h of hammers) if (!h.got) { const y = fy(h.f, h.x) - 18 + Math.sin(t / 250) * 1; drawHammer(c, h.x, y, 0); }
+    for (const b of barrels) drawBarrel(c, b, t);
+    for (const f of fires) drawFire(c, f, t);
+    if (!(deadT > 0 && Math.floor(t / 100) % 2)) drawWelder(c, t);
+    for (const q of parts) { c.globalAlpha = Math.min(1, q.l * 2); if (q.txt) K.text(c, q.txt, q.x, q.y, 6, '#fff'); else { c.fillStyle = q.c; c.fillRect(q.x - 1.5, q.y - 1.5, 3, 3); } } c.globalAlpha = 1;
+  }
+  c.restore();
+  if (pl && Math.floor(t / 400) % 2 && !winT) K.text(c, 'HELP!', 101 * SCL, 22 * SCL, 9, '#fff');
+  if (winT > 0) K.text(c, 'PUPPY SAVED!', W / 2, 150, 16, '#ffd23f');
+}
+function drawHammer(c, x, y, ang) { c.save(); c.translate(x, y); c.rotate(ang); c.fillStyle = '#8a5a2a'; c.beginPath(); c.roundRect(-1, 0, 2.2, 11, 1); c.fill(); c.fillStyle = '#c8884a'; c.fillRect(-0.4, 0.5, 0.8, 10); const g = c.createLinearGradient(0, -4, 0, 1); g.addColorStop(0, '#e0e4ec'); g.addColorStop(1, '#6a707c'); c.fillStyle = g; c.beginPath(); c.roundRect(-5.5, -3.5, 11, 5, 1.2); c.fill(); c.fillStyle = '#4a505a'; c.fillRect(-5.5, -0.5, 11, 1); c.restore(); }
+// wooden barrel with metal hoops, rolling end-over-end (or seen from the side on a ladder)
+function drawBarrel(c, b, t) {
+  c.save(); c.translate(b.x, b.y - 5.5);
+  if (b.down) { c.fillStyle = 'rgba(20,12,8,.9)'; c.beginPath(); c.ellipse(0, 0, 7.4, 5.8, 0, 0, 7); c.fill(); const g = c.createLinearGradient(-7, 0, 7, 0); g.addColorStop(0, '#7a3a1a'); g.addColorStop(0.45, '#d8884a'); g.addColorStop(1, '#6a2a12'); c.fillStyle = g; c.beginPath(); c.ellipse(0, 0, 6.8, 5.2, 0, 0, 7); c.fill(); c.fillStyle = '#4a4a54'; c.fillRect(-4.6, -5, 1.4, 10); c.fillRect(3.2, -5, 1.4, 10); c.restore(); return; }
+  c.rotate(b.rot);
+  c.fillStyle = 'rgba(20,12,8,.9)'; c.beginPath(); c.arc(0, 0, 6.2, 0, 7); c.fill();
+  const g = c.createRadialGradient(-2, -2, 1, 0, 0, 6); g.addColorStop(0, '#f0a868'); g.addColorStop(0.7, '#c8783a'); g.addColorStop(1, '#7a3a1a'); c.fillStyle = g; c.beginPath(); c.arc(0, 0, 5.6, 0, 7); c.fill();
+  c.strokeStyle = '#5a5a66'; c.lineWidth = 1.1; c.beginPath(); c.arc(0, 0, 4.6, 0, 7); c.stroke();
+  c.strokeStyle = '#7a3a1a'; c.lineWidth = 0.6; for (let k = 0; k < 3; k++) { c.beginPath(); c.moveTo(-4, -2 + k * 2); c.lineTo(4, -2 + k * 2); c.stroke(); }
+  c.fillStyle = '#3a2010'; c.beginPath(); c.arc(0, 0, 1, 0, 7); c.fill();
+  c.restore();
+}
+function drawFire(c, f, t) { const x = f.x, y = f.y - 7; A.glow(c, x, y, 14, '255,140,40', 0.45); const fl = Math.sin(t / 60) * 1.5; c.fillStyle = '#ff4a1a'; c.beginPath(); c.moveTo(x - 5.5, y + 4); c.quadraticCurveTo(x - 6, y - 4, x - 1, y - 9 - fl); c.quadraticCurveTo(x + 1, y - 4, x + 3, y - 7 + fl); c.quadraticCurveTo(x + 7, y - 2, x + 5.5, y + 4); c.fill(); c.fillStyle = '#ffd23f'; c.beginPath(); c.ellipse(x, y + 1, 3.5, 4, 0, 0, 7); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(x - 1.5, y, 1, 0, 7); c.arc(x + 1.5, y, 1, 0, 7); c.fill(); c.fillStyle = '#000'; c.beginPath(); c.arc(x - 1.5 + f.dir * 0.4, y, 0.5, 0, 7); c.arc(x + 1.5 + f.dir * 0.4, y, 0.5, 0, 7); c.fill(); }
+// the Wrecker bot on the top girder, with a stack of barrels behind it
+function drawWrecker(c, t) {
+  const gy = fy(WRECK, 30), throwing = throwT != null && throwT < 0.3;
+  for (let i = 0; i < 4; i++) drawBarrel(c, { x: 7 + (i % 2) * 11, y: gy - Math.floor(i / 2) * 11 - 0.5, rot: 1.57, down: true }, t);
+  c.save(); c.translate(36, gy);
+  c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(0, 0, 13, 2, 0, 0, 7); c.fill();
+  c.fillStyle = '#3a3a48'; c.beginPath(); c.roundRect(-9, -8, 7, 8, 2); c.roundRect(2, -8, 7, 8, 2); c.fill();
+  const g = c.createLinearGradient(-12, -32, 12, -8); g.addColorStop(0, '#a0a4b4'); g.addColorStop(1, '#4a4e5e'); c.fillStyle = g; c.beginPath(); c.roundRect(-12, -32, 24, 24, 4); c.fill();
+  c.fillStyle = '#ffd23f'; for (let k = 0; k < 5; k++) { c.beginPath(); c.moveTo(-12 + k * 5, -14); c.lineTo(-9 + k * 5, -14); c.lineTo(-12 + k * 5 + 5, -10); c.lineTo(-12 + k * 5 + 2, -10); c.fill(); }
+  c.fillStyle = '#2a2a34'; c.beginPath(); c.roundRect(-6, -27, 12, 8, 2); c.fill(); for (let k = 0; k < 3; k++) { c.fillStyle = Math.sin(t / 200 + k) > 0 ? '#7cffda' : '#1e5a4a'; c.fillRect(-4 + k * 3.4, -24, 2, 2); }
+  // arms: raised when hurling a barrel
+  const ar = throwing ? -2.3 : -0.4 + Math.sin(t / 300) * 0.15;
+  for (const sd of [-1, 1]) { c.save(); c.translate(sd * 12, -28); c.rotate(sd * ar * -1 + (sd < 0 ? 0 : 0)); c.scale(sd, 1); c.rotate(ar); c.fillStyle = '#6a6e7e'; c.beginPath(); c.roundRect(-2, 0, 4, 12, 2); c.fill(); c.fillStyle = '#3a3a48'; c.beginPath(); c.arc(0, 13, 3, 0, 7); c.fill(); c.restore(); }
+  // head with angry red eyes and antenna
+  c.fillStyle = '#5a5e6e'; c.beginPath(); c.roundRect(-8, -42, 16, 11, 3); c.fill(); c.fillStyle = '#ff3b5c'; c.fillRect(-5.5, -39, 4, 3); c.fillRect(1.5, -39, 4, 3); A.glow(c, 0, -37.5, 10, '255,60,90', 0.4);
+  c.strokeStyle = '#2a2a34'; c.lineWidth = 1; c.beginPath(); c.moveTo(-6, -41); c.lineTo(-2, -39.5); c.moveTo(6, -41); c.lineTo(2, -39.5); c.stroke();
+  c.fillStyle = '#c8ccd8'; c.fillRect(-4, -34, 8, 1.2); c.strokeStyle = '#8a8e9e'; c.beginPath(); c.moveTo(0, -42); c.lineTo(0, -47); c.stroke(); c.fillStyle = Math.floor(t / 300) % 2 ? '#ff3b5c' : '#5a1a2a'; c.beginPath(); c.arc(0, -48, 1.4, 0, 7); c.fill();
+  c.restore();
+}
+function drawPuppy(c, t) {
+  const px = 101, py = FL[TOP][1], wag = Math.sin(t / 90) * 0.6;
+  c.save(); c.translate(px, py);
+  c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(0, 0, 8, 1.4, 0, 0, 7); c.fill();
+  c.strokeStyle = '#e8d4b0'; c.lineWidth = 2; c.lineCap = 'round'; c.beginPath(); c.moveTo(-6, -6); c.quadraticCurveTo(-10, -9 + wag * 3, -9, -13 + wag * 2); c.stroke();
+  c.fillStyle = '#f2e3c6'; c.beginPath(); c.ellipse(-1, -6, 7, 4.2, 0, 0, 7); c.fill();
+  c.fillStyle = '#c89a6a'; c.beginPath(); c.ellipse(-2, -7.5, 3, 2, 0.3, 0, 7); c.fill();
+  c.fillStyle = '#e8d4b0'; for (const lx of [-5, -2, 2, 4.5]) { c.beginPath(); c.roundRect(lx - 0.9, -3, 1.8, 3, 0.8); c.fill(); }
+  c.fillStyle = '#f2e3c6'; c.beginPath(); c.arc(5.5, -11, 4, 0, 7); c.fill(); c.beginPath(); c.ellipse(8.3, -10, 2.4, 1.8, 0, 0, 7); c.fill();
+  c.fillStyle = '#8a5a2a'; c.beginPath(); c.ellipse(3, -13, 1.6, 3.4, 0.4, 0, 7); c.fill(); c.beginPath(); c.ellipse(7.4, -14, 1.4, 2.6, -0.5 + wag * 0.2, 0, 7); c.fill();
+  c.fillStyle = '#111'; c.beginPath(); c.arc(6.2, -11.6, 0.8, 0, 7); c.arc(10.2, -10.2, 0.7, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(6.3, -12.1, 0.4, 0.4);
+  c.fillStyle = '#e63946'; c.fillRect(2.5, -8.6, 5, 1); c.fillStyle = '#ffd23f'; c.beginPath(); c.arc(5, -7.4, 0.8, 0, 7); c.fill();
+  c.restore();
+}
+// you: a welder in a yellow hard hat, orange vest and blue overalls, drawn 1.15x
+// the picked hero (Desire'e / J.T.) instead of the welder
+function heroPick(c, t) {
+  const x = pl.x, y = pl.y, f = pl.face, H = 24;
+  if (pl.climb) { Roster.draw(c, 'climb', x, y + 0.5, 1, H, { phase: pl.y / 6 }); return; }
+  c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(x, y + 0.2, 6, 1.4, 0, 0, 7); c.fill();
+  const moving = !pl.air && (K.down('left') || K.down('right'));
+  const legs = deadT > 0 ? 'hurt' : pl.air ? (pl.vy < 0 ? 'jump' : 'fall') : moving ? Roster.key('run', { t }) : Roster.key('idle', { t });
+  if (pl.hammer > 0 && !(deadT > 0)) {
+    const sw = Math.sin(t / 70), ang = -1.2 + sw * 1.5, key = legs + (sw < -0.2 ? '#up' : '#swing');
+    Roster.draw(c, key, x, y + 0.5, f, H);
+    const hd = Roster.hand(key, H, f);
+    c.save(); c.translate(x + hd[0], y + hd[1]); c.scale(f, 1); drawHammer(c, 0, 0, ang); c.restore();
+    return;
+  }
+  Roster.draw(c, legs, x, y + 0.5, f, H);
+}
+function drawWelder(c, t) {
+  if (Roster.on() && !drawWelder.classic) return heroPick(c, t);
+  const x = pl.x, y = pl.y, f = pl.face, moving = !pl.air && !pl.climb && (K.down('left') || K.down('right')), ph = t / 90, st = moving ? Math.sin(ph) : 0;
+  c.save(); c.translate(x, y); c.scale(1.15 * (pl.climb ? 1 : f), 1.15);
+  if (pl.climb) { // climbing: seen from behind, arms and legs alternating
+    const cl = Math.sin(pl.y / 3);
+    c.fillStyle = '#2a5ac8'; c.beginPath(); c.roundRect(-3.2, -6 + cl, 2.6, 6, 1); c.roundRect(0.6, -6 - cl, 2.6, 6, 1); c.fill();
+    c.fillStyle = '#2a6fdb'; c.beginPath(); c.roundRect(-4, -13, 8, 8, 2); c.fill(); c.fillStyle = '#ff8a1f'; c.fillRect(-4, -12, 8, 2); c.fillRect(-1, -13, 2, 8);
+    c.fillStyle = '#ffcf9e'; c.beginPath(); c.arc(-4.6, -14 - cl * 2, 1.4, 0, 7); c.arc(4.6, -14 + cl * 2, 1.4, 0, 7); c.fill();
+    c.fillStyle = '#8a5a3a'; c.beginPath(); c.arc(0, -16, 3, 0, 7); c.fill(); c.fillStyle = '#ffd23f'; c.beginPath(); c.ellipse(0, -17.4, 4.2, 3, 0, Math.PI, 0); c.fill(); c.fillRect(-4.6, -17.6, 9.2, 1.2);
+    c.restore(); return;
+  }
+  c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(0, 0.2, 5, 1.2, 0, 0, 7); c.fill();
+  const air = pl.air;
+  const leg = (dx, a, col) => { c.save(); c.translate(dx, -6); c.rotate(a); c.fillStyle = col; c.beginPath(); c.roundRect(-1.4, 0, 2.8, 5.6, 1); c.fill(); c.fillStyle = '#3a2618'; c.beginPath(); c.roundRect(-1.6, 4.6, 3.8, 1.6, 0.7); c.fill(); c.restore(); };
+  leg(-1.1, air ? 0.6 : -st * 0.6, '#1e4aa8'); leg(1.1, air ? -0.5 : st * 0.6, '#2a6fdb');
+  const g = c.createLinearGradient(-4, -13, 4, -6); g.addColorStop(0, '#3a80ff'); g.addColorStop(1, '#1e4aa8'); c.fillStyle = g; c.beginPath(); c.roundRect(-3.8, -13, 7.6, 7.5, 2); c.fill();
+  c.fillStyle = '#ff8a1f'; c.fillRect(-3.8, -12.5, 7.6, 2.4); c.fillStyle = '#fff2a0'; c.fillRect(-3.8, -11.6, 7.6, 0.6);
+  c.fillStyle = '#ffd23f'; c.fillRect(-1.6, -8.4, 1.2, 1.2);
+  if (pl.hammer > 0) { // swinging the hammer overhead and down
+    const sw = Math.sin(t / 70); drawHammer(c, 2, -11, -1.2 + sw * 1.5); c.fillStyle = '#e0aa78'; c.beginPath(); c.arc(2 + Math.sin(-1.2 + sw * 1.5) * -1, -11, 1.4, 0, 7); c.fill();
+  } else { c.save(); c.translate(1.5, -12); c.rotate(air ? -2 : 0.3 - st * 0.5); c.fillStyle = '#ff8a1f'; c.beginPath(); c.roundRect(-1.1, 0, 2.2, 5, 1); c.fill(); c.fillStyle = '#5a4a3a'; c.beginPath(); c.arc(0, 5.6, 1.3, 0, 7); c.fill(); c.restore(); }
+  c.fillStyle = '#e0aa78'; c.beginPath(); c.arc(0.4, -15.8, 3, 0, 7); c.fill();
+  c.fillStyle = '#111'; c.fillRect(1.8, -16.4, 0.9, 1); c.fillStyle = '#6a3a1a'; c.fillRect(1.2, -14.4, 2.2, 0.7);
+  c.fillStyle = '#5a3a1e'; c.fillRect(-2.6, -15.4, 1, 2);
+  const hg = c.createLinearGradient(0, -21, 0, -17); hg.addColorStop(0, '#fff07a'); hg.addColorStop(1, '#d8a010'); c.fillStyle = hg; c.beginPath(); c.ellipse(0.2, -17.6, 3.8, 3.2, 0, Math.PI, 0); c.fill(); c.fillRect(-3.8, -17.8, 9, 1.3); c.fillStyle = '#d8a010'; c.fillRect(-0.2, -20.6, 0.8, 3);
+  c.restore();
+}
+Roster.offer({ classic: 'Welder', thumb: (g, W, H, t) => {
+  const sp = pl; pl = { x: 18 / 1.6, y: 50 / 1.6, face: 1, air: false, climb: null, hammer: 0, vy: 0 }; drawWelder.classic = true;
+  try { g.save(); g.scale(1.6, 1.6); drawWelder(g, t); g.restore(); } finally { drawWelder.classic = false; pl = sp; }
+} });
+title();
+{ const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.35); }; }
+K.run(update, draw);
+</script>
+</body>
+</html>

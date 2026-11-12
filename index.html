@@ -13,6 +13,7 @@
 :root{
   --bg:#120d26; --panel:#1d1640; --line:#2f2660; --ink:#f3f0ff; --muted:#b4acd8;
   --shooter:#ff4f6d; --racing:#ffb02e; --sports:#2fd6a3; --arcade:#46a8ff; --puzzle:#c07bff;
+  --platform:#ff7ad8; --adventure:#9be15d; --action:#ff7f3f;
   --display:'Bungee',Impact,system-ui,sans-serif; --body:'Rubik',system-ui,sans-serif;
   color-scheme:dark;
 }
@@ -48,17 +49,53 @@ main{max-width:1100px;margin:0 auto;padding:0 16px 40px;display:grid;grid-templa
 footer{text-align:center;color:var(--muted);font-size:12px;padding:0 16px 28px}
 footer a{color:var(--muted)}
 @media (orientation:landscape) and (max-height:560px){.close{left:calc(env(safe-area-inset-left,0px) + 12px);transform:none}}
+/* My Scores: records kept on this phone */
+.mys{margin-top:14px;font-family:var(--display);font-size:15px;padding:10px 18px;min-height:44px;border-radius:999px;border:0;background:var(--racing);color:#1a1200;cursor:pointer;box-shadow:0 4px 0 rgba(0,0,0,.35)}
+.mys:active{transform:translateY(2px);box-shadow:0 2px 0 rgba(0,0,0,.35)}
+#scores{position:fixed;inset:0;z-index:9;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+#scores[hidden]{display:none}
+.sc-in{max-width:760px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px calc(env(safe-area-inset-bottom,0px) + 32px)}
+.sc-back{font-family:var(--display);font-size:13px;min-height:44px;padding:8px 16px;border-radius:999px;border:2px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+#scores h2{font-family:var(--display);font-weight:400;font-size:clamp(32px,9vw,52px);margin:18px 0 0;line-height:1}
+#scores h2 .n{color:var(--racing)}
+.sc-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0 6px}
+.sc-sum div{background:var(--panel);border-radius:16px;padding:12px 12px 10px;min-width:0}
+.sc-sum b{display:block;font-family:var(--display);font-weight:400;font-size:clamp(17px,5.4vw,26px);line-height:1.15;overflow-wrap:anywhere}
+.sc-sum span{color:var(--muted);font-size:12px}
+.sc-h{font-family:var(--display);font-size:13px;letter-spacing:.06em;color:var(--muted);margin:22px 0 10px}
+.sc-row{display:grid;grid-template-columns:6px minmax(0,1fr) auto;gap:12px;align-items:center;width:100%;text-align:left;background:var(--panel);border:0;border-radius:14px;padding:12px 14px 12px 0;margin:0 0 8px;color:var(--ink);cursor:pointer;font:inherit;overflow:hidden}
+.sc-row i{align-self:stretch;background:var(--c);border-radius:0 4px 4px 0}
+.sc-row .nm{display:block;font-family:var(--display);font-size:16px;line-height:1.15}
+.sc-row .mt{display:block;color:var(--muted);font-size:12.5px;margin-top:4px;line-height:1.35}
+.sc-row .bs{text-align:right;font-family:var(--display);font-size:19px;line-height:1.1;white-space:nowrap}
+.sc-row .bs small{display:block;font-family:var(--body);font-size:10.5px;color:var(--muted);letter-spacing:.1em;font-weight:800;margin-bottom:2px}
+.sc-row.none{background:transparent;border:2px dashed var(--line);padding:10px 12px 10px 0}
+.sc-row.none .bs{color:var(--muted);font-size:14px}
+.sc-row:active{transform:scale(.985)}
+.sc-row:focus-visible,.sc-back:focus-visible,.mys:focus-visible{outline:3px solid var(--racing);outline-offset:3px}
+.sc-empty{background:var(--panel);border-radius:16px;padding:20px;color:var(--muted);text-align:center;line-height:1.5;margin-top:18px}
 </style>
 </head>
 <body>
 <header>
   <h1>Pocket <span class="n">Arcade</span></h1>
-  <p class="sub">Shooters, racers, sports and classics. Tap a game to play.</p>
+  <p class="sub">Shooters, racers, platformers, quests, sports and classics. Tap a game to play.</p>
+  <button class="mys" id="mys" type="button">★ My Scores</button>
 </header>
 <nav class="chips" id="chips" aria-label="Filter games"></nav>
 <p class="count" id="count"></p>
 <main id="grid"></main>
 <footer>by James McGuire · <a href="privacy.html">Privacy policy</a></footer>
+
+<div id="scores" role="dialog" aria-modal="true" aria-labelledby="sct" hidden>
+  <div class="sc-in">
+    <button class="sc-back" id="scback" type="button">◀ Games</button>
+    <h2 id="sct">My <span class="n">Scores</span></h2>
+    <p class="sub">Your records in every game, saved right here on this phone.</p>
+    <div class="sc-sum" id="scsum"></div>
+    <div id="sclist"></div>
+  </div>
+</div>
 
 <div id="player" role="dialog" aria-label="Game">
   <iframe id="frame" title="Game" allow="autoplay; fullscreen"></iframe>
@@ -68,7 +105,7 @@ footer a{color:var(--muted)}
 <script src="games.js"></script>
 <script>
 (function(){
-  var COLORS={Shooter:'var(--shooter)',Racing:'var(--racing)',Sports:'var(--sports)',Arcade:'var(--arcade)',Puzzle:'var(--puzzle)'};
+  var COLORS={Shooter:'var(--shooter)',Racing:'var(--racing)',Sports:'var(--sports)',Arcade:'var(--arcade)',Puzzle:'var(--puzzle)',Platform:'var(--platform)',Adventure:'var(--adventure)',Action:'var(--action)'};
   var games=window.ARCADE_GAMES, total=window.ARCADE_TOTAL, filter='All';
   var grid=document.getElementById('grid'), chips=document.getElementById('chips');
   var genres=['All'].concat(Object.keys(COLORS).filter(function(g){return games.some(function(x){return x.genre===g})}));
@@ -103,13 +140,91 @@ footer a{color:var(--muted)}
   }
   var player=document.getElementById('player'), frame=document.getElementById('frame');
   function open(id,name){
-    frame.src='games/'+id+'.html';frame.title=name;player.classList.add('on');
+    noteOpen(id);
+    go(frame,'games/'+id+'.html');frame.title=name;player.classList.add('on');
     history.pushState({game:id},'','#'+id);
     setTimeout(function(){try{frame.contentWindow.focus()}catch(e){}},300);
   }
-  function shut(){player.classList.remove('on');frame.src='about:blank'}
+  function shut(){player.classList.remove('on');go(frame,'about:blank')}
+  // swap the game frame's page without adding a step to the phone's back-button history
+  function go(f,url){try{f.contentWindow.location.replace(url)}catch(e){f.src=url}}
   document.getElementById('close').onclick=function(){history.state&&history.state.game?history.back():shut()};
-  window.addEventListener('popstate',shut);
+
+  // ---- My Scores: best score, times played and last played for every game (all stored on this phone) ----
+  var sc=document.getElementById('scores'), scBack=document.getElementById('scback');
+  var LABEL={time:'BEST TIME',cs:'BEST TIME',ms:'BEST TIME',secs:'BEST TIME',mins:'FASTEST',par:'BEST ROUND',wins:'WINS',fights:'MOST WON',cup:'BEST CUP',cash:'MOST CASH',rally:'LONGEST RALLY',streak:'BEST STREAK'};
+  // the older games keep their own best score and don't log plays, so opening one from the menu counts as a play
+  function noteOpen(id){
+    var g=games.filter(function(x){return x.id===id})[0];if(!g||g.key)return;
+    try{var s=JSON.parse(localStorage.getItem('pa-stats')||'{}')||{},r=s[id]||{n:0};r.n=(r.n||0)+1;r.at=Date.now();s[id]=r;localStorage.setItem('pa-stats',JSON.stringify(s))}catch(e){}
+  }
+  function store(k){try{return localStorage.getItem(k)}catch(e){return null}}
+  function fmt(v,kind){
+    v=+v;
+    if(kind==='time')return Math.floor(v/60)+':'+pad(Math.floor(v%60));
+    if(kind==='cs'){var s=Math.floor(v/100);return Math.floor(s/60)+':'+pad(s%60)+'.'+pad(Math.floor(v%100))}
+    if(kind==='mins')return v+' min';
+    if(kind==='par'){var r=v-100;return r===0?'Even':r>0?'+'+r:'\u2212'+(-r)}
+    if(kind==='wins')return v+(v===1?' win':' wins');
+    if(kind==='fights')return v+(v===1?' fight':' fights');
+    if(kind==='cup')return v+' pts';
+    if(kind==='ms')return (v/1000).toFixed(3)+'s';
+    if(kind==='secs')return v.toFixed(2)+'s';
+    if(kind==='cash')return '$'+v.toLocaleString();
+    if(kind==='rally')return v+(v===1?' hit':' hits');
+    return v.toLocaleString();
+  }
+  function ago(t){
+    var s=(Date.now()-t)/1000;
+    if(s<90)return 'just now';
+    if(s<3600)return Math.round(s/60)+' min ago';
+    if(s<86400){var h=Math.round(s/3600);return h+(h===1?' hour ago':' hours ago')}
+    if(s<172800)return 'yesterday';
+    if(s<604800)return Math.floor(s/86400)+' days ago';
+    return 'on '+new Date(t).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+  }
+  function renderScores(){
+    var stats={};try{stats=JSON.parse(store('pa-stats')||'{}')||{}}catch(e){}
+    var rows=games.map(function(g,i){var st=stats[g.key||g.id]||null,b=+store(g.store||('pa-'+g.key))||0;return{g:g,i:i,st:st,best:b}});
+    var played=rows.filter(function(r){return r.st||r.best}), fresh=rows.filter(function(r){return !(r.st||r.best)});
+    played.sort(function(a,b){return((b.st&&b.st.at)||0)-((a.st&&a.st.at)||0)||a.i-b.i});
+    var plays=0,fav=null;
+    played.forEach(function(r){var n=r.st?r.st.n:0;plays+=n;if(n&&(!fav||n>fav.st.n))fav=r});
+    var sum=document.getElementById('scsum');sum.innerHTML='';
+    [[plays,plays===1?'game played':'games played'],[played.length+'/'+games.length,'games tried'],[fav?fav.g.name:'\u2014','most played']].forEach(function(x){
+      var d=document.createElement('div'),b=document.createElement('b'),sp=document.createElement('span');b.textContent=x[0];sp.textContent=x[1];d.appendChild(b);d.appendChild(sp);sum.appendChild(d);
+    });
+    var list=document.getElementById('sclist');list.innerHTML='';
+    function head(t){var h=document.createElement('div');h.className='sc-h';h.textContent=t;list.appendChild(h)}
+    function row(r,none){
+      var g=r.g,b=document.createElement('button');b.type='button';b.className='sc-row'+(none?' none':'');b.style.setProperty('--c',COLORS[g.genre]);
+      b.innerHTML='<i></i><span><span class="nm"></span><span class="mt"></span></span><span class="bs"><small></small><span class="v"></span></span>';
+      b.querySelector('.nm').textContent=g.name;
+      var mt=[];
+      if(none)mt.push(g.tag);
+      else{
+        if(r.st){mt.push('Played '+r.st.n+(r.st.n===1?' time':' times'));mt.push(ago(r.st.at))}
+        else mt.push('Best from earlier games');
+        if(r.st&&r.st.last!=null&&r.st.last!=='')mt.push(r.st.last==='W'?'won the last one':r.st.last==='L'?'lost the last one':'last '+fmt(r.st.last,g.kind));
+      }
+      b.querySelector('.mt').textContent=mt.join(' \u00b7 ');
+      b.querySelector('small').textContent=none?'':(LABEL[g.kind]||'BEST');
+      b.querySelector('.v').textContent=none?'Play \u25b6':r.best?fmt(r.best,g.kind):'\u2014';
+      b.setAttribute('aria-label',g.name+(none?', not played yet':', '+b.querySelector('small').textContent.toLowerCase()+' '+b.querySelector('.v').textContent+'. '+mt.join(', ')));
+      b.onclick=function(){open(g.id,g.name)};
+      list.appendChild(b);
+    }
+    if(!played.length){var e=document.createElement('div');e.className='sc-empty';e.textContent='No scores yet. Play any game and your best score, how many times you played and when show up here.';list.appendChild(e)}
+    else{head('YOUR GAMES');played.forEach(function(r){row(r,false)})}
+    if(fresh.length){head('NOT PLAYED YET');fresh.forEach(function(r){row(r,true)})}
+  }
+  function showScores(push){renderScores();sc.hidden=false;document.body.style.overflow='hidden';if(push)history.pushState({scores:1},'','#scores');setTimeout(function(){scBack.focus()},60)}
+  function hideScores(){sc.hidden=true;document.body.style.overflow=''}
+  document.getElementById('mys').onclick=function(){showScores(true)};
+  scBack.onclick=function(){history.state&&history.state.scores?history.back():hideScores()};
+  addEventListener('keydown',function(e){if(e.key==='Escape'&&!sc.hidden&&!player.classList.contains('on'))scBack.click()});
+  // the phone's back button steps out of a game (back to My Scores if you came from there), then out of My Scores
+  window.addEventListener('popstate',function(){shut();if(history.state&&history.state.scores)showScores(false);else hideScores()});
   if(location.hash)history.replaceState(null,'',location.pathname);
   render();
   if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Juice Slash</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Juice Slash: fruit flies up, you swipe to slice it. Hit several in one swipe for a combo. Never slice a bomb, and don't let fruit fall past you.
+K.theme({ bg: '#1a0e08', ink: '#fff', accent: '#ff8a2a', accentInk: '#fff' });
+const W = 320, H = 480;
+K.screen(W, H, { smooth: true });
+K.hud(['score', 'combo', 'lives']);
+const FRUITS = [
+  { n: 'apple', r: 20, skin: '#e8343a', flesh: '#fff3d0', juice: '#ff6a6a' },
+  { n: 'orange', r: 21, skin: '#ff9a1a', flesh: '#ffc85a', juice: '#ffb02a' },
+  { n: 'lime', r: 17, skin: '#5ac83a', flesh: '#c8f08a', juice: '#8ae05a' },
+  { n: 'melon', r: 30, skin: '#2a8a3a', flesh: '#ff5a6a', juice: '#ff4a5a' },
+  { n: 'plum', r: 16, skin: '#7a3ac0', flesh: '#e8c05a', juice: '#b06aff' },
+  { n: 'lemon', r: 18, skin: '#ffe23a', flesh: '#fff7a0', juice: '#ffe86a' },
+];
+let state = 'title', score, lives, items, pieces, splats, trail, blade, waveT, slow, combo, comboT, pops, best = K.best('juiceslash'), level, shake;
+function title() { K.card({ title: 'JUICE SLASH', text: 'Swipe across the screen to slice the fruit, then keep slicing the falling pieces for bonus points: every fruit can be cut into 8 chunks. Slice 3 or more in one swipe for a COMBO bonus. Do NOT slice the bombs! Miss 3 fruits and the game is over. The frosty blue berry slows time for a few seconds.', best: best ? 'BEST ' + best : '', button: 'Slice!', onStart: start }); }
+function start() { score = 0; lives = 3; items = []; pieces = []; splats = []; trail = []; pops = []; waveT = 1; slow = 0; combo = 0; comboT = 0; level = 0; shake = 0; blade = null; state = 'play'; }
+function toss(kind) {
+  const x = K.rnd(40, W - 40), tx = K.rnd(60, W - 60), peak = K.rnd(120, 300), g = 520;
+  const vy = -Math.sqrt(2 * g * (H + 30 - peak)), t = -vy / g, vx = (tx - x) / (t * 1.6);
+  if (kind === 'bomb') items.push({ k: 'bomb', x, y: H + 30, vx, vy, r: 19, rot: 0, vr: K.rnd(-3, 3) });
+  else if (kind === 'frost') items.push({ k: 'frost', x, y: H + 30, vx, vy, r: 15, rot: 0, vr: K.rnd(-4, 4) });
+  else { const f = FRUITS[K.ri(0, FRUITS.length - 1)]; items.push({ k: 'fruit', f, x, y: H + 30, vx, vy, r: f.r, rot: 0, vr: K.rnd(-4, 4) }); }
+}
+function wave() {
+  level++; const n = Math.min(6, 1 + Math.floor(level / 3) + K.ri(0, 1)), bombChance = Math.min(0.32, 0.06 + level * 0.012);
+  for (let i = 0; i < n; i++) setTimeout(() => { if (state === 'play') toss(Math.random() < bombChance && level > 2 ? 'bomb' : Math.random() < 0.05 ? 'frost' : 'fruit'); }, i * K.rnd(90, 260));
+  waveT = Math.max(1.1, 2.6 - level * 0.04);
+}
+function segHit(ax, ay, bx, by, cx, cy, r) { const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy || 1; let t = ((cx - ax) * dx + (cy - ay) * dy) / l; t = K.clamp(t, 0, 1); const px = ax + dx * t, py = ay + dy * t; return (px - cx) ** 2 + (py - cy) ** 2 < r * r; }
+function slice(it, ax, ay, bx, by) {
+  it.dead = true;
+  if (it.k === 'bomb') { boom(it); return; }
+  if (it.k === 'frost') { slow = 5; K.tune([1200, 1600, 2000], 0.05, { type: 'triangle' }); pops.push({ x: it.x, y: it.y, txt: 'SLOW-MO!', t: 1 }); }
+  const f = it.f || { skin: '#6ad0ff', flesh: '#d8f4ff', juice: '#8ae0ff', r: it.r };
+  // the whole fruit becomes one piece, split along the swipe (straight through the middle if the blade only grazed it)
+  const whole = { f, R: it.r, poly: circlePoly(it.r + 1), cx: 0, cy: 0, x: it.x, y: it.y, rot: it.rot, vx: it.vx * 0.5, vy: it.vy * 0.4, lvl: 0 };
+  if (!cutPiece(whole, ax, ay, bx, by)) { const ux = bx - ax, uy = by - ay; cutPiece(whole, it.x - ux, it.y - uy, it.x + ux, it.y + uy); }
+  splats.push({ x: it.x, y: it.y, c: f.juice, r: it.r * 1.6, t: 3, seed: Math.random() * 6 });
+  combo++; comboT = 0.25; score += 10; K.beep(500 + combo * 90, 0.08, { type: 'triangle' }); K.noise(0.05, 0.12);
+}
+// ---- fruit pieces: each one is a slice of the fruit's circle, cut along the real swipe line ----
+function circlePoly(r) { const p = []; for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; p.push([Math.cos(a) * r, Math.sin(a) * r]); } return p; }
+function polyArea(p) { let a = 0; for (let i = 0; i < p.length; i++) { const q = p[i], w = p[(i + 1) % p.length]; a += q[0] * w[1] - w[0] * q[1]; } return a / 2; }
+function polyMid(p) { let a = 0, cx = 0, cy = 0; for (let i = 0; i < p.length; i++) { const q = p[i], w = p[(i + 1) % p.length], k = q[0] * w[1] - w[0] * q[1]; a += k; cx += (q[0] + w[0]) * k; cy += (q[1] + w[1]) * k; } return Math.abs(a) < 1e-6 ? p[0].slice() : [cx / (3 * a), cy / (3 * a)]; }
+// keep the part of a polygon on one side of the line through (px, py) along (dx, dy)
+function keepSide(p, px, py, dx, dy, side) {
+  const out = [], s = v => side * ((v[0] - px) * dy - (v[1] - py) * dx);
+  for (let i = 0; i < p.length; i++) { const a = p[i], b = p[(i + 1) % p.length], sa = s(a), sb = s(b);
+    if (sa >= 0) out.push(a);
+    if ((sa >= 0) !== (sb >= 0)) { const t = sa / (sa - sb); out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); } }
+  return out;
+}
+// split a piece along the blade segment (a -> b): the two parts fly apart with a little pop upward
+function cutPiece(pc, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l;
+  const t = K.clamp((pc.x - ax) * ux + (pc.y - ay) * uy, 0, l), qx = ax + ux * t - pc.x, qy = ay + uy * t - pc.y;
+  const co = Math.cos(-pc.rot), si = Math.sin(-pc.rot);
+  const lx = qx * co - qy * si + pc.cx, ly = qx * si + qy * co + pc.cy, ldx = ux * co - uy * si, ldy = ux * si + uy * co;
+  const minA = 10 + pc.R * pc.R * 0.03;
+  const parts = [1, -1].map(side => keepSide(pc.poly, lx, ly, ldx, ldy, side));
+  if (parts.some(q => q.length < 3 || Math.abs(polyArea(q)) < minA)) return false;
+  pc.dead = true;
+  const c2 = Math.cos(pc.rot), s2 = Math.sin(pc.rot);
+  parts.forEach((q, i) => {
+    const m = polyMid(q), ox = m[0] - pc.cx, oy = m[1] - pc.cy, sg = i ? -1 : 1;
+    let r = 0; q.forEach(v => { r = Math.max(r, Math.hypot(v[0] - m[0], v[1] - m[1])); });
+    pieces.push({ f: pc.f, R: pc.R, poly: q, cx: m[0], cy: m[1], x: pc.x + ox * c2 - oy * s2, y: pc.y + ox * s2 + oy * c2, rot: pc.rot,
+      vx: pc.vx * 0.6 + uy * sg * 70, vy: Math.min(pc.vy * 0.5, 0) - 80 - pc.lvl * 30 - ux * sg * 30, vr: sg * K.rnd(3, 7), r, lvl: pc.lvl + 1, imm: 0.14, t: 6 });
+  });
+  return true;
+}
+// slicing a piece that's already been cut: smaller chunks, more juice, bonus points
+function slicePiece(pc, ax, ay, bx, by) {
+  if (!cutPiece(pc, ax, ay, bx, by)) return;
+  const bonus = pc.lvl >= 2 ? 10 : 5;
+  score += bonus; combo++; comboT = 0.25;
+  splats.push({ x: pc.x, y: pc.y, c: pc.f.juice, r: pc.R * (1.1 - pc.lvl * 0.2), t: 2.5, seed: Math.random() * 6 });
+  pops.push({ x: K.clamp(pc.x, 30, W - 30), y: pc.y - 12, txt: pc.lvl >= 2 ? 'DICED +' + bonus : '+' + bonus, t: 0.7 });
+  K.beep(640 + pc.lvl * 160 + combo * 50, 0.06, { type: 'triangle' }); K.noise(0.04, 0.09);
+}
+function boom(it) {
+  K.noise(1, 0.6); K.beep(90, 0.6, { to: 40, type: 'sawtooth' }); shake = 0.6; splats.push({ x: it.x, y: it.y, c: '#ffffff', r: 140, t: 0.4, flash: 1 });
+  state = 'over'; best = K.saveBest('juiceslash', score);
+  setTimeout(() => K.card({ title: 'KA-BLOOEY!', text: 'You sliced a bomb. Final score ' + score + '.', best: 'BEST ' + best, button: 'Slice Again', onStart: start }), 700);
+}
+function update(dt) {
+  if (shake > 0) shake -= dt;
+  splats.forEach(s => s.t -= dt); splats = splats.filter(s => s.t > 0);
+  if (state !== 'play') return;
+  if (slow > 0) slow -= dt; const sd = slow > 0 ? dt * 0.4 : dt;
+  waveT -= sd; if (waveT <= 0 && items.filter(i => !i.dead).length < 3) wave();
+  // blade from pointer
+  if (K.ptr.down) { const p = { x: K.ptr.x, y: K.ptr.y, t: 0.18 };
+    if (blade) { const sp = Math.hypot(p.x - blade.x, p.y - blade.y);
+      if (sp > 3) { items.forEach(it => { if (!it.dead && segHit(blade.x, blade.y, p.x, p.y, it.x, it.y, it.r + 4)) slice(it, blade.x, blade.y, p.x, p.y); }); if (state !== 'play') return;
+        // pieces can be cut again, down to eighths
+        pieces.slice().forEach(pc => { if (!pc.dead && pc.lvl < 3 && pc.imm <= 0 && segHit(blade.x, blade.y, p.x, p.y, pc.x, pc.y, pc.r * 0.85 + 3)) slicePiece(pc, blade.x, blade.y, p.x, p.y); }); if (sp > 6 && Math.random() < 0.3) K.noise(0.03, 0.04); } }
+    blade = p; trail.push(p); }
+  else blade = null;
+  trail.forEach(p => p.t -= dt); trail = trail.filter(p => p.t > 0);
+  if (comboT > 0) { comboT -= dt; if (comboT <= 0) { if (combo >= 3) { const b = combo * 10; score += b; pops.push({ x: W / 2, y: 140, txt: combo + ' FRUIT COMBO +' + b, t: 1.2 }); K.tune([660, 880, 1100], 0.06); } combo = 0; } }
+  items.forEach(it => { it.vy += 520 * sd; it.x += it.vx * sd; it.y += it.vy * sd; it.rot += it.vr * sd;
+    if (it.vy > 0 && it.y > H + 40 && !it.dead) { it.dead = true; if (it.k === 'fruit') { lives--; K.beep(200, 0.3, { to: 100 }); pops.push({ x: K.clamp(it.x, 30, W - 30), y: H - 30, txt: '✖', t: 1 }); if (lives <= 0) { state = 'over'; best = K.saveBest('juiceslash', score); K.card({ title: 'TOO SLOW', text: 'Three fruits got away. Final score ' + score + '.', best: 'BEST ' + best, button: 'Slice Again', onStart: start }); } } } });
+  items = items.filter(it => !it.dead);
+  pieces.forEach(h => { h.vy += 520 * sd; h.x += h.vx * sd; h.y += h.vy * sd; h.rot += h.vr * sd; h.t -= dt; h.imm -= dt; }); pieces = pieces.filter(h => !h.dead && h.t > 0 && h.y < H + 60);
+  pops.forEach(p => { p.t -= dt; p.y -= 30 * dt; }); pops = pops.filter(p => p.t > 0);
+  K.set('score', score); K.set('combo', slow > 0 ? '❄ SLOW-MO' : ''); K.set('lives', '✖'.repeat(3 - lives) + '○'.repeat(Math.max(0, lives)));
+}
+function drawFruit(c, f, r) { c.fillStyle = f.skin; c.beginPath(); c.arc(0, 0, r, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.3)'; c.beginPath(); c.arc(-r * 0.35, -r * 0.35, r * 0.3, 0, 7); c.fill(); if (f.n === 'melon') { c.strokeStyle = '#1a5a2a'; c.lineWidth = 3; for (let i = -2; i <= 2; i++) { c.beginPath(); c.moveTo(i * r * 0.35, -r * 0.9); c.quadraticCurveTo(i * r * 0.5, 0, i * r * 0.35, r * 0.9); c.stroke(); } c.lineWidth = 1; } if (f.n === 'apple' || f.n === 'plum') { c.fillStyle = '#5a3a1a'; c.fillRect(-1.5, -r - 6, 3, 8); c.fillStyle = '#4ac03a'; c.beginPath(); c.ellipse(5, -r - 3, 6, 3, -0.5, 0, 7); c.fill(); } }
+function draw(c, t) {
+  if (shake > 0) c.translate(K.rnd(-6, 6), K.rnd(-6, 6));
+  c.fillStyle = '#5a3420'; c.fillRect(-10, -10, W + 20, H + 20);
+  for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? '#6a4028' : '#5e3822'; c.fillRect(i * (W / 6), -10, W / 6, H + 20); c.fillStyle = 'rgba(0,0,0,.15)'; c.fillRect(i * (W / 6), -10, 2, H + 20); }
+  splats.forEach(s => { if (s.flash) { c.fillStyle = 'rgba(255,255,255,' + s.t * 2 + ')'; c.fillRect(0, 0, W, H); return; } c.globalAlpha = Math.min(1, s.t) * 0.55; c.fillStyle = s.c; c.beginPath(); for (let i = 0; i < 10; i++) { const a = i / 10 * 6.283, rr = s.r * (0.6 + 0.4 * Math.abs(Math.sin(a * 3 + s.seed))); c.lineTo(s.x + Math.cos(a) * rr, s.y + Math.sin(a) * rr); } c.fill(); c.globalAlpha = 1; });
+  // each piece shows its own part of the fruit: skin on the outside, juicy flesh on every cut face
+  pieces.forEach(h => { c.save(); c.translate(h.x, h.y); c.rotate(h.rot); c.translate(-h.cx, -h.cy); c.beginPath(); h.poly.forEach((v, i) => i ? c.lineTo(v[0], v[1]) : c.moveTo(v[0], v[1])); c.closePath(); c.clip();
+    c.fillStyle = h.f.skin; c.beginPath(); c.arc(0, 0, h.R, 0, 7); c.fill(); c.fillStyle = h.f.flesh; c.beginPath(); c.arc(0, 0, h.R * 0.82, 0, 7); c.fill();
+    c.fillStyle = 'rgba(255,255,255,.22)'; c.beginPath(); c.arc(0, 0, h.R * 0.45, 0, 7); c.fill(); c.restore(); });
+  items.forEach(it => { c.save(); c.translate(it.x, it.y); c.rotate(it.rot);
+    if (it.k === 'bomb') { c.fillStyle = '#222'; c.beginPath(); c.arc(0, 0, it.r, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.25)'; c.beginPath(); c.arc(-6, -6, 5, 0, 7); c.fill(); c.strokeStyle = '#a07a4a'; c.lineWidth = 3; c.beginPath(); c.moveTo(0, -it.r); c.quadraticCurveTo(6, -it.r - 10, 12, -it.r - 8); c.stroke(); c.lineWidth = 1; c.fillStyle = Math.floor(t / 60) % 2 ? '#ffd23a' : '#ff4a2a'; c.beginPath(); c.arc(12, -it.r - 8, 4, 0, 7); c.fill(); c.fillStyle = '#ff3a3a'; c.font = 'bold 12px sans-serif'; c.textAlign = 'center'; c.fillText('✖', 0, 5); }
+    else if (it.k === 'frost') { c.fillStyle = '#6ad0ff'; c.beginPath(); c.arc(0, 0, it.r, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 2; for (let i = 0; i < 3; i++) { c.rotate(Math.PI / 3); c.beginPath(); c.moveTo(-it.r * 0.7, 0); c.lineTo(it.r * 0.7, 0); c.stroke(); } c.lineWidth = 1; }
+    else drawFruit(c, it.f, it.r);
+    c.restore(); });
+  if (trail.length > 1) { for (let i = 1; i < trail.length; i++) { const a = trail[i - 1], b = trail[i]; c.strokeStyle = 'rgba(255,255,255,' + Math.min(1, b.t * 6) + ')'; c.lineWidth = 2 + b.t * 30; c.lineCap = 'round'; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke(); } c.lineWidth = 1; }
+  if (slow > 0) { c.fillStyle = 'rgba(120,200,255,.12)'; c.fillRect(0, 0, W, H); }
+  pops.forEach(p => K.text(c, p.txt, p.x, p.y, 14, '#fff'));
+}
+start(); state = 'title'; title(); K.run(update, draw);
+</script>
+</body>
+</html>
