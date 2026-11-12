@@ -1,5 +1,5 @@
 // Offline cache for Pocket Arcade. Bump VERSION whenever you add or change a game.
-const VERSION = "arcade-v21";
+const VERSION = "arcade-v22";
 const FILES = [
  "./",
  "./games.js",
@@ -68,6 +68,7 @@ const FILES = [
  "./games/rink-rumble.html",
  "./games/road-hopper.html",
  "./games/rodeo-roundup.html",
+ "./games/rotor-rescue.html",
  "./games/rotor-strike.html",
  "./games/saddle-up.html",
  "./games/saucer-sweep.html",
