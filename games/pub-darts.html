@@ -42,7 +42,7 @@ const ORDER=[20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
 // radii as fraction of double-ring outer edge (170mm)
 const R={bull:6.35/170,obull:15.9/170,tIn:99/170,tOut:107/170,dIn:162/170,dOut:1};
 let S,cx,cy,rad,dpr;
-function resize(){if(typeof boardCv!=='undefined')boardCv=null;const r=$('stage').getBoundingClientRect();dpr=Math.min(devicePixelRatio||1,2);S=Math.min(r.width,r.height);cv.style.width=S+'px';cv.style.height=S+'px';cv.width=S*dpr;cv.height=S*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);cx=cy=S/2;rad=S*.4}
+function resize(){if(typeof boardCv!=='undefined')boardCv=null;const r=$('stage').getBoundingClientRect();dpr=Math.min(devicePixelRatio || 1, 2.5);S=Math.min(r.width,r.height);cv.style.width=S+'px';cv.style.height=S+'px';cv.width=S*dpr;cv.height=S*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);cx=cy=S/2;rad=S*.4}
 addEventListener('resize',resize);resize();
 let opp='cpu',startScore=301,scores=[301,301],cur=0,dartsLeft=3,turnStart=301,thrown=[],state='menu',aim=null,aiming=false,wob=0,AC,lastNote='';
 function pick(g,a,cb){$(g).querySelectorAll('.chip').forEach(b=>b.onclick=()=>{$(g).querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));cb(b.dataset[a])})}

@@ -101,7 +101,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   const cv = $('cv'), ctx = cv.getContext('2d'), field = $('field');
   let W = 0, H = 0, U = 1, stars = [];
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     W = field.clientWidth; H = field.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     U = Math.min(W, H) / 400;

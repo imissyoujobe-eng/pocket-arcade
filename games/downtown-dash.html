@@ -126,7 +126,7 @@ body { margin: 0; background: var(--ink); color: var(--fg); font-family: var(--b
   // ---------- setup ----------
   const app = $('app'), cvs = $('gl');
   const renderer = new THREE.WebGLRenderer({ canvas: cvs, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
   // noir grade: muted colors and stronger contrast, so the neon and lamplight pop

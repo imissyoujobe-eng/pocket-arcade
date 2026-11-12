@@ -80,7 +80,7 @@ window.addEventListener('error', function (e) { var c = document.getElementById(
   const cv = $('cv'), ctx = cv.getContext('2d'), game = $('game');
   let W = 0, H = 0, U = 1;
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     W = game.clientWidth; H = game.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     U = Math.min(W, H) / 400;
@@ -236,7 +236,7 @@ window.addEventListener('error', function (e) { var c = document.getElementById(
   }
   let tableCv = null, tableFor = '';
   function buildTable() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2), c2 = document.createElement('canvas'); c2.width = W * dpr; c2.height = H * dpr; const c = c2.getContext('2d'); c.scale(dpr, dpr);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5), c2 = document.createElement('canvas'); c2.width = W * dpr; c2.height = H * dpr; const c = c2.getContext('2d'); c.scale(dpr, dpr);
     // wooden floor around the table
     for (let y = 0; y < H; y += 16 * U) for (let x = -((y / (16 * U)) % 2) * 30 * U; x < W; x += 60 * U) { const hh = A.hash(Math.round(x), Math.round(y)); c.fillStyle = hh < .3 ? '#6a4024' : hh < .7 ? '#784a2a' : '#5e381e'; c.fillRect(x, y, 60 * U - 1, 16 * U - 1); }
     // table top with cast shadow

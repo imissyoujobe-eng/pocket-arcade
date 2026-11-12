@@ -99,7 +99,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   let W = 0, H = 0, C = 24, bx = 0, by = 0, px = 0;
   const COLS = 9, ROWS = 16, HID = 3;
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     W = field.clientWidth; H = field.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const panelW = Math.max(72, Math.min(120, W * .22));
@@ -359,7 +359,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   }
   let bgCv = null, bgFor = '';
   function buildBg() {
-    const c2 = document.createElement('canvas'), dpr = Math.min(window.devicePixelRatio || 1, 2); c2.width = W * dpr; c2.height = H * dpr; const c = c2.getContext('2d'); c.scale(dpr, dpr);
+    const c2 = document.createElement('canvas'), dpr = Math.min(window.devicePixelRatio || 1, 2.5); c2.width = W * dpr; c2.height = H * dpr; const c = c2.getContext('2d'); c.scale(dpr, dpr);
     // dusk construction site: sky, skyline, a tower crane
     const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0e1630'); g.addColorStop(.6, '#2a3a6a'); g.addColorStop(1, '#e08a5a'); c.fillStyle = g; c.fillRect(0, 0, W, H);
     for (let i = 0; i < 50; i++) { c.fillStyle = 'rgba(255,255,255,' + (.2 + A.hash(i, 1) * .5) + ')'; c.fillRect(A.hash(i, 2) * W, A.hash(i, 3) * H * .4, 1.2, 1.2); }

@@ -29,6 +29,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <div id="overlay"><h1>Spore Patrol</h1><p id="msg">A giant crawler is winding down through the mushroom patch. Blast every segment before it reaches you.</p><p class="how">Left side: drag to move. Right side: hold to fire. Hit segments turn into mushrooms. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1" data-max="1.8"></script>
 <script src="../lib/art.js"></script>
 <script>
 const GAME_ID='spore-patrol';
@@ -85,12 +86,12 @@ function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(st
 </script>
 <script>
 // SPORE PATROL — blast the segmented crawler as it winds down through the mushroom patch. Watch for jumpers and divers.
-const C=16,COLS=25,ROWS=36,ZONE=30;
+const C=16,COLS=Math.floor(W/16),ROWS=36,ZONE=30; // COLS grows when the field is widened sideways
 let mush,segs,pl,shot,spider,flea,lives,level,deadT,palette,spiderT,fleaT,shotCD,nextLife;
 ACTION_LABEL='FIRE';
 const PALS=[['#ff4fa3','#7cff6b','#ffd23f'],['#38f2ff','#ff9a3d','#fff36b'],['#c08bff','#5affc8','#ff6b6b'],['#ffd23f','#4f8bff','#ff4fa3'],['#7cff6b','#ff4fa3','#38f2ff']];
 function reset(){score=0;lives=3;level=1;nextLife=12000;mush=Array.from({length:ROWS},()=>new Array(COLS).fill(0));
- for(let i=0;i<46;i++){const r=1+Math.floor(Math.random()*(ROWS-3)),c=Math.floor(Math.random()*COLS);mush[r][c]=4}
+ for(let i=0;i<Math.round(46*COLS/25);i++){const r=1+Math.floor(Math.random()*(ROWS-3)),c=Math.floor(Math.random()*COLS);mush[r][c]=4}
  pl={x:W/2,y:(ROWS-2)*C};newWave();hud()}
 function newWave(){palette=PALS[(level-1)%PALS.length];segs=[];const n=Math.min(16,10+level),sp=Math.min(10,5+level*.6);
  for(let i=0;i<n;i++)segs.push({c:-i,pc:-i-1,r:0,pr:0,t:0,dir:1,vd:1,head:i===0,sp});

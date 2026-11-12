@@ -23,7 +23,7 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 <script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
-let W,H,dpr;function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
+let W,H,dpr;function resize(){dpr=Math.min(devicePixelRatio || 1, 2.5);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
 // track: two straights + two semicircles
 const L=1400,RAD=520,TW=170,M=400,LAPS=5;
 const pts=[];{const per=2*L+2*Math.PI*RAD;for(let i=0;i<M;i++){let s=i/M*per,x,y;

@@ -18,12 +18,12 @@ K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'POUND' }, { id: 'a', label: 'JUM
 let state = 'title', renderer, scene, camera, stageEl, hudC, hud, boxes, movers, coins, stars, puffs, hero, heroM, cam, starN, coinN, hearts, time, msg, msgT, best = K.best('cloudcastle');
 function setup() {
   stageEl = document.getElementById('ks'); const kc = stageEl.querySelector('canvas'); if (kc) kc.style.display = 'none';
-  renderer = new THREE.WebGLRenderer({ antialias: false }); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  renderer = new THREE.WebGLRenderer({ antialias: false }); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block'; stageEl.style.position = 'relative'; stageEl.insertBefore(renderer.domElement, stageEl.firstChild);
   hudC = document.createElement('canvas'); hudC.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1'; stageEl.insertBefore(hudC, renderer.domElement.nextSibling); hud = hudC.getContext('2d');
   camera = new THREE.PerspectiveCamera(65, 1, 0.3, 500); addEventListener('resize', fit); fit();
 }
-function fit() { const r = stageEl.getBoundingClientRect(), w = Math.max(100, r.width), h = Math.max(100, r.height); renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 80 : 62; camera.updateProjectionMatrix(); const d = Math.min(devicePixelRatio || 1, 2); hudC.width = w * d; hudC.height = h * d; hud.setTransform(d, 0, 0, d, 0, 0); hudC._w = w; hudC._h = h; }
+function fit() { const r = stageEl.getBoundingClientRect(), w = Math.max(100, r.width), h = Math.max(100, r.height); renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 80 : 62; camera.updateProjectionMatrix(); const d = Math.min(devicePixelRatio || 1, 2.5); hudC.width = w * d; hudC.height = h * d; hud.setTransform(d, 0, 0, d, 0, 0); hudC._w = w; hudC._h = h; }
 function title() { K.card({ title: 'CLOUD CASTLE 3D', text: 'Six sun stars are hidden on the islands around Cloud Castle. ▲ runs forward, ◀ ▶ turn, ▼ backs up. JUMP to hop, press JUMP again in the air for a second jump, and POUND in the air to stomp down. Bop the Puffs on the head. Falling off the clouds sends you back to the last flag.', best: best ? 'BEST TIME ' + Math.floor(best / 60) + ':' + String(best % 60).padStart(2, '0') : '', button: 'Start', onStart: () => { if (!renderer) setup(); build(); state = 'play'; } }); }
 
 function box(x, y, z, w, h, d, col, o) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: col })); m.position.set(x, y, z); scene.add(m); const b = Object.assign({ m, x, y, z, w, h, d }, o || {}); boxes.push(b); return b; }

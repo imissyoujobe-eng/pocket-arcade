@@ -8,6 +8,7 @@
 <body>
 <script src="../lib/kit.js"></script>
 <script src="../lib/art.js"></script>
+<script src="../lib/roster.js"></script>
 <script>
 // Copter Pack: fly a heli-pack down through the mine, blast critters with your helmet laser, dynamite the walls and rescue the trapped miner.
 K.theme({ bg: '#120c08', ink: '#fff2e0', accent: '#ffb02e', accentInk: '#2a1600' });
@@ -176,7 +177,8 @@ function draw(c, t) {
   if (msgT > 0) K.text(c, msg, VW / 2, 30, 9, '#fff');
 }
 // ---------- detailed sprites (drawn at world scale, canvas is high-res) ----------
-function drawHero(c, x, y, face, t, thrust) {
+function drawHero(c, x, y, face, t, thrust, classic) {
+  if (!classic && window.Roster && Roster.on()) return drawPicked(c, x, y, face, t, thrust);
   const INK = A.INK; c.save(); c.translate(x + 5, y); if (face < 0) c.scale(-1, 1);
   // rotor: blurred disc plus spinning blades
   const sp = t / 25; c.fillStyle = 'rgba(220,220,230,.18)'; c.beginPath(); c.ellipse(0, -3.6, 9.5, 1.6, 0, 0, 7); c.fill();
@@ -211,6 +213,18 @@ function drawHero(c, x, y, face, t, thrust) {
   // helmet lamp beam lights up the tunnel ahead
   const lx = x + 5 + face * 4, ly = y - 0.3; const lg = c.createRadialGradient(lx, ly, 1, lx + face * 18, ly + 4, 26); lg.addColorStop(0, 'rgba(255,240,180,.28)'); lg.addColorStop(1, 'rgba(255,240,180,0)');
   c.save(); c.globalCompositeOperation = 'lighter'; c.fillStyle = lg; c.beginPath(); c.moveTo(lx, ly); c.lineTo(lx + face * 40, ly - 10); c.lineTo(lx + face * 40, ly + 18); c.closePath(); c.fill(); c.restore();
+}
+// Desire'e or J.T. wearing the copter pack: backpack motor and rotor drawn on, laser pistol aimed ahead
+function drawPicked(c, x, y, face, t, thrust) {
+  const INK = A.INK; c.save(); c.translate(x + 5, y); if (face < 0) c.scale(-1, 1);
+  c.fillStyle = INK; c.fillRect(-7.6, 3.2, 4.4, 7.8); c.fillStyle = '#6a6a78'; c.fillRect(-7.2, 3.6, 3.6, 7); c.fillStyle = '#9a9aa8'; c.fillRect(-7, 3.8, 1, 6.4); c.fillStyle = '#3a3a44'; for (let k = 0; k < 3; k++) c.fillRect(-6.8, 4.8 + k * 1.8, 2.8, 0.6);
+  if (thrust) { const f = 0.6 + Math.random() * 0.6; A.glow(c, -5.4, 12.4, 4, '255,160,60', 0.7); c.fillStyle = '#ffb02e'; c.beginPath(); c.moveTo(-6.8, 11); c.lineTo(-5.4, 11 + 4 * f); c.lineTo(-4, 11); c.fill(); }
+  c.fillStyle = INK; c.fillRect(-5.8, -2.8, 1.6, 7); c.fillStyle = '#9a9aa6'; c.fillRect(-5.4, -2.4, 0.8, 6.4);
+  const sp = t / 25; c.fillStyle = 'rgba(220,220,230,.18)'; c.beginPath(); c.ellipse(-5, -3.4, 9.5, 1.6, 0, 0, 7); c.fill();
+  c.strokeStyle = '#e8e8ee'; c.lineWidth = 1; c.beginPath(); const bl = 9 * Math.cos(sp); c.moveTo(-5 - bl, -3.4); c.lineTo(-5 + bl, -3.4); c.stroke();
+  c.fillStyle = '#e63946'; c.beginPath(); c.arc(-5, -3.4, 0.9, 0, 7); c.fill();
+  c.restore();
+  Roster.draw(c, 'fly', x + 5, y + 14.2, face, 16, { t: t, aim: 'f' });
 }
 function drawMiner(c, x, y, t) {
   const INK = A.INK, wave = Math.sin(t / 180) * 2;
@@ -256,6 +270,7 @@ function drawTNT(c, x, y, t, left) {
   const sp = Math.floor(t / 60) % 2; A.glow(c, x + 1, y - 8.7, 5, '255,200,80', 0.8); c.fillStyle = sp ? '#ffd23f' : '#fff'; c.beginPath(); c.arc(x + 1, y - 8.7, 1.1, 0, 7); c.fill();
   if (left < 0.6 && Math.floor(t / 80) % 2) { c.strokeStyle = 'rgba(255,60,60,.8)'; c.lineWidth = 0.6; c.beginPath(); c.arc(x, y, 26, 0, 7); c.stroke(); }
 }
+Roster.offer({ classic: 'Pilot', thumb: (g, w, h, t) => { g.save(); g.scale(2.2, 2.2); drawHero(g, 3.2, 7.5, 1, t, true, true); g.restore(); } });
 title();
 { const _draw = draw; draw = function (c, t) { _draw(c, t); A.ambient(c, VW, VH, t, 'dust', 10); A.vignette(c, VW, VH, 0.45); }; }
 K.run(update, draw);

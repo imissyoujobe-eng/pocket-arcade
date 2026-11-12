@@ -25,6 +25,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <span class="lbl">Players</span><div class="row" id="players"><button class="chip" aria-pressed="true" data-p="1">1P vs CPU</button><button class="chip" aria-pressed="false" data-p="2">2 Players</button></div>
     <button id="go">Play</button></div>
 </div></div>
+<script src="../lib/fit.js" data-canvas="#c"></script>
 <script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);

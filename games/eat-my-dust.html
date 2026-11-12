@@ -121,7 +121,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
 
   function resize() {
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
     W = field.clientWidth; H = field.clientHeight;
     cv.width = W * DPR; cv.height = H * DPR; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     S = Math.min(H / 260, W / 420); baseY = H * 0.84;

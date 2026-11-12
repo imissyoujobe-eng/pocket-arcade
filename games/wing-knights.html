@@ -8,6 +8,7 @@
 <body>
 <script src="../lib/kit.js"></script>
 <script src="../lib/art.js"></script>
+<script src="../lib/roster.js"></script>
 <script>
 // Wing Knights: flap your flying mount over a lava pit and knock enemy riders out of the sky. The higher lance wins. Grab their eggs before they hatch.
 K.theme({ bg: '#0c0a14', ink: '#fff4e0', accent: '#ffcc33', accentInk: '#2a1a00' });
@@ -130,21 +131,83 @@ function drawRider(c, r, bird, armor, plume, t) {
   c.save(); c.translate(r.x, r.y); c.scale(S, S); c.translate(-r.x, -r.y);
   if (r.spawn > 0) { c.globalAlpha = 0.3 + 0.3 * Math.sin(t / 50); }
   if (r.inv > 0 && r.spawn <= 0 && Math.floor(t / 70) % 2) c.globalAlpha = 0.5;
-  const x = Math.round(r.x), y = Math.round(r.y), f = r.face;
-  // legs
+  const x = r.x, y = r.y, f = r.face, INK = A.INK, sh = A.shade;
   const run = r.ground && Math.abs(r.vx) > 10 ? Math.sin(t / 50) * 3 : 0;
-  c.fillStyle = '#ffb030'; c.fillRect(x - 3 + run, y - 6, 2, 6); c.fillRect(x + 1 - run, y - 6, 2, 6);
-  // body + neck + head of the mount
-  c.fillStyle = bird; c.beginPath(); c.ellipse(x, y - 10, 8, 5, 0, 0, 7); c.fill();
-  c.fillRect(x + f * 5 - 1.5, y - 18, 3, 8); c.fillRect(x + f * 5 - 1.5 + f * 1, y - 20, 4 * f, 3);
-  c.fillStyle = '#ffb030'; c.fillRect(x + f * 9 - (f < 0 ? 3 : 0), y - 19, 3, 2);
-  // wing
   const up = r.wing > 0 || !r.ground && Math.floor(t / 90) % 2 === 0;
-  c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.moveTo(x - f * 2, y - 11); c.lineTo(x - f * 12, up ? y - 20 : y - 4); c.lineTo(x - f * 6, y - 9); c.fill();
-  // rider + lance
-  c.fillStyle = armor; c.fillRect(x - 3, y - 21, 6, 8); c.fillRect(x - 2, y - 26, 5, 5); c.fillStyle = plume; c.fillRect(x - f * 2 - 1, y - 29, 3, 3);
-  c.fillStyle = '#ddd'; c.fillRect(f > 0 ? x + 2 : x - 16, y - 17, 14, 1.5);
+  c.lineCap = 'round'; c.lineJoin = 'round';
+  // far wing, behind the body
+  drawWing(c, x - f * 1, y - 12, f, up, sh(bird, -0.45), 0.85);
+  // tail plumes
+  c.fillStyle = INK; c.beginPath(); c.moveTo(x - f * 5, y - 12.5); c.lineTo(x - f * 14, y - 17); c.lineTo(x - f * 12.5, y - 11); c.lineTo(x - f * 14.5, y - 6.5); c.lineTo(x - f * 5, y - 8); c.closePath(); c.fill();
+  c.fillStyle = sh(bird, -0.22); c.beginPath(); c.moveTo(x - f * 5.5, y - 12); c.lineTo(x - f * 13, y - 15.8); c.lineTo(x - f * 11.6, y - 11); c.lineTo(x - f * 13.3, y - 7.4); c.lineTo(x - f * 5.5, y - 8.6); c.closePath(); c.fill();
+  // legs with talons
+  for (const [lx, dx] of [[-2.2, run], [2, -run]]) {
+    c.strokeStyle = INK; c.lineWidth = 2.4; c.beginPath(); c.moveTo(x + lx, y - 7); c.lineTo(x + lx + dx * 0.6, y - 3.4); c.lineTo(x + lx + dx, y - 0.8); c.stroke();
+    c.strokeStyle = '#ffb030'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x + lx, y - 7); c.lineTo(x + lx + dx * 0.6, y - 3.4); c.lineTo(x + lx + dx, y - 0.8); c.stroke();
+    c.fillStyle = INK; c.fillRect(x + lx + dx - 2, y - 1.4, 4.2, 1.6); c.fillStyle = '#ffb030'; c.fillRect(x + lx + dx - 1.6, y - 1, 3.4, 0.9);
+  }
+  // body with shading and breast feathers
+  c.fillStyle = INK; c.beginPath(); c.ellipse(x, y - 10, 8.8, 5.7, 0, 0, 7); c.fill();
+  const bg = c.createLinearGradient(x, y - 15.5, x, y - 4.5); bg.addColorStop(0, sh(bird, 0.35)); bg.addColorStop(0.55, bird); bg.addColorStop(1, sh(bird, -0.35));
+  c.fillStyle = bg; c.beginPath(); c.ellipse(x, y - 10, 8, 5, 0, 0, 7); c.fill();
+  c.fillStyle = sh(bird, 0.45); for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(x + f * (3.2 + i * 1.3), y - 9.2 + i * 1.3, 1.3, 0, 7); c.fill(); }
+  // neck, head, crest, beak and eye
+  c.strokeStyle = INK; c.lineWidth = 4.6; c.beginPath(); c.moveTo(x + f * 4.5, y - 11); c.quadraticCurveTo(x + f * 7.5, y - 15, x + f * 6.5, y - 19); c.stroke();
+  c.strokeStyle = sh(bird, 0.1); c.lineWidth = 3; c.beginPath(); c.moveTo(x + f * 4.5, y - 11); c.quadraticCurveTo(x + f * 7.5, y - 15, x + f * 6.5, y - 19); c.stroke();
+  c.fillStyle = INK; c.beginPath(); c.moveTo(x + f * 5.4, y - 21); c.lineTo(x + f * 3.2, y - 25); c.lineTo(x + f * 6.8, y - 21.6); c.fill();
+  c.fillStyle = INK; c.beginPath(); c.arc(x + f * 7, y - 19.6, 2.9, 0, 7); c.fill();
+  c.fillStyle = sh(bird, 0.2); c.beginPath(); c.arc(x + f * 7, y - 19.6, 2.2, 0, 7); c.fill();
+  c.fillStyle = INK; c.beginPath(); c.moveTo(x + f * 8.8, y - 21); c.lineTo(x + f * 13.4, y - 19.2); c.lineTo(x + f * 8.8, y - 17.8); c.closePath(); c.fill();
+  c.fillStyle = '#ffb030'; c.beginPath(); c.moveTo(x + f * 9, y - 20.4); c.lineTo(x + f * 12.3, y - 19.2); c.lineTo(x + f * 9, y - 18.5); c.closePath(); c.fill();
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(x + f * 7.7, y - 20.2, 0.95, 0, 7); c.fill(); c.fillStyle = '#111'; c.fillRect(x + f * 8 - 0.35, y - 20.6, 0.7, 0.8);
+  // near wing, over the body
+  drawWing(c, x - f * 1.5, y - 11, f, up, bird, 1);
+  // rider: your rider can be Desire'e or J.T.
+  if (r === me && window.Roster && Roster.on()) Roster.draw(c, 'ride', x, y - 12.5, f, 21, { t: t });
+  else drawKnight(c, x, y, f, armor, plume, t);
+  // lance with a steel tip and a pennant
+  c.fillStyle = INK; c.fillRect(f > 0 ? x + 1.4 : x - 16.6, y - 17.6, 15.2, 2.5);
+  const lg = c.createLinearGradient(0, y - 17.2, 0, y - 15.4); lg.addColorStop(0, '#f6f6fa'); lg.addColorStop(1, '#9a9aa8');
+  c.fillStyle = lg; c.fillRect(f > 0 ? x + 2 : x - 16, y - 17, 14, 1.4);
+  c.fillStyle = INK; c.beginPath(); c.moveTo(x + f * 15.6, y - 18); c.lineTo(x + f * 19.4, y - 16.3); c.lineTo(x + f * 15.6, y - 14.6); c.fill();
+  c.fillStyle = '#d8d8e0'; c.beginPath(); c.moveTo(x + f * 16, y - 17.3); c.lineTo(x + f * 18.6, y - 16.3); c.lineTo(x + f * 16, y - 15.3); c.fill();
+  const pw = Math.sin(t / 70) * 0.9; c.fillStyle = plume; c.beginPath(); c.moveTo(x + f * 11.5, y - 17); c.lineTo(x + f * 8, y - 19.8 + pw); c.lineTo(x + f * 11.5, y - 18.8); c.closePath(); c.fill();
   c.globalAlpha = 1; c.restore();
+}
+// a wing of layered feathers, raised (up) or swept down
+function drawWing(c, x, y, f, up, col, k) {
+  const tipY = up ? y - 11 * k : y + 6 * k, midY = up ? y - 7 * k : y + 3 * k;
+  c.fillStyle = A.INK; c.beginPath(); c.moveTo(x + f * 1, y - 1.5); c.quadraticCurveTo(x - f * 6, midY - 1, x - f * 12.5 * k, tipY); c.quadraticCurveTo(x - f * 8, y + 1.5, x + f * 1.5, y + 1.8); c.closePath(); c.fill();
+  const g = c.createLinearGradient(x, y - 6, x, y + 4); g.addColorStop(0, A.shade(col, 0.25)); g.addColorStop(1, A.shade(col, -0.25));
+  c.fillStyle = g; c.beginPath(); c.moveTo(x + f * 0.4, y - 0.8); c.quadraticCurveTo(x - f * 6, midY - 0.4, x - f * 11.4 * k, tipY + (up ? 0.6 : -0.6)); c.quadraticCurveTo(x - f * 7.6, y + 0.9, x + f * 0.8, y + 1.1); c.closePath(); c.fill();
+  c.strokeStyle = 'rgba(0,0,0,.3)'; c.lineWidth = 0.6;
+  for (let i = 1; i <= 3; i++) { const u = i / 4; c.beginPath(); c.moveTo(x - f * (2 + u * 3), y); c.lineTo(x - f * (5 + u * 6.5) * k, up ? y - (4 + u * 6) * k : y + (1 + u * 3.6) * k); c.stroke(); }
+}
+// the classic jousting knight: plate armor, crested helmet with a visor slit, plume and a shield
+function drawKnight(c, x, y, f, armor, plume, t) {
+  const INK = A.INK, sh = A.shade;
+  c.fillStyle = INK; c.beginPath(); c.roundRect(x - 3.8, y - 21.8, 7.6, 9.6, 1.6); c.fill();
+  const ag = c.createLinearGradient(x - 3, 0, x + 3, 0); ag.addColorStop(0, sh(armor, -0.35)); ag.addColorStop(0.45, sh(armor, 0.35)); ag.addColorStop(1, sh(armor, -0.2));
+  c.fillStyle = ag; c.beginPath(); c.roundRect(x - 3.1, y - 21.1, 6.2, 8.2, 1.2); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.35)'; c.fillRect(x - 1.6, y - 20.4, 1, 5.6);
+  c.fillStyle = sh(armor, -0.45); c.fillRect(x - 3.1, y - 15.2, 6.2, 1.1);
+  // shield on the far arm
+  c.fillStyle = INK; c.beginPath(); c.moveTo(x - f * 1.6, y - 20.6); c.lineTo(x - f * 6.7, y - 20.6); c.lineTo(x - f * 6.7, y - 15.5); c.lineTo(x - f * 4.15, y - 12.4); c.lineTo(x - f * 1.6, y - 15.5); c.closePath(); c.fill();
+  c.fillStyle = plume; c.beginPath(); c.moveTo(x - f * 2.2, y - 20); c.lineTo(x - f * 6.1, y - 20); c.lineTo(x - f * 6.1, y - 15.8); c.lineTo(x - f * 4.15, y - 13.4); c.lineTo(x - f * 2.2, y - 15.8); c.closePath(); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(x - f * 4.15 - 0.4, y - 19.4, 0.8, 4.6); c.fillRect(x - f * 4.15 - 1.4, y - 17.8, 2.8, 0.8);
+  // helmet
+  c.fillStyle = INK; c.beginPath(); c.roundRect(x - 3.1, y - 27.4, 6.6, 6.6, 2.2); c.fill();
+  const hg = c.createLinearGradient(x - 2.5, 0, x + 3, 0); hg.addColorStop(0, sh(armor, -0.3)); hg.addColorStop(0.5, sh(armor, 0.45)); hg.addColorStop(1, sh(armor, -0.15));
+  c.fillStyle = hg; c.beginPath(); c.roundRect(x - 2.5, y - 26.8, 5.4, 5.4, 1.8); c.fill();
+  c.fillStyle = '#111'; c.fillRect(f > 0 ? x + 0.2 : x - 2.7, y - 24.6, 2.5, 0.9);
+  c.fillStyle = 'rgba(255,255,255,.45)'; c.fillRect(x - 1.8, y - 26.2, 0.8, 2.6);
+  // waving plume
+  const sw = Math.sin(t / 120) * 0.8;
+  c.fillStyle = INK; c.beginPath(); c.moveTo(x - f * 0.5, y - 27); c.quadraticCurveTo(x - f * 3, y - 31.8 + sw, x - f * 6.8, y - 28.4 + sw); c.quadraticCurveTo(x - f * 3, y - 28.6, x - f * 0.5, y - 26); c.fill();
+  c.fillStyle = plume; c.beginPath(); c.moveTo(x - f * 0.6, y - 26.8); c.quadraticCurveTo(x - f * 3, y - 31 + sw, x - f * 6, y - 28.5 + sw); c.quadraticCurveTo(x - f * 3, y - 28.2, x - f * 0.6, y - 26.3); c.fill();
+  // lance arm
+  c.fillStyle = INK; c.beginPath(); c.roundRect(f > 0 ? x + 0.6 : x - 4.8, y - 19.4, 4.2, 3, 1); c.fill();
+  c.fillStyle = sh(armor, 0.2); c.beginPath(); c.roundRect(f > 0 ? x + 1 : x - 4.4, y - 18.9, 3.4, 2, 0.8); c.fill();
 }
 function draw(c, t) {
   const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0c0a20'); g.addColorStop(1, '#3a1420'); c.fillStyle = g; c.fillRect(0, 0, W, H);
@@ -166,6 +229,7 @@ function draw(c, t) {
 }
 drawRider = A.ink(drawRider);
 { const _draw = draw; draw = function (c, t) { _draw(c, t); A.ambient(c, W, H, t, 'ember', 18); A.vignette(c, W, H, 0.4); }; }
+Roster.offer({ classic: 'Knight', thumb: (g, w, h, t) => { g.save(); g.translate(15, 47); g.scale(0.66, 0.66); drawRider(g, { x: 0, y: 0, face: 1, spawn: 0, inv: 0, ground: true, vx: 0, wing: 0 }, '#ffd84a', '#d0d8e8', '#ffcc33', t); g.restore(); } });
 start(); state = 'title'; title(); K.run(update, draw);
 </script>
 </body>

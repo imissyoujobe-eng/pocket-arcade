@@ -8,6 +8,7 @@
 <body>
 <script src="../lib/kit.js"></script>
 <script src="../lib/art.js"></script>
+<script src="../lib/roster.js"></script>
 <script>
 // Lost Mine: explore a deep cavern for gold bars and the lost relic. Climb ladders, swim the underground river, dodge bats and scorpions.
 K.theme({ bg: '#0e0a06', ink: '#fff4e0', accent: '#ffd23f', accentInk: '#2a1d00' });
@@ -123,17 +124,40 @@ function draw(c, t) {
     if (m.t === 'bat') { const f = Math.floor(t / 90) % 2; c.fillStyle = '#4a3a5a'; c.fillRect(x - 3, y - 3, 6, 6); c.fillRect(x - 10, y - (f ? 5 : 0), 7, 3); c.fillRect(x + 3, y - (f ? 5 : 0), 7, 3); c.fillStyle = '#ff3b5c'; c.fillRect(x - 2, y - 2, 1, 1); c.fillRect(x + 1, y - 2, 1, 1); }
     else { const d = Math.sign(m.vx); c.fillStyle = '#c8502c'; c.fillRect(x - 6, y - 5, 12, 5); c.fillRect(x - 6 * d - 3, y - 11, 3, 7); c.fillRect(x - 6 * d - 3 + d * 2, y - 13, 3, 3); c.fillStyle = '#8a3a1a'; for (let k = -5; k < 6; k += 3) c.fillRect(x + k, y, 1, 2); }
   }
-  if (deadT <= 0) {
-    const x = Math.round(p.x - ox), y = Math.round(p.y - oy), k = Math.abs(p.vx) > 1 && p.ground ? Math.floor(t / 100) % 2 : 0;
-    c.fillStyle = '#c8a050'; c.fillRect(x, y, 10, 3); c.fillRect(x + 2, y - 2, 6, 2);
-    c.fillStyle = '#ffcf9e'; c.fillRect(x + 2, y + 3, 6, 4); c.fillStyle = '#000'; c.fillRect(x + (p.face > 0 ? 6 : 3), y + 4, 1, 1);
-    c.fillStyle = '#3f8530'; c.fillRect(x + 1, y + 7, 8, 4);
-    c.fillStyle = '#7a5a3a'; c.fillRect(x + 1 + (k ? 2 : 0), y + 11, 3, 3); c.fillRect(x + 6 - (k ? 2 : 0), y + 11, 3, 3);
-    if (p.climb) { c.fillStyle = '#ffcf9e'; c.fillRect(x - 1, y + 5 + (Math.floor(t / 150) % 2) * 2, 2, 2); c.fillRect(x + 9, y + 7 - (Math.floor(t / 150) % 2) * 2, 2, 2); }
+  if (deadT <= 0 && window.Roster && Roster.on()) {
+    // Desire'e or J.T. exploring the mine
+    const pose = p.climb ? 'climb' : p.swim ? 'fly' : !p.ground ? (p.vy < 0 ? 'jump' : 'fall') : Math.abs(p.vx) > 1 ? 'run' : 'idle';
+    Roster.draw(c, pose, p.x - ox + 5, p.y - oy + 14, p.face || 1, 15, { t: t });
+  } else if (deadT <= 0) {
+    const x = p.x - ox, y = p.y - oy, k = Math.abs(p.vx) > 1 && p.ground ? Math.floor(t / 100) % 2 : 0;
+    drawExplorer(c, x, y, p.face || 1, t, k, p.climb);
   }
   for (const s of sparkles) { s.x += s.vx * 0.016; s.y += s.vy * 0.016; c.fillStyle = s.red ? '#ff5a36' : '#fff3a0'; c.fillRect(s.x - ox, s.y - oy, 2, 2); }
   if (msgT > 0) K.text(c, msg, W / 2, 24, 12, '#fff');
 }
+// the explorer: fedora with a band, green shirt, khaki trousers, boots and a backpack (x, y = top-left of the 10 x 14 body)
+function drawExplorer(c, x, y, face, t, k, climb) {
+  const INK = A.INK; c.save(); c.translate(x + 5, y); if (face < 0) c.scale(-1, 1);
+  c.fillStyle = INK; c.fillRect(-5.6, 6.2, 3, 5); c.fillStyle = '#8a5a2a'; c.fillRect(-5.2, 6.6, 2.2, 4.2); c.fillStyle = '#6a4220'; c.fillRect(-5.2, 6.6, 2.2, 1);
+  const l1 = k ? 1.4 : 0, l2 = k ? -1.4 : 0;
+  c.fillStyle = INK; c.fillRect(-3.6 + l1, 10.4, 3, 3.8); c.fillRect(0.6 + l2, 10.4, 3, 3.8);
+  c.fillStyle = '#c9a45c'; c.fillRect(-3.2 + l1, 10.6, 2.2, 2.2); c.fillRect(1 + l2, 10.6, 2.2, 2.2);
+  c.fillStyle = '#4a2a14'; c.fillRect(-3.4 + l1, 12.6, 2.8, 1.5); c.fillRect(0.8 + l2, 12.6, 2.8, 1.5);
+  c.fillStyle = INK; c.beginPath(); c.roundRect(-4, 6, 8, 5.2, 1.2); c.fill();
+  const g = c.createLinearGradient(-3.5, 0, 3.5, 0); g.addColorStop(0, '#2f6a24'); g.addColorStop(0.5, '#5aae44'); g.addColorStop(1, '#2f6a24');
+  c.fillStyle = g; c.beginPath(); c.roundRect(-3.5, 6.4, 7, 4.4, 1); c.fill();
+  c.fillStyle = '#3a2614'; c.fillRect(-3.5, 9.6, 7, 0.9); c.fillStyle = '#ffd23f'; c.fillRect(-0.5, 9.5, 1, 1.1);
+  if (climb) { const s = Math.floor(t / 150) % 2 ? 1 : -1; c.fillStyle = INK; c.fillRect(-5.2, 3 + s, 2.2, 4.5); c.fillRect(3, 3 - s, 2.2, 4.5); c.fillStyle = '#ffcf9e'; c.fillRect(-4.9, 3.2 + s, 1.6, 1.6); c.fillRect(3.3, 3.2 - s, 1.6, 1.6); }
+  else { c.fillStyle = INK; c.fillRect(2.6, 6.6, 2.4, 3.6); c.fillStyle = '#5aae44'; c.fillRect(2.9, 6.9, 1.8, 2.2); c.fillStyle = '#ffcf9e'; c.fillRect(2.9, 9, 1.8, 1); }
+  c.fillStyle = INK; c.beginPath(); c.arc(0.4, 4, 3.4, 0, 7); c.fill();
+  const fg = c.createRadialGradient(1, 3.4, 0.3, 0.4, 4, 3); fg.addColorStop(0, '#ffe2c0'); fg.addColorStop(1, '#d89a68'); c.fillStyle = fg; c.beginPath(); c.arc(0.4, 4, 2.9, 0, 7); c.fill();
+  c.fillStyle = '#222'; c.fillRect(1.8, 3.5, 0.8, 1); c.fillStyle = '#b8603a'; c.fillRect(1.4, 5.6, 1.4, 0.45);
+  c.fillStyle = INK; c.beginPath(); c.ellipse(0.4, 1.6, 5.4, 1.5, 0, 0, 7); c.fill(); c.fillRect(-2.4, -1.8, 5.6, 3.6);
+  c.fillStyle = '#c9a45c'; c.beginPath(); c.ellipse(0.4, 1.6, 4.8, 1, 0, 0, 7); c.fill(); c.fillRect(-2, -1.4, 4.8, 3); c.fillStyle = '#e0c080'; c.fillRect(-2, -1.4, 4.8, 0.7);
+  c.fillStyle = '#7a3b1e'; c.fillRect(-2, 0.4, 4.8, 0.9);
+  c.restore();
+}
+Roster.offer({ classic: 'Explorer', thumb: (g, w, h, t) => { g.save(); g.translate(4, 7); g.scale(2.8, 2.8); drawExplorer(g, 0, 0, 1, t, 0, false); g.restore(); } });
 title();
 { const _draw = draw; draw = function (c, t) { _draw(c, t); A.ambient(c, W, H, t, 'dust', 12); A.vignette(c, W, H, 0.45); }; }
 K.run(update, draw);

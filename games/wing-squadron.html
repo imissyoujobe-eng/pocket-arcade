@@ -25,7 +25,7 @@ const X = 9, Y = 5.5, YHI = 30; // ship bounds: you can climb high into the sky 
 const yLo = () => STAGES[si].ground !== null ? -8.2 : -28;
 function setup() {
   stageEl = document.getElementById('ks'); const kc = stageEl.querySelector('canvas'); if (kc) kc.style.display = 'none';
-  renderer = new THREE.WebGLRenderer({ antialias: false }); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  renderer = new THREE.WebGLRenderer({ antialias: false }); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.domElement.style.cssText = 'position:absolute;left:0;top:0;width:100%;display:block'; stageEl.style.position = 'relative'; stageEl.insertBefore(renderer.domElement, stageEl.firstChild);
   hudC = document.createElement('canvas'); hudC.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1'; stageEl.insertBefore(hudC, renderer.domElement.nextSibling); hud = hudC.getContext('2d');
   camera = new THREE.PerspectiveCamera(70, 1, 0.5, 600);
@@ -39,7 +39,7 @@ function fit() { const r = stageEl.getBoundingClientRect(), w = Math.max(100, r.
   DASH = Math.round(Math.min(h * 0.3, w * 0.5 + 10, 300)); VIEWH = h - DASH + 24;
   renderer.setSize(w, VIEWH, false); renderer.domElement.style.height = VIEWH + 'px'; camera.aspect = w / VIEWH; camera.fov = w < VIEWH ? 80 : 60; camera.updateProjectionMatrix();
   // gun ports: placed so the tracers start just above the dash, left and right of the nose
-  const tv = Math.tan(camera.fov * Math.PI / 360), ndcY = -(1 - 2 * 46 / VIEWH); GX = 0.55 * GZ * tv * camera.aspect; GY = ndcY * GZ * tv; const d = Math.min(devicePixelRatio || 1, 2); hudC.width = w * d; hudC.height = h * d; hud.setTransform(d, 0, 0, d, 0, 0); hudC._w = w; hudC._h = h; }
+  const tv = Math.tan(camera.fov * Math.PI / 360), ndcY = -(1 - 2 * 46 / VIEWH); GX = 0.55 * GZ * tv * camera.aspect; GY = ndcY * GZ * tv; const d = Math.min(devicePixelRatio || 1, 2.5); hudC.width = w * d; hudC.height = h * d; hud.setTransform(d, 0, 0, d, 0, 0); hudC._w = w; hudC._h = h; }
 function title() { K.card({ title: 'WING SQUADRON', text: 'Fly like a real plane: pull the stick down to climb, push it up to dive (left and right steer as usual). FIRE shoots lasers, BOMB clears everything nearby. Fly through gold rings to repair your shield. Survive each stage and destroy the mothership waiting at the end!', best: best ? 'BEST ' + best : '', button: 'Launch', onStart: () => { if (!renderer) setup(); si = 0; score = 0; bombs = 3; shield = 100; loadStage(); state = 'play'; } }); }
 function loadStage() {
   const S = STAGES[si]; scene = new THREE.Scene(); scene.background = A.skyTex(THREE, '#' + new THREE.Color(S.sky).offsetHSL(0, 0, -0.15).getHexString(), '#' + new THREE.Color(S.fog).getHexString()); scene.fog = new THREE.Fog(S.fog, 60, 260);

@@ -39,7 +39,7 @@ button:focus-visible{outline:3px solid var(--water);outline-offset:3px}
 const cv=document.getElementById('c'),ctx=cv.getContext('2d');
 const $=id=>document.getElementById(id);
 let W,H,dpr;
-function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}
+function resize(){dpr=Math.min(devicePixelRatio || 1, 2.5);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);}
 addEventListener('resize',resize);resize();
 
 let best=0;try{best=+localStorage.getItem('kaboom-best')||0}catch(e){}

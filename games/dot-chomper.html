@@ -142,7 +142,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   const isWall = (c, r) => { const t = tileAt(c, r); return t === '#'; };
 
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     W = field.clientWidth; H = field.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     T = Math.min(W / COLS, H / ROWS); ox = (W - COLS * T) / 2; oy = (H - ROWS * T) / 2;
@@ -383,7 +383,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   // ---------- drawing ----------
   let mazeCv = null, mazeKey = '';
   function buildMaze(p, white) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2), c2 = document.createElement('canvas'); c2.width = W * dpr; c2.height = H * dpr; const c = c2.getContext('2d'); c.scale(dpr, dpr);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5), c2 = document.createElement('canvas'); c2.width = W * dpr; c2.height = H * dpr; const c = c2.getContext('2d'); c.scale(dpr, dpr);
     // background: deep gradient with a faint star field and the maze floor tiles
     const bg = c.createRadialGradient(W / 2, H / 2, 20, W / 2, H / 2, Math.max(W, H) * .7); bg.addColorStop(0, A.shade(p.bg, .12)); bg.addColorStop(1, A.shade(p.bg, -.4)); c.fillStyle = bg; c.fillRect(0, 0, W, H);
     for (let i = 0; i < 90; i++) { c.fillStyle = 'rgba(255,255,255,' + (.1 + A.hash(i, 3) * .4) + ')'; c.fillRect(A.hash(i, 1) * W, A.hash(i, 2) * H, 1.2, 1.2); }

@@ -24,7 +24,7 @@ canvas{display:block;width:100%;height:100%}
 <script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
-let W,H,dpr;function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
+let W,H,dpr;function resize(){dpr=Math.min(devicePixelRatio || 1, 2.5);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
 let state='menu',ship={x:80,y:200,tx:80,ty:200,inv:0},shots=[],enemyShots=[],walkers=[],parts=[],snow=[],score=0,hp=3,base=100,wave=1,toSpawn=0,spawnT=0,fireT=0,AC,best=0,scroll=0,keys={};
 try{best=+localStorage.getItem('siege-best')||0}catch(e){}$('best').textContent=best?'BEST '+best:'';
 for(let i=0;i<90;i++)snow.push({x:Math.random(),y:Math.random(),s:Math.random()*2+.5});

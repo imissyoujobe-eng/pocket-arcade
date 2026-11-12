@@ -35,7 +35,7 @@ function mesh(geo, mat, x, y, z, parent) { const m = new THREE.Mesh(geo, mat); m
 const GEO = {};
 function setup() {
   stageEl = document.getElementById('ks'); const kc = stageEl.querySelector('canvas'); if (kc) kc.style.display = 'none';
-  renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' }); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5)); renderer.autoClear = false;
+  renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' }); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); renderer.autoClear = false;
   stageEl.style.position = 'relative'; renderer.domElement.style.cssText = 'position:absolute;display:block;touch-action:none;border-radius:8px'; stageEl.insertBefore(renderer.domElement, stageEl.firstChild);
   hudC = document.createElement('canvas'); hudC.style.cssText = 'position:absolute;pointer-events:none;z-index:1'; stageEl.insertBefore(hudC, renderer.domElement.nextSibling); hx = hudC.getContext('2d');
   camera = new THREE.PerspectiveCamera(72, 0.7, 0.05, 120); camera.rotation.order = 'YXZ';
@@ -66,7 +66,7 @@ function fit() {
   fitW = W; fitH = H; const L = Math.floor((r.width - W) / 2) + 'px', T = Math.floor((r.height - H) / 2) + 'px';
   renderer.setSize(W, H, false); for (const el of [renderer.domElement, hudC]) { el.style.left = L; el.style.top = T; el.style.width = W + 'px'; el.style.height = H + 'px'; }
   camera.aspect = vmCam.aspect = W / H; camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
-  const d = Math.min(devicePixelRatio || 1, 2); hudC.width = W * d; hudC.height = H * d; hx.setTransform(d, 0, 0, d, 0, 0);
+  const d = Math.min(devicePixelRatio || 1, 2.5); hudC.width = W * d; hudC.height = H * d; hx.setTransform(d, 0, 0, d, 0, 0);
 }
 // drag on the 3D view to turn / look; a quick tap advances dialog
 let look = null;

@@ -105,7 +105,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   const cv = $('cv'), ctx = cv.getContext('2d'), field = $('field');
   let W = 0, H = 0, U = 1, VW = 360, VH = 600, OX = 0, pY = 460, DPR = 1;
   function resize() {
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
     W = field.clientWidth; H = field.clientHeight;
     cv.width = W * DPR; cv.height = H * DPR;
     U = Math.min(W / 360, H / 540); VW = W / U; VH = H / U; OX = (VW - 360) / 2; pY = VH * .78;

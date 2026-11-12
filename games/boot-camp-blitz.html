@@ -97,7 +97,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   let W = 0, H = 0, U = 1, SW = 0, SH = 0, DPR = 1;
   const ZOOM = 2; // camera zoom: the view shows half as much ground, so everything is twice as big
   function resize() {
-    const dpr = DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = DPR = Math.min(window.devicePixelRatio || 1, 2.5);
     SW = field.clientWidth; SH = field.clientHeight;
     W = SW / ZOOM; H = SH / ZOOM;
     cv.width = SW * dpr; cv.height = SH * dpr; ctx.setTransform(dpr * ZOOM, 0, 0, dpr * ZOOM, 0, 0);
