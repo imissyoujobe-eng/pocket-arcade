@@ -3,7 +3,7 @@
 // To add a game: put its file in games/ (games/<id>.html), add one line below and raise ARCADE_TOTAL to match.
 // My Scores: key = the name a kit game saves its best under (pa-<key>); store = where an older game saves its own best;
 // kind = how that score reads (time, cs, ms, secs, mins, par, wins, fights, cup, cash, rally, streak, level; blank = points).
-window.ARCADE_TOTAL = 85;
+window.ARCADE_TOTAL = 84;
 window.ARCADE_GAMES = [
   { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue' },
   { id: 'word-clash', name: 'Word Clash', genre: 'Word', tag: 'Crossword tile duel vs the computer or friends', key: 'wordclash' },
@@ -73,7 +73,6 @@ window.ARCADE_GAMES = [
   { id: 'deep-core', name: 'Deep Core', genre: 'Adventure', tag: 'Explore the alien base', key: 'deepcore', kind: 'time' },
   { id: 'jungle-fire', name: 'Jungle Fire', genre: 'Action', tag: 'Run-and-gun commando', key: 'junglefire' },
   { id: 'girder-gauntlet', name: 'Girder Gauntlet', genre: 'Platform', tag: 'Climb past rolling barrels', key: 'girder' },
-  { id: 'cloud-castle', name: 'Cloud Castle 3D', genre: 'Platform', tag: '3D sky island star hunt', key: 'cloudcastle', kind: 'time' },
   { id: 'fairway-nine', name: 'Fairway Nine', genre: 'Sports', tag: 'Nine holes, wind and water', key: 'fairway9', kind: 'par' },
   { id: 'ramp-rally', name: 'Ramp Rally', genre: 'Racing', tag: '3D motocross, tricks and wrecks', key: 'ramprally3d', kind: 'cs' },
   { id: 'diamond-dash', name: 'Diamond Dash', genre: 'Sports', tag: 'Pitch, swing and win in three innings', key: 'diamond-wins', kind: 'wins' },
