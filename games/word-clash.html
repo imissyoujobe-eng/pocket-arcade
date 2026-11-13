@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Word Clash</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@500;700;800&display=swap">
+<style>
+:root { --bg: #17306b; --bg2: #0f2150; --ink: #fff; --tile1: #ffd98f; --tile2: #f2b25a; --tileInk: #3a2208; --acc: #ffb02e;
+  --tw: #e8505b; --dw: #f08a9a; --tl: #3fae6a; --dl: #4a9fe0; --cell: #2a4a8f; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: radial-gradient(120% 90% at 50% 0%, #2a58b8 0%, var(--bg) 45%, var(--bg2) 100%); color: var(--ink);
+  font-family: Rubik, system-ui, sans-serif; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+#app { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto auto; gap: 6px;
+  padding: max(46px, calc(env(safe-area-inset-top, 0px) + 44px)) max(8px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
+#scores { display: flex; gap: 6px; justify-content: center; align-items: stretch; }
+.pl { flex: 1 1 0; min-width: 0; max-width: 200px; padding: 5px 10px; border-radius: 14px; background: rgba(255,255,255,.1); border: 2px solid transparent; display: flex; flex-direction: column; align-items: center; }
+.pl.on { border-color: var(--acc); background: rgba(255,176,46,.18); }
+.pl .nm { font-size: 12px; font-weight: 700; opacity: .9; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl .sc { font: 400 22px Bungee, Impact, sans-serif; line-height: 1.1; }
+#boardWrap { position: relative; min-height: 0; overflow: auto; display: grid; place-items: center; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+#boardWrap::-webkit-scrollbar { display: none; }
+#board { display: grid; grid-template-columns: repeat(15, 1fr); gap: 2px; padding: 3px; background: rgba(0,0,0,.25); border-radius: 10px; position: relative; flex: none; }
+.c { position: relative; border-radius: 4px; background: var(--cell); display: flex; align-items: center; justify-content: center; font-weight: 800; color: rgba(255,255,255,.9); }
+.c.TW { background: var(--tw); } .c.DW { background: var(--dw); } .c.TL { background: var(--tl); } .c.DL { background: var(--dl); }
+.c.st { background: #f0b03a; }
+.c .lab { font-size: .34em; letter-spacing: -.02em; opacity: .95; }
+.c.st .lab { font-size: .7em; }
+.t { position: absolute; inset: 0; border-radius: 4px; background: linear-gradient(180deg, var(--tile1), var(--tile2)); color: var(--tileInk); box-shadow: inset 0 -2px 0 rgba(0,0,0,.18);
+  display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: .66em; }
+.t i { position: absolute; right: 8%; bottom: 2%; font-style: normal; font-size: .42em; font-weight: 700; }
+.t.blank { color: #8a5a20; }
+.t.pend { background: linear-gradient(180deg, #fff3c4, #ffd06a); box-shadow: 0 0 0 2px #fff, 0 3px 6px rgba(0,0,0,.35); z-index: 1; }
+.t.last { box-shadow: inset 0 -2px 0 rgba(0,0,0,.18), 0 0 0 2px #7cf0ff; }
+.bub { position: absolute; z-index: 3; right: -30%; top: -40%; min-width: 1.6em; padding: 0 4px; height: 1.6em; border-radius: .8em; display: flex; align-items: center; justify-content: center;
+  background: #e8505b; color: #fff; font: 800 11px Rubik, sans-serif; box-shadow: 0 2px 4px rgba(0,0,0,.4); pointer-events: none; }
+.bub.ok { background: #2fa85a; }
+#status { min-height: 22px; text-align: center; font-size: 14px; font-weight: 700; padding: 0 6px; }
+#status.bad { color: #ffb4b4; } #status.ok { color: #b6ffcc; }
+#rack { display: flex; justify-content: center; gap: 5px; min-height: 54px; touch-action: none; }
+.rt { position: relative; width: min(calc((100vw - 52px) / 7), 52px); height: min(calc((100vw - 52px) / 7), 52px); flex: none; border-radius: 9px; background: linear-gradient(180deg, var(--tile1), var(--tile2)); color: var(--tileInk);
+  box-shadow: inset 0 -4px 0 rgba(0,0,0,.18), 0 4px 0 rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; font: 800 min(7.4vw, 30px) Rubik, sans-serif; cursor: pointer; transition: transform .12s; }
+.rt i { position: absolute; right: 6px; bottom: 3px; font-style: normal; font-size: 12px; font-weight: 700; }
+.rt.sel { transform: translateY(-9px); box-shadow: inset 0 -4px 0 rgba(0,0,0,.18), 0 0 0 3px #fff, 0 10px 12px rgba(0,0,0,.35); }
+.rt.gone { visibility: hidden; }
+.rt.hid { background: rgba(255,255,255,.15); box-shadow: none; color: transparent; }
+#btns { display: flex; justify-content: center; gap: 6px; }
+.b { all: unset; box-sizing: border-box; flex: 1 1 0; max-width: 110px; min-height: 48px; padding: 4px 2px; border-radius: 14px; background: rgba(255,255,255,.12); display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font: 700 11px Rubik, sans-serif; letter-spacing: .04em; cursor: pointer; text-align: center; }
+.b svg { width: 22px; height: 22px; fill: none; stroke: #fff; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 2px; }
+.b.play { flex: 1.5 1 0; max-width: 150px; background: linear-gradient(180deg, #ffd06a, var(--acc)); color: #2a1600; font: 400 18px Bungee, Impact, sans-serif; box-shadow: 0 4px 0 rgba(0,0,0,.3); }
+.b.play[disabled] { opacity: .45; }
+.b:active { transform: translateY(2px); } .b:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+#ghost { position: fixed; z-index: 20; pointer-events: none; width: 46px; height: 46px; margin: -30px 0 0 -23px; border-radius: 9px; background: linear-gradient(180deg, var(--tile1), var(--tile2)); color: var(--tileInk);
+  display: none; align-items: center; justify-content: center; font: 800 26px Rubik, sans-serif; box-shadow: 0 10px 18px rgba(0,0,0,.4); }
+#ov, #cover { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 12px; padding: 50px 18px 24px; overflow-y: auto;
+  background: rgba(8,16,40,.86); backdrop-filter: blur(4px); text-align: center; }
+#ov[hidden], #cover[hidden] { display: none; }
+h1 { margin: 0; font: 400 clamp(30px, 10vw, 52px) Bungee, Impact, sans-serif; color: var(--acc); line-height: 1.05; text-shadow: 0 4px 0 rgba(0,0,0,.3); }
+h2 { margin: 6px 0 0; font: 400 15px Bungee, Impact, sans-serif; letter-spacing: .04em; opacity: .9; }
+#ov p, #cover p { margin: 0; max-width: 36ch; line-height: 1.5; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.big { all: unset; box-sizing: border-box; padding: 12px 22px; min-height: 48px; border-radius: 999px; background: linear-gradient(180deg, #ffd06a, var(--acc)); color: #2a1600; font: 400 17px Bungee, Impact, sans-serif;
+  box-shadow: 0 4px 0 rgba(0,0,0,.3); cursor: pointer; text-align: center; }
+.big.alt { background: rgba(255,255,255,.14); color: #fff; box-shadow: none; border: 2px solid rgba(255,255,255,.35); font-size: 14px; }
+.big[aria-pressed="true"] { background: #fff; color: #17306b; }
+.big:active { transform: translateY(2px); } .big:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.names { display: grid; gap: 8px; width: min(320px, 100%); }
+.names input { font: 700 16px Rubik, sans-serif; padding: 10px 12px; border-radius: 12px; border: 2px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: #fff; min-height: 44px; }
+.pick { display: grid; grid-template-columns: repeat(7, 42px); gap: 6px; }
+.pick button, .swapr button { all: unset; width: 42px; height: 42px; border-radius: 8px; background: linear-gradient(180deg, var(--tile1), var(--tile2)); color: var(--tileInk); font: 800 22px Rubik, sans-serif;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.swapr { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.swapr button[aria-pressed="true"] { outline: 3px solid #fff; transform: translateY(-5px); background: #ffe9b8; }
+.how { text-align: left; max-width: 40ch; line-height: 1.5; font-size: 15px; }
+.how b { color: var(--acc); }
+#ov .how p + p { margin-top: 10px; }
+.sq { display: inline-block; padding: 0 5px; border-radius: 4px; font-size: 12px; font-weight: 800; }
+#think { position: fixed; left: 50%; top: 46%; transform: translate(-50%, -50%); z-index: 6; padding: 10px 18px; border-radius: 999px; background: rgba(8,16,40,.8); font-weight: 700; display: none; }
+#load { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; font: 400 20px Bungee, Impact, sans-serif; background: var(--bg2); }
+/* phone on its side: board on the right, everything else on the left (clear of the ARCADE button, top left) */
+@media (orientation: landscape) and (max-height: 620px) {
+  #app { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr) auto auto; padding-top: max(8px, env(safe-area-inset-top, 0px)); column-gap: 14px; }
+  #boardWrap { grid-column: 2; grid-row: 1 / -1; }
+  #scores { grid-column: 1; grid-row: 1; padding-left: 100px; }
+  #status { grid-column: 1; grid-row: 2; align-self: center; }
+  #rack { grid-column: 1; grid-row: 4; flex-wrap: wrap; }
+  #btns { grid-column: 1; grid-row: 5; }
+  .rt { width: min(6.4vw, 50px); height: min(6.4vw, 50px); font-size: min(3.6vw, 28px); }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="scores"></div>
+  <div id="boardWrap"><div id="board" role="grid" aria-label="game board"></div></div>
+  <div id="status" aria-live="polite"></div>
+  <div id="rack" aria-label="your letters"></div>
+  <div id="btns">
+    <button class="b" id="bMenu" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>MENU</button>
+    <button class="b" id="bSwap" aria-label="Swap letters"><svg viewBox="0 0 24 24"><path d="M7 4l-3 3 3 3M4 7h12a4 4 0 0 1 4 4M17 20l3-3-3-3M20 17H8a4 4 0 0 1-4-4"/></svg>SWAP</button>
+    <button class="b" id="bPass" aria-label="Pass your turn"><svg viewBox="0 0 24 24"><path d="M5 12h12M13 7l5 5-5 5"/></svg>PASS</button>
+    <button class="b" id="bMix" aria-label="Shuffle or recall letters"><svg viewBox="0 0 24 24"><path d="M3 7h3c4 0 6 10 10 10h4M17 14l3 3-3 3M3 17h3c1.6 0 2.8-1.6 4-3.5M13.5 9.5C14.6 8 15.7 7 17 7h3M17 4l3 3-3 3"/></svg><span>SHUFFLE</span></button>
+    <button class="b play" id="bPlay">PLAY</button>
+  </div>
+</div>
+<div id="ghost"></div>
+<div id="think">Computer is thinking…</div>
+<div id="ov" hidden></div>
+<div id="cover" hidden></div>
+<div id="load">LOADING WORDS…</div>
+<script>
+// Word Clash: a crossword tile game. Take turns placing letter tiles to make words on the board; colored squares
+// double or triple a letter or the whole word. Play the computer (easy / medium / hard) or pass the phone around (2-4 players).
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id), N = 15, CENTER = 112, RACK = 7, BINGO = 40, SAVE = 'wc-game';
+  const VAL = { A: 1, B: 4, C: 4, D: 2, E: 1, F: 4, G: 3, H: 3, I: 1, J: 10, K: 5, L: 2, M: 4, N: 2, O: 1, P: 4, Q: 10, R: 1, S: 1, T: 1, U: 2, V: 5, W: 4, X: 8, Y: 3, Z: 10, '?': 0 };
+  const COUNT = { A: 9, B: 2, C: 2, D: 5, E: 13, F: 2, G: 3, H: 4, I: 8, J: 1, K: 1, L: 4, M: 2, N: 6, O: 8, P: 2, Q: 1, R: 6, S: 5, T: 7, U: 4, V: 2, W: 2, X: 1, Y: 2, Z: 1, '?': 2 };
+  const ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  // the bonus squares (the same in all four corners and both diagonals)
+  const PREM = new Array(N * N).fill('');
+  function mark(r, c, t) { for (const [a, b] of [[r, c], [c, r]]) for (const [x, y] of [[a, b], [14 - a, b], [a, 14 - b], [14 - a, 14 - b]]) PREM[x * N + y] = t; }
+  mark(0, 4, 'TW'); mark(2, 2, 'DW'); mark(3, 7, 'DW'); mark(6, 6, 'DW'); mark(1, 5, 'TL'); mark(5, 5, 'TL'); mark(0, 7, 'DL'); mark(2, 6, 'DL'); mark(3, 3, 'DL'); mark(0, 0, 'DL');
+  const LM = { DL: 2, TL: 3 }, WM = { DW: 2, TW: 3 };
+
+  // ---------------------------------------------------------------- words
+  let DICT = null, TIERS = {};
+  const tries = {};
+  // the computer's vocabulary: easy plays everyday words, hard knows the word-game words too
+  const LEVELS = { easy: { tiers: ['10', '20'], name: 'Easy' }, medium: { tiers: ['10', '20', '35'], name: 'Medium' }, hard: { tiers: ['10', '20', '35', '40', '50'], name: 'Hard' } };
+  function trieFor(lv) {
+    if (tries[lv]) return tries[lv];
+    const root = {};
+    for (const t of LEVELS[lv].tiers) for (const w of TIERS[t] || []) { if (w.length > N) continue; let n = root; for (let k = 0; k < w.length; k++) { const ch = w.charCodeAt(k) - 32; n = n[ch] || (n[ch] = {}); } n.$ = 1; }
+    return (tries[lv] = root);
+  }
+  const isWord = w => DICT.has(w.toLowerCase());
+
+  // ---------------------------------------------------------------- sound
+  let AC = null;
+  function tone(f, d, o) { try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); o = o || {};
+    const t = AC.currentTime + (o.at || 0), os = AC.createOscillator(), g = AC.createGain(); os.type = o.type || 'triangle'; os.frequency.setValueAtTime(f, t); if (o.to) os.frequency.exponentialRampToValueAtTime(o.to, t + d);
+    g.gain.setValueAtTime(o.vol || 0.06, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d); os.connect(g).connect(AC.destination); os.start(t); os.stop(t + d + 0.05); } catch (e) {} }
+  const tune = (n, s, o) => n.forEach((f, i) => tone(f, s * 1.4, Object.assign({ at: i * s }, o || {})));
+  const click = () => tone(520, 0.05, { type: 'square', vol: 0.025 });
+
+  // ---------------------------------------------------------------- game state
+  let G = null;            // { board, bag, players: [{ name, rack, score, cpu }], turn, idle, over, last, log, mode }
+  let pend = new Map();    // board index -> { ri: rack slot, ch, blank }
+  let sel = -1, zoom = 1, cpuBusy = false;
+  function newBag() { const b = []; for (const k in COUNT) for (let i = 0; i < COUNT[k]; i++) b.push(k); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; }
+  function draw(p) { while (p.rack.length < RACK && G.bag.length) p.rack.push(G.bag.pop()); }
+  function newGame(players, mode) {
+    G = { board: new Array(N * N).fill(null), bag: newBag(), players: players.map(p => ({ name: p.name, cpu: p.cpu || null, rack: [], score: 0 })), turn: 0, idle: 0, over: false, last: null, mode, msg: '' };
+    G.players.forEach(draw); pend.clear(); sel = -1; save(); render();
+    if (mode === 'pass') coverFor(G.turn); else if (cur().cpu) cpuTurn();
+  }
+  const cur = () => G.players[G.turn];
+  const save = () => { try { if (G && !G.over) localStorage.setItem(SAVE, JSON.stringify(G)); else localStorage.removeItem(SAVE); } catch (e) {} };
+  function loadSaved() { try { const g = JSON.parse(localStorage.getItem(SAVE)); if (g && g.board && g.players) return g; } catch (e) {} return null; }
+  // My Scores: best game score, games played, and whether you won the last game against the computer
+  function record(score, result) {
+    try { const best = +localStorage.getItem('pa-wordclash') || 0; if (score > best) localStorage.setItem('pa-wordclash', score);
+      const s = JSON.parse(localStorage.getItem('pa-stats') || '{}') || {}, r = s.wordclash || { n: 0 }; r.n = (r.n || 0) + 1; r.at = Date.now(); r.last = result || score; if (score > best) r.bAt = r.at; s.wordclash = r; localStorage.setItem('pa-stats', JSON.stringify(s)); } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------- reading and scoring a move
+  // tile at a square: one being placed this turn, or one already on the board
+  const at = (i, pm) => (pm && pm.get(i)) || G.board[i];
+  // words a set of new tiles makes. Returns { words: [{ w, cells }], err }
+  function collect(pm) {
+    if (!pm.size) return { err: '' };
+    const idx = [...pm.keys()], rows = new Set(idx.map(i => Math.floor(i / N))), cols = new Set(idx.map(i => i % N));
+    if (rows.size > 1 && cols.size > 1) return { err: 'Tiles must be in one row or one column' };
+    const r0 = Math.floor(idx[0] / N), c0 = idx[0] % N;
+    let across = rows.size === 1 && (idx.length > 1 || (c0 > 0 && at(idx[0] - 1, pm)) || (c0 < N - 1 && at(idx[0] + 1, pm)));
+    if (idx.length === 1 && !across && !((r0 > 0 && at(idx[0] - N, pm)) || (r0 < N - 1 && at(idx[0] + N, pm)))) across = true;
+    const step = across ? 1 : N, line = i => across ? Math.floor(i / N) : i % N;
+    const lo = Math.min(...idx), hi = Math.max(...idx);
+    for (let i = lo; i <= hi; i += step) if (!at(i, pm)) return { err: 'Leave no gaps between your tiles' };
+    const run = (i, st) => { const ln = st === 1 ? Math.floor(i / N) : i % N; let a = i; while (a - st >= 0 && (st === N || Math.floor((a - st) / N) === ln) && at(a - st, pm)) a -= st;
+      const cells = []; for (let b = a; b < N * N && (st === N || Math.floor(b / N) === ln) && at(b, pm); b += st) cells.push(b); return cells; };
+    const words = [], main = run(lo, step);
+    if (main.length > 1) words.push(main);
+    for (const i of idx) { const cr = run(i, across ? N : 1); if (cr.length > 1) words.push(cr); }
+    if (!words.length) return { err: 'Words need at least 2 letters' };
+    const empty = G.board.every(x => !x);
+    if (empty && !pm.has(CENTER)) return { err: 'The first word must cover the ★ in the middle' };
+    if (!empty && !words.some(ws => ws.some(i => !pm.has(i)))) return { err: 'Your word must join the words on the board' };
+    return { words: words.map(cells => ({ w: cells.map(i => at(i, pm).ch).join(''), cells })), main: main.length > 1 ? main : words[0] };
+  }
+  function scoreWords(words, pm) {
+    let total = 0;
+    for (const wd of words) { let s = 0, mult = 1; for (const i of wd.cells) { const t = at(i, pm), v = t.blank ? 0 : VAL[t.ch]; if (pm.has(i)) { s += v * (LM[PREM[i]] || 1); mult *= WM[PREM[i]] || 1; } else s += v; } wd.score = s * mult; total += wd.score; }
+    if (pm.size === RACK) total += BINGO;
+    return total;
+  }
+  function evaluate(pm) {
+    const c = collect(pm); if (c.err !== undefined) return { ok: false, err: c.err };
+    const badw = c.words.find(wd => !isWord(wd.w)); if (badw) return { ok: false, err: 'Not a word: ' + badw.w, words: c.words };
+    return { ok: true, words: c.words, score: scoreWords(c.words, pm), main: c.main.map(i => at(i, pm).ch).join('') };
+  }
+
+  // ---------------------------------------------------------------- the computer player
+  // Every legal move for a rack (Appel-Jacobson: grow words through each anchor square using a trie of the vocabulary;
+  // letters across other words must make real words too)
+  function allMoves(rack, trie) {
+    const moves = new Map(), B = G.board, empty = B.every(x => !x), left = rack.slice();
+    for (const d of [0, 1]) {
+      const ix = (r, c) => d === 0 ? r * N + c : c * N + r;
+      const cross = new Array(N * N).fill(null), anchor = new Array(N * N).fill(false);
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const i = ix(r, c); if (B[i]) continue;
+        let up = '', k = r - 1; while (k >= 0 && B[ix(k, c)]) { up = B[ix(k, c)].ch + up; k--; }
+        let dn = ''; k = r + 1; while (k < N && B[ix(k, c)]) { dn += B[ix(k, c)].ch; k++; }
+        if (up || dn) { const s = new Set(); for (const L of ABC) if (isWord(up + L + dn)) s.add(L); cross[i] = s; }
+        anchor[i] = empty ? i === CENTER : !!(up || dn || (c > 0 && B[ix(r, c - 1)]) || (c < N - 1 && B[ix(r, c + 1)]));
+      }
+      const part = [];
+      const record = (r, c) => {   // the word ends just before column c
+        const start = c - part.length, tiles = [];
+        part.forEach((p, k) => { if (p.rack) tiles.push({ i: ix(r, start + k), ch: p.ch, blank: p.blank }); });
+        if (!tiles.length) return;
+        const key = tiles.map(t => t.i + t.ch + (t.blank ? '*' : '')).sort().join(); if (moves.has(key)) return;
+        const pm = new Map(tiles.map(t => [t.i, { ch: t.ch, blank: t.blank }])), cl = collect(pm); if (cl.err !== undefined) return;
+        moves.set(key, { tiles, score: scoreWords(cl.words, pm), word: part.map(p => p.ch).join('') });
+      };
+      const tryLetter = (L, fn) => {
+        let k = left.indexOf(L); if (k >= 0) { left.splice(k, 1); part.push({ ch: L, rack: true, blank: false }); fn(); part.pop(); left.splice(k, 0, L); }
+        k = left.indexOf('?'); if (k >= 0) { left.splice(k, 1); part.push({ ch: L, rack: true, blank: true }); fn(); part.pop(); left.splice(k, 0, '?'); }
+      };
+      const extend = (r, c, node, ac) => {
+        if (c < N && B[ix(r, c)]) { const L = B[ix(r, c)].ch, nx = node[L.charCodeAt(0)]; if (nx) { part.push({ ch: L, rack: false }); extend(r, c + 1, nx, ac); part.pop(); } return; }
+        if (node.$ && c > ac) record(r, c);
+        if (c >= N || !left.length) return;
+        const cs = cross[ix(r, c)];
+        for (const k in node) { if (k === '$') continue; const L = String.fromCharCode(+k); if (cs && !cs.has(L)) continue; tryLetter(L, () => extend(r, c + 1, node[k], ac)); }
+      };
+      const leftPart = (r, ac, node, limit) => {
+        extend(r, ac, node, ac);
+        if (limit > 0) for (const k in node) { if (k === '$') continue; tryLetter(String.fromCharCode(+k), () => leftPart(r, ac, node[k], limit - 1)); }
+      };
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const i = ix(r, c); if (!anchor[i]) continue;
+        if (c > 0 && B[ix(r, c - 1)]) {   // letters already to the left: they start the word
+          let k = c - 1; while (k > 0 && B[ix(r, k - 1)]) k--;
+          let node = trie; for (let q = k; q < c && node; q++) node = node[B[ix(r, q)].ch.charCodeAt(0)];
+          if (node) { for (let q = k; q < c; q++) part.push({ ch: B[ix(r, q)].ch, rack: false }); extend(r, c, node, c); part.length = 0; }
+        } else {
+          let limit = 0, k = c - 1; while (k >= 0 && !B[ix(r, k)] && !anchor[ix(r, k)]) { limit++; k--; }
+          leftPart(r, c, trie, Math.min(limit, left.length - 1));
+        }
+      }
+    }
+    return [...moves.values()];
+  }
+  function cpuPick(p) {
+    const lv = p.cpu, moves = allMoves(p.rack, trieFor(lv));
+    if (!moves.length) return null;
+    if (lv === 'hard') {   // best score, holding on to blanks and S for a big play
+      for (const m of moves) m.v = m.score - m.tiles.filter(t => t.blank).length * (m.score < 35 ? 9 : 0) - m.tiles.filter(t => t.ch === 'S' && !t.blank).length * (m.score < 25 ? 3 : 0);
+      return moves.sort((a, b) => b.v - a.v)[0];
+    }
+    // easy and medium play a fair-sized move for the board: a share of the best score available
+    moves.sort((a, b) => a.score - b.score);
+    const best = moves[moves.length - 1].score, [lo, hi] = lv === 'easy' ? [0.22, 0.45] : [0.5, 0.8];
+    const pool = moves.filter(m => m.score >= best * lo && m.score <= best * hi);
+    if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+    const aim = best * (lo + hi) / 2; return moves.reduce((a, b) => Math.abs(b.score - aim) < Math.abs(a.score - aim) ? b : a);
+  }
+  function cpuTurn() {
+    if (!G || G.over || !cur().cpu) return;
+    cpuBusy = true; $('think').style.display = 'block'; render();
+    setTimeout(() => {
+      const p = cur(), m = cpuPick(p);
+      $('think').style.display = 'none'; cpuBusy = false;
+      if (m) { pend = new Map(m.tiles.map(t => [t.i, { ri: -1, ch: t.ch, blank: t.blank }])); commit(); return; }
+      // nothing fits: swap the awkward letters if the bag allows, otherwise pass
+      if (G.bag.length >= RACK) { const out = p.rack.filter(L => !'AEIRST?'.includes(L)); doSwap(out.length ? out : p.rack.slice(0, 3)); }
+      else pass();
+    }, 450);
+  }
+
+  // ---------------------------------------------------------------- playing a turn
+  function commit() {
+    const p = cur(), ev = evaluate(pend);
+    if (!ev.ok) { status(ev.err || 'Place some tiles first', 'bad'); tone(150, 0.25, { type: 'square', vol: 0.04 }); return false; }
+    const cells = [];
+    for (const [i, t] of pend) {
+      G.board[i] = { ch: t.ch, blank: !!t.blank }; cells.push(i);
+      const k = t.ri >= 0 ? t.ri : p.rack.indexOf(t.blank ? '?' : t.ch);
+      p.rack[k] = null;
+    }
+    p.rack = p.rack.filter(x => x !== null);
+    p.score += ev.score; G.idle = 0; draw(p);
+    const bingo = pend.size === RACK;
+    G.last = { p: G.turn, cells, word: ev.main, score: ev.score };
+    G.msg = p.name + ' played ' + ev.main + ' for ' + ev.score + (bingo ? ' (all 7 tiles! +' + BINGO + ')' : '');
+    pend.clear(); sel = -1;
+    if (bingo) tune([523, 659, 784, 1047, 1319], 0.08); else tune([659, 880], 0.08);
+    if (!p.rack.length && !G.bag.length) return endGame(G.turn);
+    nextTurn(); return true;
+  }
+  function pass() { G.msg = cur().name + ' passed'; recallAll(); G.idle++; tone(300, 0.15, { vol: 0.04 }); if (G.idle >= G.players.length * 2) return endGame(-1); nextTurn(); }
+  function doSwap(letters) {
+    const p = cur(); recallAll();
+    for (const L of letters) { const k = p.rack.indexOf(L); if (k >= 0) { p.rack.splice(k, 1); G.bag.push(L); } }
+    for (let i = G.bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [G.bag[i], G.bag[j]] = [G.bag[j], G.bag[i]]; }
+    draw(p); G.msg = p.name + ' swapped ' + letters.length + ' letter' + (letters.length === 1 ? '' : 's'); G.idle++; tone(400, 0.12, { vol: 0.04 });
+    if (G.idle >= G.players.length * 2) return endGame(-1);
+    nextTurn();
+  }
+  function nextTurn() {
+    G.turn = (G.turn + 1) % G.players.length; save(); render();
+    if (cur().cpu) cpuTurn();
+    else if (G.mode === 'pass') coverFor(G.turn);
+  }
+  // outBy: who used their last tile (-1: nobody). quitter: who resigned (they lose, whatever the scores)
+  function endGame(outBy, quitter) {
+    if (quitter == null) {
+      // leftover letters count against you; going out first earns everyone else's leftovers
+      let bonus = 0;
+      for (const [k, p] of G.players.entries()) { const left = p.rack.reduce((s, L) => s + VAL[L], 0); if (k !== outBy) { p.score -= left; bonus += left; } }
+      if (outBy >= 0) G.players[outBy].score += bonus;
+    }
+    G.over = true; save(); render();
+    const alive = G.players.filter((p, k) => k !== quitter), top = Math.max(...alive.map(p => p.score)), winners = alive.filter(p => p.score === top), human = G.players.find(p => !p.cpu);
+    if (G.mode === 'cpu') record(human.score, winners.length > 1 ? null : winners[0] === human ? 'W' : 'L');
+    else record(Math.max(...G.players.map(p => p.score)), null);
+    tune(winners.some(p => !p.cpu) ? [523, 659, 784, 1047] : [392, 330, 262], 0.14);
+    const ov = $('ov'); ov.innerHTML = '';
+    const h = document.createElement('h1'); h.textContent = winners.length > 1 ? "IT'S A TIE!" : G.mode === 'cpu' ? (winners[0].cpu ? 'COMPUTER WINS' : 'YOU WIN!') : winners[0].name.toUpperCase() + ' WINS!'; ov.appendChild(h);
+    const pp = document.createElement('p'); pp.textContent = (quitter != null ? G.players[quitter].name + ' resigned.   ' : '') + G.players.map(p => p.name + ' ' + p.score).join('   ·   '); ov.appendChild(pp);
+    const r = document.createElement('div'); r.className = 'row'; ov.appendChild(r);
+    btn(r, 'NEW GAME', setupScreen); btn(r, 'SEE BOARD', () => { ov.hidden = true; }, true);
+    ov.hidden = false;
+  }
+
+  // ---------------------------------------------------------------- drawing the screen
+  function status(t, cls) { const s = $('status'); s.textContent = t; s.className = cls || ''; }
+  let cellEls = [];
+  function buildBoard() {
+    const b = $('board'); b.innerHTML = ''; cellEls = [];
+    for (let i = 0; i < N * N; i++) { const d = document.createElement('div'); d.className = 'c ' + (i === CENTER ? 'st' : PREM[i]); d.dataset.i = i; d.setAttribute('role', 'gridcell'); b.appendChild(d); cellEls.push(d); }
+  }
+  function sizeBoard() {
+    const w = $('boardWrap'), land = innerWidth > innerHeight && innerHeight <= 620;
+    const avail = land ? Math.min(innerHeight - 16, innerWidth * 0.58) : Math.min(w.clientWidth, w.clientHeight);
+    const s = Math.max(150, Math.floor(avail)) * zoom, b = $('board');
+    b.style.width = b.style.height = s + 'px'; b.style.fontSize = (s / N * 0.98) + 'px';
+  }
+  function render() {
+    if (!G) return;
+    const p = cur(), last = G.last ? new Set(G.last.cells) : new Set(), ev = pend.size ? evaluate(pend) : null, lastPend = [...pend.keys()].pop();
+    for (let i = 0; i < N * N; i++) {
+      const d = cellEls[i], t = pend.get(i) || G.board[i];
+      d.innerHTML = '';
+      if (!t) { const lab = i === CENTER ? '★' : PREM[i]; if (lab) d.innerHTML = '<span class="lab">' + lab + '</span>'; continue; }
+      const e = document.createElement('div'); e.className = 't' + (pend.has(i) ? ' pend' : '') + (t.blank ? ' blank' : '') + (!pend.has(i) && last.has(i) ? ' last' : '');
+      e.textContent = t.ch; if (!t.blank) { const v = document.createElement('i'); v.textContent = VAL[t.ch]; e.appendChild(v); }
+      d.appendChild(e);
+      if (i === lastPend && ev && (ev.ok || ev.words)) { const bb = document.createElement('div'); bb.className = 'bub' + (ev.ok ? ' ok' : ''); bb.textContent = ev.ok ? ev.score : '?'; d.appendChild(bb); }
+    }
+    // scores
+    const sc = $('scores'); sc.innerHTML = '';
+    G.players.forEach((q, k) => { const d = document.createElement('div'); d.className = 'pl' + (k === G.turn && !G.over ? ' on' : ''); d.innerHTML = '<span class="nm"></span><span class="sc"></span>'; d.querySelector('.nm').textContent = q.name; d.querySelector('.sc').textContent = q.score; sc.appendChild(d); });
+    // the rack of whoever's turn it is (in a game against the computer, always yours)
+    const me = G.mode === 'cpu' ? G.players.find(q => !q.cpu) : p, rk = $('rack'); rk.innerHTML = '';
+    const hide = G.mode === 'pass' && !$('cover').hidden, used = new Set([...pend.values()].map(t => t.ri));
+    me.rack.forEach((L, k) => {
+      const d = document.createElement('div'); d.className = 'rt' + (used.has(k) ? ' gone' : '') + (sel === k ? ' sel' : '') + (hide ? ' hid' : ''); d.dataset.r = k;
+      d.setAttribute('role', 'button'); d.setAttribute('aria-label', L === '?' ? 'blank tile' : L);
+      if (!hide) { d.textContent = L === '?' ? '' : L; if (L !== '?') { const v = document.createElement('i'); v.textContent = VAL[L]; d.appendChild(v); } }
+      rk.appendChild(d);
+    });
+    // what's happening
+    if (G.over) status('Game over · ' + G.players.map(q => q.name + ' ' + q.score).join(' · '));
+    else if (ev) status(ev.ok ? ev.main + ' · ' + ev.score + ' points · tap PLAY' : ev.err, ev.ok ? 'ok' : 'bad');
+    else status((G.msg ? G.msg + ' · ' : '') + G.bag.length + ' letters left');
+    const myTurn = !G.over && !cur().cpu && !cpuBusy;
+    $('bPlay').disabled = !myTurn || !pend.size;
+    $('bMix').querySelector('span').textContent = pend.size ? 'RECALL' : 'SHUFFLE';
+  }
+
+  // ---------------------------------------------------------------- touch: tap a letter then a square, or drag it there
+  const myTurn = () => G && !G.over && !cur().cpu && !cpuBusy && $('ov').hidden && $('cover').hidden;
+  function placeAt(i, ri) {
+    const me = cur(); if (G.board[i] || pend.has(i)) return;
+    const L = me.rack[ri];
+    if (L === '?') { pickBlank(ch => { pend.set(i, { ri, ch, blank: true }); sel = -1; click(); render(); }); return; }
+    pend.set(i, { ri, ch: L, blank: false }); sel = -1; click(); render();
+  }
+  function recallAll() { pend.clear(); sel = -1; }
+  let drag = null;
+  const ghost = $('ghost');
+  function startDrag(e, from) { drag = { from, x0: e.clientX, y0: e.clientY, moved: false, id: e.pointerId }; }
+  addEventListener('pointerdown', e => {
+    if (!myTurn()) return;
+    const rt = e.target.closest('.rt'), cell = e.target.closest('.c');
+    if (rt && !rt.classList.contains('gone')) { startDrag(e, { ri: +rt.dataset.r }); }
+    else if (cell && pend.has(+cell.dataset.i)) { startDrag(e, { cell: +cell.dataset.i }); }
+  });
+  addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 8) {
+      drag.moved = true; const L = drag.from.cell != null ? pend.get(drag.from.cell).ch : cur().rack[drag.from.ri];
+      ghost.textContent = L === '?' ? '' : L; ghost.style.display = 'flex';
+    }
+    if (drag.moved) { ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px'; }
+  });
+  addEventListener('pointerup', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null; ghost.style.display = 'none';
+    const under = document.elementFromPoint(e.clientX, e.clientY), cell = under && under.closest('.c'), onRack = under && under.closest('#rack');
+    if (!d.moved) {   // a tap
+      if (d.from.cell != null) { pend.delete(d.from.cell); click(); render(); return; }
+      sel = sel === d.from.ri ? -1 : d.from.ri; click(); render(); return;
+    }
+    if (d.from.cell != null) {   // moving a tile already on the board
+      const t = pend.get(d.from.cell);
+      if (cell && !G.board[+cell.dataset.i] && !pend.has(+cell.dataset.i)) { pend.delete(d.from.cell); pend.set(+cell.dataset.i, t); click(); }
+      else if (onRack || !cell) { pend.delete(d.from.cell); click(); }
+      render(); return;
+    }
+    if (cell) placeAt(+cell.dataset.i, d.from.ri);
+  });
+  addEventListener('pointercancel', () => { drag = null; ghost.style.display = 'none'; });
+  // tap a square with a letter picked up: put it there. Double-tap the board to zoom in or out (small screens)
+  let lastTap = 0;
+  $('board').addEventListener('click', e => {
+    const cell = e.target.closest('.c'); if (!cell || !G) return;
+    const now = performance.now(), i = +cell.dataset.i;
+    if (now - lastTap < 320 && !pend.has(i) && sel < 0) { toggleZoom(cell); lastTap = 0; return; }
+    lastTap = now;
+    if (myTurn() && sel >= 0 && !G.board[i] && !pend.has(i)) placeAt(i, sel);
+  });
+  function toggleZoom(cell) {
+    zoom = zoom === 1 ? 1.8 : 1; sizeBoard();
+    const w = $('boardWrap'); if (zoom > 1 && cell) { const r = cell.getBoundingClientRect(), wr = w.getBoundingClientRect(); w.scrollLeft += r.left + r.width / 2 - wr.left - wr.width / 2; w.scrollTop += r.top + r.height / 2 - wr.top - wr.height / 2; }
+    w.style.placeItems = zoom > 1 ? 'start' : 'center';
+  }
+  // keyboard: type letters to place them after the last tile (to the right), Enter plays, Backspace takes back
+  addEventListener('keydown', e => {
+    if (!myTurn()) return;
+    if (e.key === 'Enter') { if (pend.size) commit(); return; }
+    if (e.key === 'Backspace') { const k = [...pend.keys()].pop(); if (k != null) { pend.delete(k); render(); } return; }
+    if (e.key === 'Escape') { recallAll(); render(); return; }
+  });
+
+  // ---------------------------------------------------------------- buttons
+  $('bPlay').onclick = () => { if (myTurn() && pend.size) commit(); };
+  $('bMix').onclick = () => {
+    if (!myTurn()) return;
+    if (pend.size) { recallAll(); click(); render(); return; }
+    const r = cur().rack; for (let i = r.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [r[i], r[j]] = [r[j], r[i]]; } sel = -1; tone(600, 0.06, { vol: 0.03 }); tone(800, 0.06, { at: 0.05, vol: 0.03 }); save(); render();
+  };
+  $('bPass').onclick = () => { if (!myTurn()) return; confirmBox('Pass your turn?', 'You score nothing this turn.', 'PASS', pass); };
+  $('bSwap').onclick = () => {
+    if (!myTurn()) return;
+    if (G.bag.length < RACK) { status('Swapping needs at least ' + RACK + ' letters left in the bag', 'bad'); return; }
+    recallAll(); render();
+    const ov = $('ov'), picked = new Set(); ov.innerHTML = '<h1>SWAP</h1><p>Pick the letters to swap for new ones. You score nothing this turn.</p><div class="swapr" id="sw"></div><div class="row" id="swr"></div>';
+    cur().rack.forEach((L, k) => { const b = document.createElement('button'); b.textContent = L === '?' ? ' ' : L; b.setAttribute('aria-pressed', 'false'); b.setAttribute('aria-label', L === '?' ? 'blank' : L); b.onclick = () => { picked.has(k) ? picked.delete(k) : picked.add(k); b.setAttribute('aria-pressed', String(picked.has(k))); go.textContent = 'SWAP ' + picked.size; }; $('sw').appendChild(b); });
+    const go = btn($('swr'), 'SWAP 0', () => { if (!picked.size) return; const L = [...picked].map(k => cur().rack[k]); ov.hidden = true; doSwap(L); });
+    btn($('swr'), 'CANCEL', () => { ov.hidden = true; }, true);
+    ov.hidden = false;
+  };
+  $('bMenu').onclick = () => {
+    if (cpuBusy) return;
+    const ov = $('ov'); ov.innerHTML = '<h1>WORD CLASH</h1><div class="row" id="mr" style="flex-direction:column;align-items:center"></div>';
+    if (G && !G.over) btn($('mr'), 'BACK TO THE GAME', () => { ov.hidden = true; });
+    btn($('mr'), 'HOW TO PLAY', () => howTo(() => $('bMenu').onclick()), true);
+    btn($('mr'), 'NEW GAME', () => { if (G && !G.over) confirmBox('Start a new game?', 'This game will be lost.', 'NEW GAME', setupScreen); else setupScreen(); }, true);
+    if (G && !G.over) btn($('mr'), 'RESIGN', () => confirmBox('Resign this game?', G.mode === 'cpu' ? 'The computer wins.' : cur().name + ' gives up and the game ends.', 'RESIGN', () => endGame(-1, G.mode === 'cpu' ? G.players.findIndex(q => !q.cpu) : G.turn)), true);
+    ov.hidden = false;
+  };
+  function btn(parent, text, fn, alt) { const b = document.createElement('button'); b.className = 'big' + (alt ? ' alt' : ''); b.textContent = text; b.onclick = fn; parent.appendChild(b); return b; }
+  function confirmBox(title, text, yes, fn) {
+    const ov = $('ov'); ov.innerHTML = '<h1></h1><p></p><div class="row" id="cr"></div>'; ov.querySelector('h1').textContent = title; ov.querySelector('p').textContent = text;
+    btn($('cr'), yes, () => { ov.hidden = true; fn(); }); btn($('cr'), 'CANCEL', () => { ov.hidden = true; }, true); ov.hidden = false;
+  }
+  function pickBlank(fn) {
+    const ov = $('ov'); ov.innerHTML = '<h1>BLANK</h1><p>Which letter should the blank tile be? (It scores 0.)</p><div class="pick" id="pk"></div><div class="row" id="pr"></div>';
+    for (const L of ABC) { const b = document.createElement('button'); b.textContent = L; b.onclick = () => { ov.hidden = true; fn(L); }; $('pk').appendChild(b); }
+    btn($('pr'), 'CANCEL', () => { ov.hidden = true; sel = -1; render(); }, true); ov.hidden = false;
+  }
+  function howTo(back) {
+    const ov = $('ov'); ov.innerHTML = '<h1>HOW TO PLAY</h1><div class="how">' +
+      '<p>Take turns making words on the board, crossword style. Tap a letter in your rack, then tap a square (or drag it there). Tap a tile you placed to take it back.</p>' +
+      '<p>All your tiles must be in one row or column and join the words already on the board. The first word must cover the <b>★</b>.</p>' +
+      '<p>Squares: <span class="sq" style="background:var(--dl)">DL</span> double letter, <span class="sq" style="background:var(--tl)">TL</span> triple letter, <span class="sq" style="background:var(--dw)">DW</span> double word, <span class="sq" style="background:var(--tw)">TW</span> triple word. Use all 7 tiles in one turn for <b>+' + BINGO + '</b>.</p>' +
+      '<p>A blank tile can be any letter. Stuck? <b>SWAP</b> letters or <b>PASS</b>. The game ends when the bag is empty and someone uses their last tile. Leftover letters count against you.</p>' +
+      '<p>Small screen? Double-tap the board to zoom in.</p></div><div class="row" id="hr"></div>';
+    btn($('hr'), 'GOT IT', () => { ov.hidden = true; if (back) back(); }); ov.hidden = false;
+  }
+  // between turns in a pass-the-phone game the letters stay hidden until the next player is ready
+  function coverFor(k) {
+    const cv = $('cover'); cv.innerHTML = '<h1></h1><h2>YOUR TURN</h2><p>Pass the phone. Your letters show when you tap Ready.</p><p id="cm"></p><div class="row" id="cvr"></div>';
+    cv.querySelector('h1').textContent = G.players[k].name.toUpperCase(); $('cm').textContent = G.msg || '';
+    btn($('cvr'), "I'M READY", () => { cv.hidden = true; render(); });
+    cv.hidden = false; render();
+  }
+
+  // ---------------------------------------------------------------- new game screen
+  function setupScreen() {
+    const ov = $('ov'); let mode = 'cpu', level = localStorage.getItem('wc-level') || 'medium', count = 2;
+    function paint() {
+      ov.innerHTML = '<h1>WORD CLASH</h1><p>Make words on the board, crossword style. Bonus squares double and triple your points.</p><h2>WHO DO YOU WANT TO PLAY?</h2><div class="row" id="m"></div><div id="opt" style="display:grid;gap:10px;justify-items:center"></div><div class="row" id="go"></div>';
+      const m = $('m'); const b1 = btn(m, 'VS COMPUTER', () => { mode = 'cpu'; paint(); }, true), b2 = btn(m, 'PASS & PLAY', () => { mode = 'pass'; paint(); }, true);
+      b1.setAttribute('aria-pressed', String(mode === 'cpu')); b2.setAttribute('aria-pressed', String(mode === 'pass'));
+      const opt = $('opt');
+      if (mode === 'cpu') {
+        opt.innerHTML = '<h2>HOW HARD?</h2><div class="row" id="lv"></div>';
+        for (const k of ['easy', 'medium', 'hard']) { const b = btn($('lv'), LEVELS[k].name.toUpperCase(), () => { level = k; paint(); }, true); b.setAttribute('aria-pressed', String(level === k)); }
+      } else {
+        opt.innerHTML = '<h2>HOW MANY PLAYERS?</h2><div class="row" id="pc"></div><div class="names" id="nm"></div>';
+        for (const k of [2, 3, 4]) { const b = btn($('pc'), String(k), () => { keep(); count = k; paint(); }, true); b.setAttribute('aria-pressed', String(count === k)); }
+        const saved = (localStorage.getItem('wc-names') || '').split('|');
+        for (let k = 0; k < count; k++) { const inp = document.createElement('input'); inp.maxLength = 12; inp.value = saved[k] || 'Player ' + (k + 1); inp.setAttribute('aria-label', 'Player ' + (k + 1) + ' name'); $('nm').appendChild(inp); }
+      }
+      btn($('go'), 'START', start);
+      if (!localStorage.getItem('wc-seen')) btn($('go'), 'HOW TO PLAY', () => howTo(paint), true);
+    }
+    function keep() { const ins = [...ov.querySelectorAll('.names input')]; if (ins.length) try { localStorage.setItem('wc-names', ins.map(i => i.value.trim()).join('|')); } catch (e) {} }
+    function start() {
+      try { localStorage.setItem('wc-seen', '1'); localStorage.setItem('wc-level', level); } catch (e) {}
+      let players;
+      if (mode === 'cpu') players = [{ name: 'You' }, { name: 'Computer', cpu: level }];
+      else { keep(); players = [...ov.querySelectorAll('.names input')].map((i, k) => ({ name: (i.value.trim() || 'Player ' + (k + 1)).slice(0, 12) })); }
+      ov.hidden = true; newGame(players, mode);
+    }
+    paint(); ov.hidden = false;
+  }
+
+  // (automatic testing only: word-clash.html?test lets a test script play moves; players never see this)
+  if (/[?&]test\b/.test(location.search)) window.__wcTest = {
+    best: () => { const ms = allMoves(cur().rack, trieFor('medium')); if (!ms.length) return null; ms.sort((a, b) => b.score - a.score); return ms[Math.floor(Math.random() * Math.min(4, ms.length))]; },
+    place: m => { pend = new Map(m.tiles.map(t => [t.i, { ri: -1, ch: t.ch, blank: t.blank }])); render(); },
+    game: () => G
+  };
+  // ---------------------------------------------------------------- start up
+  addEventListener('resize', () => { clearTimeout(sizeBoard.t); sizeBoard.t = setTimeout(sizeBoard, 60); });
+  buildBoard(); sizeBoard();
+  fetch('../lib/words.txt').then(r => r.text()).then(t => {
+    DICT = new Set(); let sec = null;
+    for (const line of t.split('\n')) { const w = line.trim(); if (!w) continue; if (w[0] === '#') { const m = /^#(\d+|!)$/.exec(w); if (m) sec = m[1]; continue; } DICT.add(w); if (sec !== '!') (TIERS[sec] || (TIERS[sec] = [])).push(w); }
+    $('load').remove();
+    const g = loadSaved();
+    if (g) { G = g; render(); sizeBoard(); if (G.mode === 'pass') coverFor(G.turn); else if (cur().cpu) cpuTurn(); }
+    else setupScreen();
+  }).catch(() => { $('load').textContent = 'Could not load the word list. Check your connection and reopen the game.'; });
+})();
+</script>
+</body>
+</html>

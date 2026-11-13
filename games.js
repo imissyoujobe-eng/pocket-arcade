@@ -3,9 +3,10 @@
 // To add a game: put its file in games/ (games/<id>.html), add one line below and raise ARCADE_TOTAL to match.
 // My Scores: key = the name a kit game saves its best under (pa-<key>); store = where an older game saves its own best;
 // kind = how that score reads (time, cs, ms, secs, mins, par, wins, fights, cup, cash, rally, streak, level; blank = points).
-window.ARCADE_TOTAL = 84;
+window.ARCADE_TOTAL = 85;
 window.ARCADE_GAMES = [
   { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue' },
+  { id: 'word-clash', name: 'Word Clash', genre: 'Word', tag: 'Crossword tile duel vs the computer or friends', key: 'wordclash' },
   { id: 'word-wheel', name: 'Word Wheel', genre: 'Word', tag: 'Swipe the letters to fill the crossword', key: 'wordwheel', kind: 'level' },
   { id: 'gloom-dungeon', name: 'Gloom Dungeon', genre: 'Arcade', tag: 'Hunt the creatures by radar', store: 'best_gloom-dungeon' },
   { id: 'rotor-strike', name: 'Rotor Strike', genre: 'Shooter', tag: 'Fly cover for a desert convoy', store: 'best_rotor-strike' },
