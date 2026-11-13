@@ -14,7 +14,9 @@
 // Pick the GUNSHIP (attack copter: chin cannon slaved to your helmet sight, 8 missiles, carries 4 people on its
 // wings) or the LIFELINE (rescue copter: side-door miniguns, room for 10). Lift off from the firebase, fly up the
 // river valley to the coloured smoke, land, load the people and bring them home, with gun nests, flak guns,
-// missile sites, gun boats and enemy choppers shooting at you the whole way there and back.
+// missile sites, gun boats and enemy choppers shooting at you the whole way there and back. Big gun towers stand
+// above the trees and concrete bunkers sit in the clearings: lock on with missiles or bomb them. Shot-down enemy
+// choppers burn, spin down and crash, and the pilot falls out.
 // Drag the screen to look around: the helmet sight aims the gun wherever you look.
 K.theme({ bg: '#07100a', ink: '#eaffe0', accent: '#8cff6a', accentInk: '#0a2006' });
 K.hud([]);
@@ -42,12 +44,13 @@ const SITES = [
 ];
 const ROADS = [[[420, 760], [330, 420], [110, -80], [-30, -250], [-170, -700], [-250, -1090]], [[110, -80], [480, -60], [900, -140]]];
 const MISSIONS = [
-  { name: 'HOT LZ', lz: 0, people: 4, aa: 2, sam: 0, nest: 6, truck: 3, boat: 2, helo: 0, text: 'Villagers are trapped by the river. Fly north up the valley, land by the purple smoke and bring everyone home. Gun nests in the trees will shoot at you all the way.' },
-  { name: 'DOWNED CREW', lz: 1, people: 6, aa: 3, sam: 2, nest: 7, truck: 3, boat: 1, helo: 0, text: 'A crew went down on the ridge to the north-east (yellow smoke). Missile sites guard the hills: when you hear the warning, drop FLARES.' },
-  { name: 'OUTPOST', lz: 2, people: 8, aa: 4, sam: 3, nest: 8, truck: 4, boat: 2, helo: 2, text: 'The far outpost (red smoke) is being overrun and enemy choppers are up. Get every last one of them out.' },
-  { name: 'LAST LIGHT', lz: 3, people: 10, aa: 5, sam: 4, nest: 9, truck: 4, boat: 2, helo: 3, dusk: true, text: 'Sundown. The hill village to the east (green smoke) is the last one left, and everything they have is waiting for you.' }
+  { name: 'HOT LZ', lz: 0, people: 4, aa: 2, sam: 0, nest: 6, tower: 2, bunker: 1, truck: 3, boat: 2, helo: 1, text: 'Villagers are trapped by the river. Fly north up the valley, land by the purple smoke and bring everyone home. Gun towers stick up above the trees, a bunker guards the way and an enemy chopper is up: lock on with missiles or bomb them.' },
+  { name: 'DOWNED CREW', lz: 1, people: 6, aa: 3, sam: 2, nest: 7, tower: 2, bunker: 2, truck: 3, boat: 1, helo: 1, text: 'A crew went down on the ridge to the north-east (yellow smoke). Missile sites guard the hills: when you hear the warning, drop FLARES.' },
+  { name: 'OUTPOST', lz: 2, people: 8, aa: 4, sam: 3, nest: 7, tower: 2, bunker: 1, truck: 4, boat: 2, helo: 2, text: 'The far outpost (red smoke) is being overrun and enemy choppers are up. Get every last one of them out.' },
+  { name: 'LAST LIGHT', lz: 3, people: 10, aa: 5, sam: 4, nest: 7, tower: 2, bunker: 2, truck: 4, boat: 2, helo: 3, dusk: true, text: 'Sundown. The hill village to the east (green smoke) is the last one left, and everything they have is waiting for you.' }
 ];
-const PTS = { aa: 150, sam: 300, nest: 100, truck: 120, boat: 150, helo: 400 };
+const PTS = { aa: 150, sam: 300, nest: 100, truck: 120, boat: 150, helo: 400, tower: 350, bunker: 400 };
+const NAMES = { aa: 'FLAK GUN', sam: 'MISSILE SITE', nest: 'GUN NEST', truck: 'TRUCK', boat: 'GUN BOAT', helo: 'CHOPPER', tower: 'GUN TOWER', bunker: 'BUNKER' };
 
 // ---------------------------------------------------------------- small helpers
 const D2R = Math.PI / 180, TAU = Math.PI * 2, rnd = K.rnd, clamp = K.clamp;
@@ -166,6 +169,34 @@ function unitModel(type) {
       ['cyl', 0x1a1a1a, -1.1, 0.5, -1.9, 1, 0.35, 1, 0, 0, Math.PI / 2], ['cyl', 0x1a1a1a, 1.1, 0.5, -1.9, 1, 0.35, 1, 0, 0, Math.PI / 2], ['cyl', 0x1a1a1a, -1.1, 0.5, 1.8, 1, 0.35, 1, 0, 0, Math.PI / 2], ['cyl', 0x1a1a1a, 1.1, 0.5, 1.8, 1, 0.35, 1, 0, 0, Math.PI / 2]);
     T.push(['box', MET, 0, 2.6, 0.4, 0.14, 0.14, 1.8], ['box', OD, 0, 2.3, 1.2, 0.4, 0.6, 0.4]); }
   else if (type === 'boat') { L.push(['box', 0x5a5a4a, 0, 0.4, 0.4, 2.4, 1.0, 7.0], ['cone', 0x5a5a4a, 0, 0.4, -3.9, 2.4, 2.2, 1.0, Math.PI / 2, Math.PI / 4, 0], ['box', OD, 0, 1.4, 0.8, 1.6, 1.1, 2.0], ['box', RED, 0, 2.0, 0.8, 1.62, 0.12, 2.0]); T.push(['box', MET, 0, 1.7, -1.6, 0.14, 0.14, 1.8], ['box', OD, 0, 1.4, -1.0, 0.4, 0.6, 0.4]); }
+  else if (type === 'tower') {
+    // big gun tower: a pale concrete shaft 34 m tall inside a braced steel frame (well above the trees, easy to spot),
+    // a wide deck with sandbags, a hut with a red roof and twin flak guns on top that swing round to follow you
+    const hw = y => 5.2 - 2.0 * y / 34, ST = 0x6e6a5e, BR = 0x7a7466;
+    L.push(['box', 0xa8a498, 0, 9, 0, 6.2, 18, 6.2], ['box', 0x9c988c, 0, 26, 0, 5.2, 16, 5.2], ['box', 0x9a2a1a, 0, 32.6, 0, 5.3, 1.4, 5.3]);
+    for (let k = 0; k < 4; k++) for (const s of [-1, 1]) L.push(['box', 0x1a1a18, s * 3.12, 8 + k * 7, 0, 0.1, 1.2, 0.5], ['box', 0x1a1a18, 0, 11.5 + k * 7, s * (k < 2 ? 3.12 : 2.62), 0.5, 1.2, 0.1]);   // gun slits
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) beam(L, ST, [sx * 5.2, -1, sz * 5.2], [sx * 3.2, 34, sz * 3.2], 1.2);
+    for (let k = 0; k < 3; k++) {
+      const y0 = k * 11.3, y1 = y0 + 11.3, a = hw(y0), b = hw(y1);
+      for (const s of [-1, 1]) { beam(L, BR, [s * a, y0, -a], [s * b, y1, b], 0.4); beam(L, BR, [s * a, y0, a], [s * b, y1, -b], 0.4); beam(L, BR, [-a, y0, s * a], [b, y1, s * b], 0.4); beam(L, BR, [a, y0, s * a], [-b, y1, s * b], 0.4); }
+      for (const s of [-1, 1]) { beam(L, BR, [-b, y1, s * b], [b, y1, s * b], 0.5); beam(L, BR, [s * b, y1, -b], [s * b, y1, b], 0.5); }
+    }
+    L.push(['box', 0x6a5434, 0, 34.4, 0, 11, 0.9, 11], ['box', SB, 0, 35.5, 5.15, 11, 1.4, 0.8], ['box', SB, 0, 35.5, -5.15, 11, 1.4, 0.8], ['box', SB, 5.15, 35.5, 0, 0.8, 1.4, 9.4], ['box', SB, -5.15, 35.5, 0, 0.8, 1.4, 9.4],
+      ['box', 0x5a4a32, 0, 36.5, 0, 5.6, 3.4, 5.6], ['box', 0x111111, 0, 37.1, -2.82, 4, 0.9, 0.08], ['box', 0x111111, 0, 37.1, 2.82, 4, 0.9, 0.08], ['box', 0x111111, 2.82, 37.1, 0, 0.08, 0.9, 4], ['box', 0x111111, -2.82, 37.1, 0, 0.08, 0.9, 4],
+      ['box', 0xe8e0d0, 0, 38.35, 0, 5.7, 0.4, 5.7], ['cone', 0xb02a1a, 0, 39.7, 0, 8.4, 2.6, 8.4, 0, Math.PI / 4, 0],
+      ['cyl', 0x2a2a28, 4.2, 36.0, 4.2, 1.2, 1.0, 1.2, 1.2, 0, 0], ['sph', 0xfff2c0, 4.2, 36.15, 3.8, 1.0, 1.0, 0.5]);   // searchlight
+    T.push(['cyl', OD, 0, 41.2, 0, 2.6, 0.7, 2.6], ['box', OL, 0, 42.0, 0, 2.2, 1.1, 2.2], ['box', RED, 0, 42.6, 0.4, 2.22, 0.14, 1.1],
+      ['cyl', MET, -0.5, 43.0, -1.7, 0.26, 4.6, 0.26, -1.05, 0, 0], ['cyl', MET, 0.5, 43.0, -1.7, 0.26, 4.6, 0.26, -1.05, 0, 0]);
+  } else if (type === 'bunker') {
+    // concrete bunker: a big pale slab you can spot from high up, gun slits, sandbags, camo netting and a heavy flak cannon
+    L.push(['box', 0x9c9c90, 0, 2.0, 0, 13, 4, 10], ['box', 0xb8b8aa, 0, 4.3, 0, 14, 0.7, 11], ['box', 0x8c8c80, 0, 1.2, -5.6, 13, 2.4, 2.4, 0.55, 0, 0],
+      ['box', 0x0e0e0c, -3.6, 3.1, -5.04, 3.2, 0.55, 0.1], ['box', 0x0e0e0c, 3.6, 3.1, -5.04, 3.2, 0.55, 0.1], ['box', 0x0e0e0c, 6.54, 3.1, 0, 0.1, 0.55, 3.0], ['box', 0x0e0e0c, -6.54, 3.1, 0, 0.1, 0.55, 3.0],
+      ['box', RED, 0, 4.72, -5.1, 14.1, 0.16, 0.7], ['box', OL, -3.4, 4.72, 2.4, 5.4, 0.14, 4.2, 0, 0.3, 0], ['box', OD, 3.8, 4.72, 2.8, 4.2, 0.14, 3.4, 0, -0.4, 0],
+      ['box', SB, -7.6, 0.8, 0, 1.4, 1.6, 10.5], ['box', SB, 7.6, 0.8, 0, 1.4, 1.6, 10.5], ['box', SB, -4.5, 0.8, 5.8, 6, 1.6, 1.4], ['box', SB, 4.5, 0.8, 5.8, 6, 1.6, 1.4],
+      ['cyl', MET, 5.6, 7.2, 4.2, 0.12, 5.2, 0.12]);
+    T.push(['cyl', OD, 0, 5.2, 0, 4.4, 1.2, 4.4], ['box', OL, 0, 6.1, -0.3, 3.0, 1.5, 3.4], ['box', RED, 0, 6.9, 0.4, 3.02, 0.14, 1.4],
+      ['cyl', MET, 0, 6.9, -4.4, 0.46, 7.6, 0.46, -1.15, 0, 0], ['cyl', 0x1a1a1a, 0, 8.45, -7.85, 0.7, 0.9, 0.7, -1.15, 0, 0]);
+  }
   const g = new THREE.Group(); g.add(new THREE.Mesh(merge(L), MAT));
   let top = null; if (T.length) { top = new THREE.Mesh(merge(T), MAT); g.add(top); }
   g.userData.top = top;
@@ -178,6 +209,21 @@ const GEO = {
 };
 function personModel(shirt) {
   return new THREE.Mesh(merge([['box', 0x2a2a2a, -0.13, 0.42, 0, 0.18, 0.84, 0.2], ['box', 0x2a2a2a, 0.13, 0.42, 0, 0.18, 0.84, 0.2], ['box', shirt, 0, 1.15, 0, 0.5, 0.66, 0.28], ['sph', 0xc89a6a, 0, 1.68, 0, 0.32, 0.36, 0.32], ['cone8', 0xd8c890, 0, 1.92, 0, 0.7, 0.22, 0.7], ['box', shirt, 0.36, 1.55, 0, 0.14, 0.7, 0.16, 0, 0, -0.4]]), MAT);
+}
+// an enemy pilot falling out of his chopper: orange flight suit, white helmet and dark visor, arms and legs flung out
+// (drawn 2x life size so you can pick him out against the jungle)
+let PILOT = null;
+function pilotModel() {
+  if (!PILOT) PILOT = merge([['box', 0xc8601e, -0.2, 0.42, 0, 0.18, 0.84, 0.2, 0, 0, 0.35], ['box', 0xc8601e, 0.2, 0.42, 0, 0.18, 0.84, 0.2, 0, 0, -0.35], ['box', 0x2a2a2a, -0.33, 0.04, 0, 0.22, 0.14, 0.3, 0, 0, 0.35], ['box', 0x2a2a2a, 0.33, 0.04, 0, 0.22, 0.14, 0.3, 0, 0, -0.35],
+    ['box', 0xe8742a, 0, 1.15, 0, 0.52, 0.68, 0.3], ['box', 0x3a3a34, 0, 0.86, 0, 0.54, 0.1, 0.32],
+    ['box', 0xe8742a, -0.44, 1.62, 0, 0.14, 0.66, 0.16, 0, 0, 0.95], ['box', 0xe8742a, 0.44, 1.62, 0, 0.14, 0.66, 0.16, 0, 0, -0.95], ['sph', 0xc89a6a, 0, 1.68, 0, 0.32, 0.36, 0.32],
+    ['sph', 0xf0f0ea, 0, 1.78, 0.03, 0.42, 0.4, 0.42], ['box', 0x16181a, 0, 1.7, -0.18, 0.3, 0.12, 0.06]]);
+  const g = new THREE.Group(), m = new THREE.Mesh(PILOT, MAT); m.position.y = -1; g.add(m); g.scale.setScalar(2.4); return g;
+}
+// a straight beam (box) from point p to point q, t thick: girders and braces for the gun towers
+function beam(L, col, p, q, t) {
+  const d = new THREE.Vector3(q[0] - p[0], q[1] - p[1], q[2] - p[2]), len = d.length(), e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(_up, d.normalize()), 'XYZ');
+  L.push(['box', col, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, (p[2] + q[2]) / 2, t, len, t, e.x, e.y, e.z]);
 }
 
 // ---------------------------------------------------------------- particles: smoke, dust, fire and glows (2 draw calls)
@@ -231,8 +277,8 @@ let state = 'title', heliId = 'gunship', mi = 0, score = 0, missionScore = 0, be
 try { const s = localStorage.getItem('rr-heli'); if (HELIS[s]) heliId = s; } catch (e) {}
 let renderer, scene, camera, stageEl, hudC, hud, HW = 1, HH = 1, HD = 1, PR = 1, sun, hemi, water, attractHeli = null, smokeSite = null;
 let P = null, M = null, phase = 'pad', aboard = 0, remaining = 0, rescued = 0, rearmT = 0, deadT = 0, ambushed = false, helosOut = 0;
-let enemies = [], rounds = [], etr = [], emsl = [], pmsl = [], bombs = [], flares = [], people = [], wrecks = [], missionObjs = [];
-let msg = '', msgT = 0, msg2 = '', warnTxt = '', warnT = 0, hitFlash = 0, shake = 0, clock = 0, mwarnT = 0, lowT = 0, rotorT = 0, perfT = 0, perfN = 0, tuned = false;
+let enemies = [], rounds = [], etr = [], emsl = [], pmsl = [], bombs = [], flares = [], people = [], wrecks = [], missionObjs = [], fallers = [];
+let kmsg = '', kmsgT = 0, msg = '', msgT = 0, msg2 = '', warnTxt = '', warnT = 0, hitFlash = 0, shake = 0, clock = 0, mwarnT = 0, lowT = 0, rotorT = 0, perfT = 0, perfN = 0, tuned = false;
 const head = { yaw: 0, pitch: -0.08, drag: null, idle: 0, lastTap: 0 };
 const SC = { x: 0, y: 0, d: 0 };
 
@@ -414,7 +460,7 @@ function setAttractHeli() {
   attractHeli = heliModel(heliId, heliId === 'gunship' ? 0x4c5a34 : 0x46512f);
   const pd = BASE.pads[0]; attractHeli.position.set(pd.x, FLATS[0].h + 0.35, pd.z); attractHeli.rotation.y = 0.5; scene.add(attractHeli);
 }
-function dropMissionObjs() { for (const o of missionObjs) scene.remove(o); missionObjs = []; for (const e of enemies) scene.remove(e.g); for (const p of people) scene.remove(p.m); for (const m of pmsl.concat(emsl, bombs)) scene.remove(m.m); enemies = []; people = []; pmsl = []; emsl = []; bombs = []; rounds = []; etr = []; flares = []; }
+function dropMissionObjs() { for (const o of missionObjs) scene.remove(o); missionObjs = []; for (const e of enemies) scene.remove(e.g); for (const p of people) scene.remove(p.m); for (const m of pmsl.concat(emsl, bombs)) scene.remove(m.m); for (const f of fallers) scene.remove(f.g); enemies = []; people = []; pmsl = []; emsl = []; bombs = []; rounds = []; etr = []; flares = []; fallers = []; kmsgT = 0; }
 
 // ---------------------------------------------------------------- menus
 const css = document.createElement('style');
@@ -488,18 +534,32 @@ function spotsFor(si, n, pick) {
   const out = c.slice(0, n); out.forEach(s => s.used = true); return out;
 }
 function addEnemy(type, x, z, o) {
-  const g = type === 'helo' ? heliModel('lifeline', 0x4a4434, 0x9a2a1a) : unitModel(type);
+  const g = type === 'helo' ? (o && o.kind === 'gunship' ? heliModel('gunship', 0x5a5646, 0x9a2a1a) : heliModel('lifeline', 0x4a4434, 0x9a2a1a)) : unitModel(type);
   const y = type === 'boat' ? 0.4 : type === 'helo' ? (o.y || 120) : groundH(x, z);
-  g.position.set(x, y, z); scene.add(g);
-  const HP = { aa: 4, sam: 3, nest: 2, truck: 3, boat: 3, helo: 7 }, R = { aa: 5, sam: 5, nest: 3.5, truck: 4, boat: 4.5, helo: 7 };
-  const e = Object.assign({ type, g, top: g.userData.top, x, y, z, hp: HP[type], r: R[type], cool: rnd(1, 4), burst: 0, bt: 0, dead: false, smokeT: 0, yaw: 0 }, o || {});
+  g.position.set(x, y, z); g.rotation.order = 'YXZ'; if (type === 'tower' || type === 'bunker') g.rotation.y = rnd(0, TAU); scene.add(g);
+  if (type === 'tower') g.scale.set(1.15, 1.3, 1.15);   // towers stand 57 m tall, high above the treetops
+  const HP = { aa: 4, sam: 3, nest: 2, truck: 3, boat: 3, helo: 7, tower: 12, bunker: 16 }, R = { aa: 5, sam: 5, nest: 3.5, truck: 4, boat: 4.5, helo: 7, tower: 6, bunker: 8 };
+  // hy: how high to aim (tall towers: the gun deck on top), gunY: where its guns fire from
+  const TALL = { tower: { hy: 53, gunY: 56 }, bunker: { hy: 4, gunY: 7.5 } };
+  const e = Object.assign({ type, g, top: g.userData.top, x, y, z, hp: HP[type], r: R[type], cool: rnd(1, 4), burst: 0, bt: 0, dead: false, smokeT: 0, yaw: 0 }, TALL[type] || {}, o || {});
   enemies.push(e); return e;
+}
+// where to aim at an enemy, and how far a point is from it (a tall tower can be hit anywhere from its feet to the guns on top)
+function aimY(e) { return e.y + (e.hy || 1.5); }
+function distE(e, x, y, z) { const ey = e.hy > 6 ? clamp(y, e.y, aimY(e)) : aimY(e); return Math.hypot(e.x - x, ey - y, e.z - z); }
+function hitE(e, x0, y0, z0, x1, y1, z1) {
+  if (!(e.hy > 6)) return segHit(x0, y0, z0, x1, y1, z1, e.x, aimY(e), e.z, e.r);
+  for (let k = 0; k <= 3; k++) if (segHit(x0, y0, z0, x1, y1, z1, e.x, e.y + 4 + (e.hy - 4) * k / 3, e.z, k === 3 ? e.r : e.r * 0.75)) return true;
+  return false;
 }
 function placeEnemies(m) {
   SPOTS.forEach(s => s.used = false);
   const si = m.lz, rand = () => srand() - 0.5;
   spotsFor(si, m.aa, (a, b) => Math.abs(a.t - 0.55) - Math.abs(b.t - 0.55) + rand() * 0.5).forEach(s => addEnemy('aa', s.x, s.z));
   spotsFor(si, m.sam, (a, b) => (b.t === 1) - (a.t === 1) + rand() * 0.6).forEach(s => addEnemy('sam', s.x, s.z, { cool: rnd(4, 9) }));
+  // big gun towers along the way (they stand above the trees) and concrete bunkers, mostly around the LZ
+  spotsFor(si, m.tower || 0, (a, b) => Math.abs(a.t - 0.5) - Math.abs(b.t - 0.5) + rand() * 0.6).forEach(s => addEnemy('tower', s.x, s.z));
+  spotsFor(si, m.bunker || 0, (a, b) => (b.t === 1) - (a.t === 1) + rand() * 0.8).forEach(s => addEnemy('bunker', s.x, s.z));
   spotsFor(si, m.nest, () => rand()).forEach(s => addEnemy('nest', s.x, s.z));
   // trucks drive the roads near the route
   const S = SITES[si], segs = [];
@@ -518,7 +578,7 @@ function placePeople(S, n) {
 }
 function spawnHelo(nearReturn) {
   const S = SITES[M.lz], a = Math.atan2(P.z - S.z, P.x - S.x) + rnd(-0.8, 0.8), d = 1050;
-  addEnemy('helo', clamp(P.x + Math.cos(a + Math.PI) * d * (nearReturn ? -1 : 1), -LIM, LIM), clamp(P.z + Math.sin(a + Math.PI) * d * (nearReturn ? -1 : 1), -LIM, LIM), { y: P.y + 30, vyaw: 0, orbit: rnd(0, TAU), cool: rnd(2, 4) });
+  addEnemy('helo', clamp(P.x + Math.cos(a + Math.PI) * d * (nearReturn ? -1 : 1), -LIM, LIM), clamp(P.z + Math.sin(a + Math.PI) * d * (nearReturn ? -1 : 1), -LIM, LIM), { y: P.y + 30, vyaw: 0, orbit: rnd(0, TAU), cool: rnd(2, 4), kind: helosOut % 2 ? 'gunship' : 'lifeline', vx: 0, vz: 0 });
   helosOut++; banner('ENEMY CHOPPER', 'Coming in fast', 1.8);
 }
 
@@ -551,7 +611,8 @@ function simulate(dt) {
   enemiesStep(dt);
   projectiles(dt, H0);
   peopleStep(dt);
-  hitFlash = Math.max(0, hitFlash - dt * 2.5); shake = Math.max(0, shake - dt * 3); msgT -= dt; warnT -= dt; P.limitT -= dt; P.muzzle = Math.max(0, P.muzzle - dt);
+  fallersStep(dt);
+  hitFlash = Math.max(0, hitFlash - dt * 2.5); shake = Math.max(0, shake - dt * 3); msgT -= dt; kmsgT -= dt; warnT -= dt; P.limitT -= dt; P.muzzle = Math.max(0, P.muzzle - dt);
   // the rotor: a steady thump that speeds up as the engines come up to power
   if (rotorT <= 0 && state === 'fly') { rotorT = 0.105 + (1 - P.rpm) * 0.3; K.noise(0.06, 0.02 + 0.03 * P.rpm); }
 }
@@ -611,7 +672,7 @@ function weapons(dt, H0) {
   P.gunT -= dt; P.mslT -= dt; P.flrT -= dt;
   // missile lock: whatever enemy sits closest to the middle of your sight
   aimDir(_v3); let cand = null, candA = 0.13;
-  for (const e of enemies) { if (e.dead) continue; _v1.set(e.x - camera.position.x, e.y + 1.5 - camera.position.y, e.z - camera.position.z); const d = _v1.length(); if (d > 1300) continue; const a = _v1.angleTo(_v3); if (a < candA) { candA = a; cand = e; } }
+  for (const e of enemies) { if (e.dead) continue; _v1.set(e.x - camera.position.x, aimY(e) - camera.position.y, e.z - camera.position.z); const d = _v1.length(); if (d > 1300) continue; const a = _v1.angleTo(_v3); if (a < candA) { candA = a; cand = e; } }
   P.lock = cand;
   // gun
   if (K.down('a') && P.gun > 0) {
@@ -707,19 +768,26 @@ function gameOver() {
 }
 
 // ---------------------------------------------------------------- enemies
-function enemyShoot(e, sp, spread, dmg, size) {
+function enemyShoot(e, sp, spread, dmg, size, flak) {
   // lead the target a little, then scatter
-  const tx = P.x + P.vx * 0.6, ty = P.y + P.vy * 0.4, tz = P.z + P.vz * 0.6, ox = e.x, oy = e.y + (e.type === 'helo' ? 0 : 2), oz = e.z;
+  const tx = P.x + P.vx * 0.6, ty = P.y + P.vy * 0.4, tz = P.z + P.vz * 0.6, ox = e.x, oy = e.y + (e.type === 'helo' ? 0 : e.gunY || 2), oz = e.z;
   _v1.set(tx - ox, ty - oy, tz - oz); const d = _v1.length(); _v1.multiplyScalar(1 / d);
   const tof = d / sp; _v1.set(tx + P.vx * tof * 0.6 - ox, ty - oy, tz + P.vz * tof * 0.6 - oz).normalize();
   _v1.x += rnd(-1, 1) * spread; _v1.y += rnd(-1, 1) * spread; _v1.z += rnd(-1, 1) * spread; _v1.normalize();
-  etr.push({ x: ox, y: oy, z: oz, vx: _v1.x * sp, vy: _v1.y * sp, vz: _v1.z * sp, life: 3, dmg: dmg * (0.75 + mi * 0.1), s: size || 1.6 });
+  // flak shells are fused to burst about where you'll be, so misses still go off around you in black puffs
+  etr.push({ x: ox, y: oy, z: oz, vx: _v1.x * sp, vy: _v1.y * sp, vz: _v1.z * sp, life: flak ? tof * rnd(0.92, 1.08) : 3, dmg: dmg * (0.75 + mi * 0.1), s: size || 1.6, flak: !!flak });
+}
+function flakBurst(x, y, z, dmg) {
+  glow(x, y, z, 8, 0xffc06a, 0.2, { grow: 1.4 }); glow(x, y, z, 4, 0xff6a1a, 0.35, { grow: 1.6 });
+  puff(x, y, z, 6, 0x1c1c1c, 2.8, { vy: 0.4, grow: 2.2, a: 0.85, drag: 0.4 }); puff(x + rnd(-2, 2), y + rnd(-1, 1), z + rnd(-2, 2), 4.5, 0x2e2c2a, 2.4, { vy: 0.3, grow: 2, a: 0.7, drag: 0.4 });
+  const dd = Math.hypot(x - P.x, y - P.y, z - P.z);
+  if (dd < 300) K.noise(0.2, 0.04 + 0.3 * (1 - dd / 300));
+  if (dd < 12 && state === 'fly') damage(dmg * (1 - dd / 12) + 0.5, 'FLAK!');
 }
 function enemiesStep(dt) {
   const live = state === 'fly', diff = 1 + mi * 0.12;
   for (const e of enemies) {
-    if (e.dead && e.falling) { e.vy = (e.vy || 0) - 16 * dt; e.y += e.vy * dt; e.g.position.y = e.y; e.g.rotation.y += dt * 3.5; const gy = groundH(e.x, e.z); if (e.y < Math.max(gy, 0.4) + 1) { e.falling = false; e.y = Math.max(gy, 0.4) + 1; boom(e.x, e.y, e.z, 1.3); } }
-    if (e.dead) { if (e.smokeT > 0) { e.smokeT -= dt; if (Math.random() < dt * 6) puff(e.x + rnd(-2, 2), e.y + 2, e.z + rnd(-2, 2), 3, 0x2a2a28, 4, { vy: 4, grow: 2.5, a: 0.6, drag: 0.1 }); if (Math.random() < dt * 4) glow(e.x + rnd(-1.5, 1.5), e.y + 1, e.z + rnd(-1.5, 1.5), 2.5, 0xff7a2a, 0.5, { vy: 3 }); } continue; }
+    if (e.dead) { deadStep(e, dt); continue; }
     const dx = P.x - e.x, dy = P.y - e.y, dz = P.z - e.z, d = Math.hypot(dx, dy, dz), face = Math.atan2(-dx, -dz);
     if (e.type === 'truck') {
       const [a, b] = e.seg, L = Math.hypot(b[0] - a[0], b[1] - a[1]); e.u += e.dir * 7 / L * dt; if (e.u > 1 || e.u < 0) { e.dir *= -1; e.u = c01(e.u); }
@@ -733,15 +801,19 @@ function enemiesStep(dt) {
       // fly in, circle you at a few hundred metres and shoot
       e.orbit += dt * 0.35; const R = 330, gx = P.x + Math.cos(e.orbit) * R, gz = P.z + Math.sin(e.orbit) * R, gy = Math.max(groundH(gx, gz) + 40, P.y + 15);
       const vx = gx - e.x, vz = gz - e.z, vl = Math.hypot(vx, vz) || 1, sp = Math.min(58, vl * 0.8);
-      e.x += vx / vl * sp * dt; e.z += vz / vl * sp * dt; e.y += (gy - e.y) * Math.min(1, dt * 0.8);
+      e.vx = vx / vl * sp; e.vz = vz / vl * sp; e.x += e.vx * dt; e.z += e.vz * dt; e.y += (gy - e.y) * Math.min(1, dt * 0.8);
       e.g.position.set(e.x, e.y, e.z); e.g.rotation.y = face; e.g.rotation.z = Math.sin(clock + e.orbit) * 0.1;
       e.g.userData.rotor.rotation.y += dt * 30; e.g.userData.tail.rotation.x += dt * 40;
     }
     if (e.top) e.top.rotation.y = face - e.g.rotation.y;
+    // a red warning light blinks on top of every gun tower, so you can pick them out from far away
+    if (e.type === 'tower' && d < 1150 && Math.floor(clock * 1.3 + e.x) !== Math.floor((clock - dt) * 1.3 + e.x)) glow(e.x, e.y + 58.5, e.z, 9, 0xff2a1a, 0.42);
     if (!live) continue;
     // firing
     e.cool -= dt;
-    if (e.type === 'aa' && d < 600) { if (e.cool <= 0 && e.burst <= 0) { e.burst = 7; e.cool = rnd(2.2, 3.4) / diff; } if (e.burst > 0 && (e.bt -= dt) <= 0) { e.bt = 0.08; e.burst--; enemyShoot(e, 380, 0.035, 3, 2.2); if (d < 400) K.noise(0.03, 0.04); } }
+    if (e.type === 'tower' && d < 760) { if (e.cool <= 0 && e.burst <= 0) { e.burst = 8; e.cool = rnd(2, 3.2) / diff; } if (e.burst > 0 && (e.bt -= dt) <= 0) { e.bt = 0.08; e.burst--; enemyShoot(e, 400, 0.03, 2.6, 2.4); if (d < 450) K.noise(0.03, 0.05); } }
+    else if (e.type === 'bunker' && d < 820) { if (e.cool <= 0 && e.burst <= 0) { e.burst = 3; e.cool = rnd(3, 4.4) / diff; } if (e.burst > 0 && (e.bt -= dt) <= 0) { e.bt = 0.45; e.burst--; enemyShoot(e, 230, 0.03, 4.5, 4.2, true); K.noise(0.14, 0.04 + 0.25 * (1 - d / 820)); } }
+    else if (e.type === 'aa' && d < 600) { if (e.cool <= 0 && e.burst <= 0) { e.burst = 7; e.cool = rnd(2.2, 3.4) / diff; } if (e.burst > 0 && (e.bt -= dt) <= 0) { e.bt = 0.08; e.burst--; enemyShoot(e, 380, 0.035, 3, 2.2); if (d < 400) K.noise(0.03, 0.04); } }
     else if ((e.type === 'nest' || (e.type === 'truck' && e.armed) || e.type === 'boat') && d < 420) { if (e.cool <= 0 && e.burst <= 0) { e.burst = 9; e.cool = rnd(2.5, 4.5) / diff; } if (e.burst > 0 && (e.bt -= dt) <= 0) { e.bt = 0.075; e.burst--; enemyShoot(e, 320, 0.05, 1.4); } }
     else if (e.type === 'helo' && d < 700) { if (e.cool <= 0 && e.burst <= 0) { e.burst = 10; e.cool = rnd(2.5, 4) / diff; } if (e.burst > 0 && (e.bt -= dt) <= 0) { e.bt = 0.07; e.burst--; enemyShoot(e, 360, 0.04, 2); } }
     else if (e.type === 'sam' && d < 900 && d > 120 && e.cool <= 0 && emsl.length < 2 + Math.floor(mi / 2)) {
@@ -755,9 +827,73 @@ function enemiesStep(dt) {
 }
 function killEnemy(e, big) {
   if (e.dead) return; e.dead = true; e.smokeT = 14; P.kills++; score += PTS[e.type] || 100;
+  if (P.lock === e) P.lock = null;
+  if (PTS[e.type] >= 350) { kmsg = NAMES[e.type] + ' DOWN  +' + PTS[e.type]; kmsgT = 2; }
+  if (e.type === 'helo') {
+    // engine hit: it bursts into flames and spins down trailing smoke, and the pilot falls out
+    e.falling = true; e.fallT = 0; e.vy = 1.5; e.spin = 0.4; e.rotorSp = 30; e.smokeT = 22; e.bailT = rnd(0.3, 0.6);
+    boom(e.x, e.y + 2, e.z, 0.9); return;
+  }
   e.g.traverse(o => { if (o.isMesh) o.material = BURNT; });
-  if (e.type === 'helo') { e.falling = true; }
-  boom(e.x, e.y + 1.5, e.z, big ? 1.4 : 1); if (P.lock === e) P.lock = null;
+  if (e.type === 'tower') { e.topple = 0; e.tv = 0.12; e.smokeT = 24; boom(e.x, aimY(e), e.z, 1.5); boom(e.x, e.y + 18, e.z, 0.8); return; }
+  if (e.type === 'bunker') { e.smokeT = 30; boom(e.x, e.y + 4, e.z, 2.1); glow(e.x, e.y + 8, e.z, 30, 0xff8a2a, 0.8, { vy: 10, grow: 1.8 }); return; }
+  boom(e.x, e.y + 1.5, e.z, big ? 1.4 : 1);
+}
+// what's left after a kill: choppers burn and spin down, towers topple over, wrecks smoke for a while
+function deadStep(e, dt) {
+  const g = e.g;
+  if (e.falling) {
+    e.fallT += dt; e.vy = Math.max(-42, e.vy - 11 * dt); const k = Math.pow(0.75, dt); e.vx = (e.vx || 0) * k; e.vz = (e.vz || 0) * k;
+    e.x += e.vx * dt; e.y += e.vy * dt; e.z += e.vz * dt; e.spin = Math.min(5.5, e.spin + dt * 2.4); e.rotorSp = Math.max(5, e.rotorSp - dt * 9);
+    g.position.set(e.x, e.y, e.z); g.rotation.y += e.spin * dt; g.rotation.x = -Math.min(0.55, e.fallT * 0.3); g.rotation.z = Math.sin(e.fallT * 2.6) * 0.18;
+    if (g.userData.rotor) g.userData.rotor.rotation.y += dt * e.rotorSp;
+    // flames pouring out of the engines and a thick black smoke trail
+    for (let i = 0; i < 3; i++) if (Math.random() < dt * 14) glow(e.x + rnd(-1.6, 1.6), e.y + 2.6 + rnd(0, 1.6), e.z + rnd(-1.6, 1.6), rnd(3.5, 6.5), Math.random() < 0.4 ? 0xffd27a : 0xff6a1a, rnd(0.25, 0.5), { vy: rnd(3, 7), grow: 1.5 });
+    if (Math.random() < dt * 16) puff(e.x + rnd(-1, 1), e.y + 3, e.z + rnd(-1, 1), 4.2, 0x1c1a18, 3.2, { vy: 1.5, grow: 2.6, a: 0.8, drag: 0.3 });
+    if (e.bailT != null && (e.bailT -= dt) <= 0) { e.bailT = null; bailOut(e); }
+    const gy = groundH(e.x, e.z), top = isJungle(e.x, e.z) ? gy + CANOPY - 4 : Math.max(gy, 0.4);
+    if (e.y < top + 1.5) {
+      e.falling = false; boom(e.x, e.y + 1, e.z, 1.7); glow(e.x, e.y + 6, e.z, 26, 0xff8a2a, 0.9, { vy: 8, grow: 1.8 });
+      // (down in the jungle the wreck burns under the trees, so its smoke rises from the treetops)
+      e.smokeY = top > Math.max(gy, 0.4) + 2 ? top - 2 : null;
+      e.y = Math.max(gy, 0.4) + 0.6; g.position.y = e.y; g.rotation.x = -0.3; g.rotation.z = 0.9;
+      g.traverse(o => { if (o.isMesh) o.material = BURNT; });
+    }
+  }
+  if (e.topple != null && e.topple < 1.4) {
+    e.tv += dt * 1.5; e.topple = Math.min(1.4, e.topple + e.tv * dt); g.rotation.z = e.topple;
+    if (Math.random() < dt * 8) puff(e.x + rnd(-5, 5), e.y + 1, e.z + rnd(-5, 5), 5, 0x8a7a5a, 2.5, { vy: 2, grow: 2, a: 0.5 });
+    if (e.topple >= 1.4) { // the top crashes down into the trees
+      const lx = -Math.sin(1.4) * 52, yaw = g.rotation.y, wx = e.x + lx * Math.cos(yaw), wz = e.z - lx * Math.sin(yaw), wy = groundH(wx, wz);
+      boom(wx, wy + 4, wz, 1.6); for (let i = 0; i < 6; i++) puff(wx + rnd(-8, 8), wy + 3, wz + rnd(-8, 8), 7, 0x7a6a4a, 3, { vy: 3, grow: 2, a: 0.6 });
+    }
+  }
+  if (e.smokeT > 0) { e.smokeT -= dt; const sy = e.smokeY || e.y + 2; if (Math.random() < dt * 6) puff(e.x + rnd(-2, 2), sy, e.z + rnd(-2, 2), 3, 0x2a2a28, 4, { vy: 4, grow: 2.5, a: 0.6, drag: 0.1 }); if (Math.random() < dt * 4) glow(e.x + rnd(-1.5, 1.5), sy - 1, e.z + rnd(-1.5, 1.5), 2.5, 0xff7a2a, 0.5, { vy: 3 }); }
+}
+// the enemy pilot tumbles out of the door of his burning chopper and falls to the ground
+function bailOut(e) {
+  const g = pilotModel(), yaw = e.g.rotation.y, side = Math.random() < 0.5 ? -1 : 1, rx = Math.cos(yaw), rz = -Math.sin(yaw);
+  const x = e.x + rx * side * 1.8, y = e.y + 1.8, z = e.z + rz * side * 1.8;
+  g.position.set(x, y, z); scene.add(g);
+  fallers.push({ g, x, y, z, vx: (e.vx || 0) * 0.6 + rx * side * 8, vy: 3, vz: (e.vz || 0) * 0.6 + rz * side * 8, wx: rnd(2.5, 4.5) * (Math.random() < 0.5 ? -1 : 1), wz: rnd(-3, 3), t: 0, down: false });
+  const d = Math.hypot(x - P.x, y - P.y, z - P.z); if (d < 700) K.beep(1250, 1.6, { to: 300, type: 'triangle', vol: 0.006 + 0.025 * (1 - d / 700) });
+}
+function fallersStep(dt) {
+  let n = 0;
+  for (const f of fallers) {
+    f.t += dt;
+    if (!f.down) {
+      f.vy = Math.max(-40, f.vy - 9.8 * dt); const k = Math.pow(0.7, dt); f.vx *= k; f.vz *= k;
+      f.x += f.vx * dt; f.y += f.vy * dt; f.z += f.vz * dt; f.g.position.set(f.x, f.y, f.z); f.g.rotation.x += f.wx * dt; f.g.rotation.z += f.wz * dt;
+      const gy = groundH(f.x, f.z), wet = gy < 0.4;
+      if (f.y < Math.max(gy, 0.4) + 0.3) {
+        f.down = true; f.t = 0; f.y = Math.max(gy, 0.4) + (wet ? -0.5 : 0.35); f.g.position.y = f.y; f.g.rotation.set(-Math.PI / 2, rnd(0, TAU), 0, 'YXZ');
+        puff(f.x, Math.max(gy, 0.4) + 0.5, f.z, 3, wet ? 0xe0e8e8 : 0x8a7a5a, 1.4, { vy: 2.5, grow: 2, a: 0.65 });
+      }
+    } else if (f.t > 15) { scene.remove(f.g); continue; }
+    fallers[n++] = f;
+  }
+  fallers.length = n;
 }
 function boom(x, y, z, s) {
   glow(x, y, z, 14 * s, 0xffd27a, 0.35, { grow: 1.2 }); glow(x, y + 2, z, 9 * s, 0xff6a1a, 0.6, { vy: 6, grow: 1.5 });
@@ -766,7 +902,7 @@ function boom(x, y, z, s) {
   const dd = Math.hypot(x - P.x, y - P.y, z - P.z); if (dd < 600) { K.noise(0.5, 0.5 * (1 - dd / 600) * s + 0.05); shake = Math.max(shake, 0.6 * (1 - dd / 600) * s); }
 }
 function splash(x, y, z, r, dmg) {
-  for (const e of enemies) { if (e.dead) continue; const dd = Math.hypot(e.x - x, e.y + 1 - y, e.z - z); if (dd < r + e.r) { e.hp -= dmg * (1 - Math.max(0, dd - e.r) / r); if (e.hp <= 0) killEnemy(e, dmg > 3); } }
+  for (const e of enemies) { if (e.dead) continue; const dd = distE(e, x, y, z); if (dd < r + e.r) { e.hp -= dmg * (1 - Math.max(0, dd - e.r) / r); if (e.hp <= 0) killEnemy(e, dmg > 3); } }
 }
 
 // ---------------------------------------------------------------- bullets, missiles, bombs, flares
@@ -781,7 +917,7 @@ function projectiles(dt, H0) {
   for (const r of rounds) {
     r.life -= dt; if (r.life <= 0) continue;
     const x1 = r.x + r.vx * dt, y1 = r.y + r.vy * dt, z1 = r.z + r.vz * dt; let hit = false;
-    for (const e of enemies) { if (e.dead) continue; if (Math.abs(e.x - x1) > 60 || Math.abs(e.z - z1) > 60) continue; if (segHit(r.x, r.y, r.z, x1, y1, z1, e.x, e.y + 1.5, e.z, e.r)) { hit = true; e.hp -= r.dmg; glow(x1, y1, z1, 3, 0xffe08a, 0.15); if (e.hp <= 0) killEnemy(e); break; } }
+    for (const e of enemies) { if (e.dead) continue; if (Math.abs(e.x - x1) > 60 || Math.abs(e.z - z1) > 60) continue; if (hitE(e, r.x, r.y, r.z, x1, y1, z1)) { hit = true; e.hp -= r.dmg; glow(x1, y1, z1, 3, 0xffe08a, 0.15); if (e.hp <= 0) killEnemy(e); break; } }
     if (!hit) for (const m of emsl) { if (segHit(r.x, r.y, r.z, x1, y1, z1, m.x, m.y, m.z, 3)) { hit = true; m.life = 0; boom(m.x, m.y, m.z, 0.6); score += 50; break; } }
     if (!hit) { const g = groundH(x1, z1); if (y1 < Math.max(g, 0.4) || (y1 < g + CANOPY - 3 && isJungle(x1, z1))) { hit = true; const wet = g < 0.4; glow(x1, Math.max(y1, 0.5), z1, 3.2, 0xffc06a, 0.18); puff(x1, Math.max(y1, 0.5), z1, 2.2, wet ? 0xd8e0e0 : (y1 > g + 3 ? 0x4a7a3a : 0x8a7a5a), 0.9, { vy: 3, grow: 1.5, a: 0.6 }); splash(x1, y1, z1, r.splash, r.dmg * 0.7); } }
     if (hit) continue;
@@ -794,12 +930,13 @@ function projectiles(dt, H0) {
   // enemy tracers
   n = 0;
   for (const r of etr) {
-    r.life -= dt; if (r.life <= 0) continue;
+    r.life -= dt; if (r.life <= 0) { if (r.flak) flakBurst(r.x, r.y, r.z, r.dmg); continue; }
     const x1 = r.x + r.vx * dt, y1 = r.y + r.vy * dt, z1 = r.z + r.vz * dt;
-    if (state === 'fly' && segHit(r.x, r.y, r.z, x1, y1, z1, P.x, P.y, P.z, 3.4)) { damage(r.dmg, 'TAKING FIRE'); glow(P.x, P.y, P.z, 2, 0xffe0a0, 0.1); continue; }
+    if (state === 'fly' && segHit(r.x, r.y, r.z, x1, y1, z1, P.x, P.y, P.z, 3.4)) { if (r.flak) flakBurst(x1, y1, z1, r.dmg); else { damage(r.dmg, 'TAKING FIRE'); glow(P.x, P.y, P.z, 2, 0xffe0a0, 0.1); } continue; }
     if (y1 < groundH(x1, z1)) continue;
     r.x = x1; r.y = y1; r.z = z1;
-    bolt(r.x, r.y, r.z, r.s, 1, 0.35, 0.15, 1); bolt(r.x - r.vx * 0.015, r.y - r.vy * 0.015, r.z - r.vz * 0.015, r.s * 0.7, 1, 0.25, 0.1, 0.6);
+    if (r.flak) { bolt(r.x, r.y, r.z, r.s, 1, 0.62, 0.22, 1); bolt(r.x - r.vx * 0.03, r.y - r.vy * 0.03, r.z - r.vz * 0.03, r.s * 0.75, 1, 0.4, 0.12, 0.7); }
+    else { bolt(r.x, r.y, r.z, r.s, 1, 0.35, 0.15, 1); bolt(r.x - r.vx * 0.015, r.y - r.vy * 0.015, r.z - r.vz * 0.015, r.s * 0.7, 1, 0.25, 0.1, 0.6); }
     etr[n++] = r;
   }
   etr.length = n;
@@ -807,12 +944,12 @@ function projectiles(dt, H0) {
   n = 0;
   for (const m of pmsl) {
     m.life -= dt; m.sp = Math.min(150, m.sp + 110 * dt);
-    if (m.target && !m.target.dead) { _v1.set(m.target.x - m.x, m.target.y + 1.5 - m.y, m.target.z - m.z).normalize(); m.dir.lerp(_v1, Math.min(1, dt * 4)).normalize(); }
+    if (m.target && !m.target.dead) { _v1.set(m.target.x - m.x, aimY(m.target) - m.y, m.target.z - m.z).normalize(); m.dir.lerp(_v1, Math.min(1, dt * 4)).normalize(); }
     m.x += m.dir.x * m.sp * dt; m.y += m.dir.y * m.sp * dt; m.z += m.dir.z * m.sp * dt;
     m.m.position.set(m.x, m.y, m.z); m.m.quaternion.setFromUnitVectors(_v2.set(0, 0, -1), m.dir);
     puff(m.x, m.y, m.z, 1.4, 0xd8d8d0, 1.4, { vy: 0.5, grow: 2, a: 0.5 }); bolt(m.x - m.dir.x * 1.6, m.y - m.dir.y * 1.6, m.z - m.dir.z * 1.6, 2.4, 1, 0.75, 0.35, 1);
     let hit = m.life <= 0, g = groundH(m.x, m.z);
-    if (!hit) for (const e of enemies) if (!e.dead && Math.hypot(e.x - m.x, e.y + 1.5 - m.y, e.z - m.z) < e.r + 3) { hit = true; break; }
+    if (!hit) for (const e of enemies) if (!e.dead && distE(e, m.x, m.y, m.z) < e.r + 3) { hit = true; break; }
     if (!hit && (m.y < g || (m.y < g + CANOPY - 4 && isJungle(m.x, m.z)))) hit = true;
     if (hit) { scene.remove(m.m); boom(m.x, m.y, m.z, 1.1); splash(m.x, m.y, m.z, 16, 6); continue; }
     pmsl[n++] = m;
@@ -963,7 +1100,7 @@ function mfd(c, f, az, el, w, h, kind) {
     const S = SITES[M.lz], ql = mp(S.x, S.z), qb = mp(BASE.x, BASE.z);
     c.fillStyle = '#' + ('00000' + S.smoke.toString(16)).slice(-6); c.beginPath(); c.arc(ql[0], ql[1], 4, 0, TAU); c.fill();
     c.strokeStyle = GRN; c.lineWidth = 1.5; c.strokeRect(qb[0] - 4, qb[1] - 4, 8, 8);
-    c.fillStyle = REDC; for (const e of enemies) if (!e.dead) { const q = mp(e.x, e.z); c.fillRect(q[0] - 1.5, q[1] - 1.5, 3, 3); }
+    c.fillStyle = REDC; for (const e of enemies) if (!e.dead) { const q = mp(e.x, e.z), k = e.type === 'tower' || e.type === 'bunker' ? 2.5 : 1.5; c.fillRect(q[0] - k, q[1] - k, k * 2, k * 2); }
     c.fillStyle = GRN; c.beginPath(); c.moveTo(cx, cy - 6); c.lineTo(cx + 4, cy + 4); c.lineTo(cx - 4, cy + 4); c.closePath(); c.fill();
   } else {
     c.fillStyle = GRN; c.font = '600 ' + Math.max(8, Math.min(13, Math.round(Hh / 8))) + 'px Rubik, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
@@ -1010,11 +1147,12 @@ function drawHUD() {
   c.fillStyle = GRN; c.fillRect(bx - head.yaw / 2.3 * 38 - 2, byy - head.pitch / 1.15 * 10 - 2, 5, 5);
   // targets: little diamonds on every enemy you can see, a box on the one your missiles will go for
   for (const e of enemies) {
-    if (e.dead) continue; const s = toScreen(e.x, e.y + 2, e.z, SC); if (!s || s.d > 1100 || s.x < 0 || s.x > W || s.y < 0 || s.y > H) continue;
-    const r = clamp(900 / s.d, 5, 14); c.strokeStyle = e === P.lock ? AMBER : 'rgba(255,110,90,.85)'; c.lineWidth = 2;
-    if (e === P.lock && P.msl > 0) { c.strokeRect(s.x - r - 6, s.y - r - 6, (r + 6) * 2, (r + 6) * 2); txt(c, 'LOCK', s.x, s.y - r - 16, AMBER, 'center', 11); }
-    else { c.beginPath(); c.moveTo(s.x, s.y - r); c.lineTo(s.x + r, s.y); c.lineTo(s.x, s.y + r); c.lineTo(s.x - r, s.y); c.closePath(); c.stroke(); }
+    if (e.dead) continue; const big = e.type === 'tower' || e.type === 'bunker', s = toScreen(e.x, big ? aimY(e) : e.y + 2, e.z, SC); if (!s || s.d > 1100 || s.x < 0 || s.x > W || s.y < 0 || s.y > H) continue;
+    const r = big ? clamp(1300 / s.d, 8, 20) : clamp(900 / s.d, 5, 14); c.strokeStyle = e === P.lock ? AMBER : 'rgba(255,110,90,.85)'; c.lineWidth = big ? 2.5 : 2;
+    if (e === P.lock && P.msl > 0) { c.strokeRect(s.x - r - 6, s.y - r - 6, (r + 6) * 2, (r + 6) * 2); txt(c, 'LOCK', s.x, s.y - r - 16, AMBER, 'center', 11); txt(c, NAMES[e.type] + '  ' + Math.round(s.d) + ' m', s.x, s.y + r + 18, AMBER, 'center', 11); }
+    else { c.beginPath(); c.moveTo(s.x, s.y - r); c.lineTo(s.x + r, s.y); c.lineTo(s.x, s.y + r); c.lineTo(s.x - r, s.y); c.closePath(); c.stroke(); if (big) { c.fillStyle = 'rgba(255,110,90,.85)'; c.fillRect(s.x - 2, s.y - 2, 4, 4); if (s.d < 900) txt(c, NAMES[e.type], s.x, s.y + r + 13, 'rgba(255,140,120,.9)', 'center', 10); } }
   }
+  if (kmsgT > 0) { c.globalAlpha = c01(kmsgT * 2); txt(c, kmsg, cx, cy - 104, AMBER, 'center', 16, 800); c.globalAlpha = 1; }
   // incoming missile: red marker or an arrow toward it
   if (P.threat) { const m = P.threat.m, s = toScreen(m.x, m.y, m.z, SC), fl = Math.floor(clock * 8) % 2;
     if (s && s.x > 0 && s.x < W && s.y > 0 && s.y < H) { c.strokeStyle = REDC; c.lineWidth = 3; c.beginPath(); c.arc(s.x, s.y, 16, 0, TAU); c.stroke(); }
