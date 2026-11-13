@@ -57,7 +57,7 @@ const NODES = [{ x: 30, y: 166 }, { x: 98, y: 150 }, { x: 42, y: 122 }, { x: 110
 const PAL = [{ sky: '#8fd8ff', g: '#e8a050', d: '#b06a2a', top: '#5cc23a' }, { sky: '#ffd0a0', g: '#d07a3a', d: '#9a4a1a', top: '#8ad04a' }, { sky: '#7ab8ff', g: '#c8c0b0', d: '#8a8478', top: '#f4f4ff' }, { sky: '#9ae0c8', g: '#6a9a4a', d: '#3a6a2a', top: '#aaf07a' }, { sky: '#5a6ad8', g: '#8a7ab8', d: '#5a4a8a', top: '#c8b8ff' }, { sky: '#2a1414', g: '#6a6a7a', d: '#3a3a4a', top: '#9a9aa8' }];
 
 let state = 'title', mode, node, cleared, li, w, p, cam, ents, items, fx, score, coins, lives, timeLeft, power, deadT, winT, msg, msgT, pmeter, fly, spinT, best = K.best('skytail');
-function title() { K.card({ title: 'SKY TAIL', text: 'Pick a level on the map. Bonk blocks, stomp critters, and find the SKY LEAF. With it, sprint until your meter fills, then tap JUMP over and over to fly! Tap SPIN anytime to whip your tail at enemies. Spiky ones can\'t be stomped.', best: best ? 'BEST ' + best : '', button: 'Start adventure', onStart: newGame }); }
+function title() { K.card({ title: 'SKY TAIL', text: 'Pick a level on the map. Bonk blocks, stomp critters, and find the SKY LEAF. With it, sprint until your meter fills, then tap JUMP over and over to fly! Tap JUMP again in mid-air for one extra jump. Tap SPIN anytime to whip your tail at enemies. Spiky ones can\'t be stomped. You can take one hit; the second one costs a life.', best: best ? 'BEST ' + best : '', button: 'Start adventure', onStart: newGame }); }
 function newGame() { score = 0; coins = 0; lives = 4; power = 0; cleared = 0; node = 0; mode = 'map'; state = 'play'; hud(); }
 function hud() { K.set('score', score); K.set('coins', '● ' + coins); K.set('lives', '♥' + lives); K.set('time', mode === 'level' ? Math.ceil(timeLeft) : 'MAP'); }
 function load() {
@@ -74,13 +74,24 @@ function load() {
     if (ch === 'z') { ents.push(P.walker(X + 2, Y + 4, { kind: 'spiky', stompable: false, smart: true, vx: -22 })); w.g[y][x] = '.'; }
     if (ch === 'b') { ents.push({ kind: 'birdy', x: X, y: Y, y0: Y, w: 12, h: 10, vx: -30, ph: Math.random() * 6, alive: true }); w.g[y][x] = '.'; }
   }
-  p = P.player(w.start.x, 0, { h: power ? HB : HS, sprint: 150 });
-  p.y = w.start.y + T - p.h - 0.5;
+  p = P.player(w.start.x, 0, { h: power ? HB : HS, sprint: 150, jump: 305 });
+  p.y = w.start.y + T - p.h - 0.5; p.hp = 2; p.dj = false; p.flip = 0;
   mode = 'level'; hud();
 }
 function setPower(n) { if (n > 0 && power === 0) { p.y -= HB - HS; p.h = HB; } if (n === 0 && power > 0) { p.h = HS; p.y += HB - HS; } power = n; }
 function addCoin() { coins++; score += 100; if (coins >= 100) { coins -= 100; lives++; K.tune([660, 880, 1320], 0.08); } K.beep(988, 0.05, { vol: 0.05 }); K.beep(1319, 0.1, { vol: 0.05, at: 0.05 }); hud(); }
-function hurt() { if (p.inv > 0 || deadT) return; if (power > 0) { setPower(power === 2 ? 1 : 0); p.inv = 2; fly = 0; K.beep(300, 0.4, { to: 120, vol: 0.06 }); return; } die(); }
+function hurt() { if (p.inv > 0 || deadT) return; if (power > 0) { setPower(power === 2 ? 1 : 0); p.inv = 2; fly = 0; K.beep(300, 0.4, { to: 120, vol: 0.06 }); return; }
+  // first hit only hurts: a hop back and a blink. The second one costs a life
+  if (p.hp > 1) { p.hp--; p.inv = 2; p.vy = -170; p.vx = -p.face * 60; p.ground = false; fly = 0; msg = '1 HIT LEFT!'; msgT = 1.3; K.beep(260, 0.35, { to: 110, vol: 0.06 }); return; }
+  die(); }
+// one extra jump in mid-air: a little leap forward with a flip
+function airJump() {
+  p.dj = true; p.vy = -p.cfg.jump * 0.95; p.jumping = true; p.buf = 0; p.flip = AIRFLIP;
+  p.vx = K.clamp(p.vx + p.face * 35, -p.cfg.sprint, p.cfg.sprint);
+  fx.push({ t: 'poof', x: p.x + p.w / 2 - 4, y: p.y + p.h, l: 0.3 }, { t: 'poof', x: p.x + p.w / 2 + 4, y: p.y + p.h, l: 0.3 });
+  K.beep(520, 0.12, { to: 1150, vol: 0.05, type: 'triangle' });
+}
+const AIRFLIP = 0.4;
 function die() { deadT = 2.2; p.vy = -260; K.tune([494, 440, 392, 349], 0.12, { type: 'triangle' }); }
 
 function update(dt) {
@@ -97,8 +108,11 @@ function update(dt) {
   if (p.ground) pmeter = p.running && Math.abs(p.vx) > 135 ? Math.min(1, pmeter + dt * 1.1) : Math.max(0, pmeter - dt * 0.8);
   if (power === 2 && pmeter >= 1 && K.hit('a') && !p.ground && fly <= 0) fly = 4;
   if (fly > 0) { fly -= dt; if (K.hit('a')) { p.vy = -150; K.beep(500, 0.05, { to: 900, vol: 0.04 }); } if (fly <= 0) pmeter = 0; }
-  const wasVy = p.vy;
+  const wasVy = p.vy, airTap = K.hit('a') && !p.ground && p.coyote <= 0 && fly <= 0;
   P.control(w, p, dt);
+  if (p.ground) { p.dj = false; p.flip = 0; }
+  else if (airTap && !p.dj) airJump();
+  if (p.flip > 0) p.flip -= dt;
   // with the leaf, holding jump while falling floats you down
   if (power === 2 && !p.ground && p.vy > 40 && K.down('a') && fly <= 0) p.vy = 40;
   if (fly > 0 && K.down('a') && p.vy > 30) p.vy = 30;
@@ -119,7 +133,7 @@ function update(dt) {
     if (it.rise > 0) { it.rise -= dt; it.y -= 20 * dt; continue; }
     if (it.kind === 'berry') { it.vy = Math.min(250, (it.vy || 0) + 800 * dt); const v0 = it.vx; P.move(w, it, dt); if (it.hitWall) it.vx = -v0; }
     else { it.ph = (it.ph || 0) + dt * 3; it.y += 22 * dt; it.x += Math.sin(it.ph) * 50 * dt; }
-    if (P.overlap(p, it)) { it.dead = true; score += 1000; hud(); setPower(it.kind === 'berry' ? Math.max(1, power) : 2); K.tune([523, 659, 784, 1047], 0.05); }
+    if (P.overlap(p, it)) { it.dead = true; score += 1000; p.hp = 2; hud(); setPower(it.kind === 'berry' ? Math.max(1, power) : 2); K.tune([523, 659, 784, 1047], 0.05); }
     if (it.y > w.py) it.dead = true;
   }
   items = items.filter(i => !i.dead);
@@ -244,6 +258,7 @@ function draw(c, t) {
   for (const e of ents) if (e.x > cam.x - 30 && e.x < cam.x + VW + 30) drawEnt(c, e, Math.round(e.x - cam.x), Math.round(e.y - cam.y), t);
   for (const f of fx) { const x = Math.round(f.x - cam.x), y = Math.round(f.y - cam.y); if (f.t === 'coin') { c.fillStyle = '#ffd23f'; c.fillRect(x + 2, y, 4, 9); } else if (f.t === 'pts') K.text(c, f.txt, x + 6, y, 7, '#fff'); else if (f.t === 'poof') { c.fillStyle = 'rgba(255,255,255,' + f.l * 3 + ')'; c.beginPath(); c.arc(x, y, (0.3 - f.l) * 40, 0, 7); c.fill(); } }
   drawFox(c, Math.round(p.x - cam.x), Math.round(p.y - cam.y), t);
+  if (p.hp < 2 && !deadT && !winT) hpPips(c, Math.round(p.x + p.w / 2 - cam.x), Math.round(p.y - cam.y) - 9);
   // run meter
   c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(8, VH - 14, 66, 8);
   for (let i = 0; i < 6; i++) { c.fillStyle = pmeter * 6 > i ? (pmeter >= 1 ? (Math.floor(t / 80) % 2 ? '#fff' : '#ffd23f') : '#ff8a1f') : '#555'; c.fillRect(10 + i * 9, VH - 12, 7, 4); }
@@ -273,9 +288,15 @@ function spriteInk(fn, BW, BH, offX, offY, xi) {
 }
 drawFox = spriteInk(drawFox, 64, 60, 28, 40, 1);
 // the picked hero (Desire'e / J.T.) instead of Kit: grows a fox tail with the sky leaf, flies with it, twirls on SPIN
+// two little hearts over the hero after the first hit: one left, one lost
+function hpPips(c, x, y) {
+  const HEART = ['.X.X.', 'XXXXX', '.XXX.', '..X..'];
+  for (let k = 0; k < 2; k++) { const ox = x - 6 + k * 7; c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(ox - 1, y - 1, 7, 6); c.fillStyle = k < p.hp ? '#ff4d6d' : '#5a5a66'; HEART.forEach((r, j) => { for (let i = 0; i < 5; i++) if (r[i] === 'X') c.fillRect(ox + i, y + j, 1, 1); }); }
+}
 function heroPick(c, x, y, t) {
   if (p.inv > 0 && Math.floor(t / 60) % 2) return;
   const f = p.face, fx = x + p.w / 2, fy = y + p.h, H = p.h * 1.15;
+  if (p.flip > 0 && !deadT && fly <= 0) { Roster.draw(c, 'tuck', fx, fy - H * 0.45, f, H, { t, at: 'center', rot: (1 - p.flip / AIRFLIP) * Math.PI * 2 }); return; }
   let pose, face = f;
   if (deadT > 0) pose = 'hurt';
   else if (fly > 0) pose = 'fly';
@@ -286,7 +307,9 @@ function heroPick(c, x, y, t) {
   if (p.ground && !deadT) { c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(fx, fy, 6 * H / 28, 1.4 * H / 28, 0, 0, 7); c.fill(); }
   Roster.draw(c, pose, fx, fy + 0.5, face, H, { t, phase: p.anim / (p.h * 0.34), tail: power === 2 });
 }
-drawFox = (function (inked) { const f = (c, x, y, t) => Roster.on() && !f.classic ? heroPick(c, x, y, t) : inked(c, x, y, t); return f; })(drawFox);
+// the classic sprite flips too on the extra air jump
+function spinWrap(draw) { return (c, x, y, t) => { if (p && p.flip > 0 && !deadT && !(typeof fly !== 'undefined' && fly > 0)) { const cx = x + p.w / 2, cy = y + p.h / 2; c.save(); c.translate(cx, cy); c.rotate(p.face * (1 - p.flip / AIRFLIP) * Math.PI * 2); c.translate(-cx, -cy); draw(c, x, y, t); c.restore(); } else draw(c, x, y, t); }; }
+drawFox = (function (inked) { const spun = spinWrap(inked), f = (c, x, y, t) => Roster.on() && !f.classic ? heroPick(c, x, y, t) : (f.classic ? inked : spun)(c, x, y, t); return f; })(drawFox);
 drawFoxAt = (function (fox) { return (c, x, y) => Roster.on() ? Roster.draw(c, 'idle', x + 6, y + 11, 1, 19, { t: performance.now() }) : fox(c, x, y); })(drawFoxAt);
 drawEnt = A.ink(drawEnt);
 { const _draw = draw; draw = function (c, t) { _draw(c, t); if (w) { const L = ART[li] || ART[0]; A.ambient(c, VW, VH, t, L.amb, 16); A.vignette(c, VW, VH, L.vig == null ? 0.3 : L.vig); } }; }

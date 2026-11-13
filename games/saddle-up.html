@@ -45,7 +45,7 @@ const LANDS = [
 ];
 
 let state = 'title', li, w, p, cam, ents, items, fx, score, lives, timeLeft, big, dino, deadT, winT, msg, msgT, stars, starsTotal, mid, best = K.best('saddleup');
-function title() { K.card({ title: 'SADDLE UP', text: 'Bonk the spotted egg block to hatch a dino buddy, then jump on its back! While riding, CHOMP gobbles enemies in front of you, even spiky ones, and you can stomp anything. Hold JUMP in the air to flutter. If you get hit, your dino runs off, so catch it again!', best: best ? 'BEST ' + best : '', button: 'Ride on', onStart: () => { li = 0; score = 0; lives = 4; big = false; stars = 0; starsTotal = 0; mid = false; load(); state = 'play'; } }); }
+function title() { K.card({ title: 'SADDLE UP', text: 'Bonk the spotted egg block to hatch a dino buddy, then jump on its back! While riding, CHOMP gobbles enemies in front of you, even spiky ones, and you can stomp anything. Tap JUMP again in mid-air for one extra jump. If you get hit, your dino runs off, so catch it again!', best: best ? 'BEST ' + best : '', button: 'Ride on', onStart: () => { li = 0; score = 0; lives = 4; big = false; stars = 0; starsTotal = 0; mid = false; load(); state = 'play'; } }); }
 function load() {
   const L = LANDS[li];
   const chunks = L.chunks.map(k => k === 'river' && L.lava ? CH.river.map(r => r.replace(/~/g, 'L')) : CH[k]);
@@ -73,6 +73,13 @@ function hurt() {
   if (big) { setBig(false); p.inv = 2; K.beep(300, 0.4, { to: 120, vol: 0.06 }); return; }
   die();
 }
+const AIRFLIP = 0.4;
+function airJump() {
+  p.dj = true; p.vy = -p.cfg.jump * 0.95; p.jumping = true; p.buf = 0; p.flip = riding() ? 0 : AIRFLIP;
+  p.vx = K.clamp(p.vx + p.face * 35, -p.cfg.sprint, p.cfg.sprint);
+  fx.push({ t: 'poof', x: p.x + p.w / 2 - 4, y: p.y + p.h, l: 0.3 }, { t: 'poof', x: p.x + p.w / 2 + 4, y: p.y + p.h, l: 0.3 });
+  K.beep(520, 0.12, { to: 1150, vol: 0.05, type: 'triangle' });
+}
 function die() { deadT = 2.2; p.vy = -260; dino = null; K.tune([494, 440, 392, 349], 0.12, { type: 'triangle' }); }
 
 function update(dt) {
@@ -85,12 +92,14 @@ function update(dt) {
   timeLeft -= dt * 2.5; if (timeLeft <= 0) { timeLeft = 0; die(); }
   if (Math.floor(timeLeft) !== Math.floor(timeLeft + dt * 2.5)) hud();
   const ride = riding();
-  if (ride) { p.cfg.run = 105; p.cfg.sprint = 150; p.cfg.jump = 400; } else { p.cfg.run = 96; p.cfg.sprint = 140; p.cfg.jump = 375; }
-  p.cfg.cut = 0.65; // higher jumps, and a quick tap on JUMP still goes up a good way
+  // a little more spring than the classic jump (the dino adds a bit), and one extra jump in mid-air
+  if (ride) { p.cfg.run = 105; p.cfg.sprint = 150; p.cfg.jump = 325; } else { p.cfg.run = 96; p.cfg.sprint = 140; p.cfg.jump = 305; }
+  p.cfg.cut = 0.5;
+  const airTap = K.hit('a') && !p.ground && p.coyote <= 0;
   P.control(w, p, dt);
-  // flutter: hold jump while falling for a little hang time
-  if (!p.ground && p.vy > 0 && K.down('a') && (p.flutter = (p.flutter || 0) + dt) < 0.6) p.vy = Math.min(p.vy, ride ? -20 : 30);
-  if (p.ground) p.flutter = 0;
+  if (p.ground) { p.dj = false; p.flip = 0; }
+  else if (airTap && !p.dj) airJump();
+  if (p.flip > 0) p.flip -= dt;
   if (p.hitHead) bonk(p.hitHead.tx, p.hitHead.ty);
   // chomp
   if (ride && K.hit('b')) { dino.chomp = 0.25; K.beep(300, 0.06, { to: 700, vol: 0.05 }); }
@@ -277,11 +286,14 @@ function heroPick(c, x, y, t) {
   const f = p.face, H = (big ? HB : HS) * 1.2;
   if (riding()) { const S = p.h / 24 * 1.05; Roster.draw(c, 'ride', x + p.w / 2 - f * 5, y + p.h - 10 - 8 * S, f, H, { t }); return; }
   const fx = x + p.w / 2, fy = y + p.h;
+  if (p.flip > 0 && !deadT) { Roster.draw(c, 'tuck', fx, fy - H * 0.45, f, H, { t, at: 'center', rot: (1 - p.flip / AIRFLIP) * Math.PI * 2 }); return; }
   if (p.ground && !deadT) { c.fillStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.ellipse(fx, fy, 6 * H / 28, 1.4 * H / 28, 0, 0, 7); c.fill(); }
   const pose = deadT > 0 ? 'hurt' : !p.ground ? (p.vy < 0 ? 'jump' : 'fall') : Math.abs(p.vx) > 5 ? 'run' : 'idle';
   Roster.draw(c, pose, fx, fy + 0.5, f, H, { t, phase: p.anim / (H * 0.3) });
 }
-drawHero = (function (inked) { const f = (c, x, y, t) => Roster.on() && !f.classic ? heroPick(c, x, y, t) : inked(c, x, y, t); return f; })(drawHero);
+// the classic sprite flips too on the extra air jump
+function spinWrap(draw) { return (c, x, y, t) => { if (p && p.flip > 0 && !deadT && !(typeof fly !== 'undefined' && fly > 0)) { const cx = x + p.w / 2, cy = y + p.h / 2; c.save(); c.translate(cx, cy); c.rotate(p.face * (1 - p.flip / AIRFLIP) * Math.PI * 2); c.translate(-cx, -cy); draw(c, x, y, t); c.restore(); } else draw(c, x, y, t); }; }
+drawHero = (function (inked) { const spun = spinWrap(inked), f = (c, x, y, t) => Roster.on() && !f.classic ? heroPick(c, x, y, t) : (f.classic ? inked : spun)(c, x, y, t); return f; })(drawHero);
 drawEnt = A.ink(drawEnt);
 { const _draw = draw; draw = function (c, t) { _draw(c, t); if (w) { const L = ART[li] || ART[0]; A.ambient(c, VW, VH, t, L.amb, 16); A.vignette(c, VW, VH, L.vig == null ? 0.3 : L.vig); } }; }
 K.run(update, draw);
