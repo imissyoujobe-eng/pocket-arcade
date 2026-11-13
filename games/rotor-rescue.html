@@ -11,10 +11,11 @@
 <script src="../lib/three.min.js"></script>
 <script>
 // Rotor Rescue: jungle-war rescue missions flown from the cockpit.
-// Pick the GUNSHIP (attack copter: chin cannon slaved to your helmet sight, 8 missiles, carries 4 people on its
+// Pick the GUNSHIP (attack copter: chin cannon slaved to your helmet sight, carries 4 people on its
 // wings) or the LIFELINE (rescue copter: side-door miniguns, room for 10). Lift off from the firebase, fly up the
 // river valley to the coloured smoke, land, load the people and bring them home, with gun nests, flak guns,
-// missile sites, gun boats and enemy choppers shooting at you the whole way there and back. Big gun towers stand
+// missile sites, gun boats and enemy choppers shooting at you the whole way there and back. Bullets, missiles and
+// bombs never run out (flares do: land at the firebase for more). Big gun towers stand
 // above the trees and concrete bunkers sit in the clearings: lock on with missiles or bomb them. Shot-down enemy
 // choppers burn, spin down and crash, and the pilot falls out.
 // Drag the screen to look around: the helmet sight aims the gun wherever you look.
@@ -30,8 +31,8 @@ addEventListener('keyup', e => { const n = KEYX[e.key]; if (n) K.release(n); });
 
 // ---------------------------------------------------------------- the two helicopters
 const HELIS = {
-  gunship: { name: 'GUNSHIP', short: 'Attack copter: chin cannon, 8 missiles, carries 4', speed: 80, turn: 1.25, climb: 17, armor: 100, gun: 320, rate: 10, dmg: 1, splash: 5, spread: 0.006, msl: 8, bomb: 4, flr: 14, seats: 4 },
-  lifeline: { name: 'LIFELINE', short: 'Rescue copter: door miniguns, 4 missiles, carries 10', speed: 68, turn: 1.05, climb: 14, armor: 140, gun: 1400, rate: 24, dmg: 0.45, splash: 2.5, spread: 0.012, door: true, msl: 4, bomb: 6, flr: 20, seats: 10 }
+  gunship: { name: 'GUNSHIP', short: 'Attack copter: big chin cannon, carries 4', speed: 80, turn: 1.25, climb: 17, armor: 100, gun: 320, rate: 10, dmg: 1, splash: 5, spread: 0.006, msl: 8, bomb: 4, flr: 14, seats: 4 },
+  lifeline: { name: 'LIFELINE', short: 'Rescue copter: door miniguns, carries 10', speed: 68, turn: 1.05, climb: 14, armor: 140, gun: 1400, rate: 24, dmg: 0.45, splash: 2.5, spread: 0.012, door: true, msl: 4, bomb: 6, flr: 20, seats: 10 }
 };
 // ---------------------------------------------------------------- the map
 const SIZE = 3200, SEG = 128, CANOPY = 20, LIM = 1400;
@@ -523,7 +524,7 @@ function startMission() {
   dropMissionObjs(); if (attractHeli) { scene.remove(attractHeli); attractHeli = null; }
   missionScore = score;
   P = { x: pd.x, y: FLATS[0].h + 2.2, z: pd.z, yaw: Math.atan2(-(S.x - pd.x), -(S.z - pd.z)), v: 0, vx: 0, vz: 0, vy: 0, yawRate: 0, pitch: 0, roll: 0, rpm: 0, landed: true, agl: 0,
-    armor: H0.armor, gun: H0.gun, msl: H0.msl, bomb: H0.bomb, flr: H0.flr, gunT: 0, mslT: 0, flrT: 0, muzzle: 0, lock: null, limitT: 0, kills: 0 };
+    armor: H0.armor, gun: H0.gun, msl: H0.msl, bomb: H0.bomb, flr: H0.flr, gunT: 0, mslT: 0, bombT: 0, shots: 0, mslN: 0, flrT: 0, muzzle: 0, lock: null, limitT: 0, kills: 0 };
   head.yaw = 0; head.pitch = -0.08; head.idle = 0;
   phase = 'pad'; aboard = 0; remaining = M.people; rescued = 0; rearmT = 0; ambushed = false; helosOut = 0; clock = 0; tuned = false; perfT = 0; perfN = 0;
   placeEnemies(M); placePeople(S, remaining); smokeSite = S;
@@ -669,29 +670,29 @@ function damage(n, why, quiet) {
 
 // ---------------------------------------------------------------- your weapons
 function weapons(dt, H0) {
-  P.gunT -= dt; P.mslT -= dt; P.flrT -= dt;
+  P.gunT -= dt; P.mslT -= dt; P.flrT -= dt; P.bombT -= dt;
   // missile lock: whatever enemy sits closest to the middle of your sight
   aimDir(_v3); let cand = null, candA = 0.13;
   for (const e of enemies) { if (e.dead) continue; _v1.set(e.x - camera.position.x, aimY(e) - camera.position.y, e.z - camera.position.z); const d = _v1.length(); if (d > 1300) continue; const a = _v1.angleTo(_v3); if (a < candA) { candA = a; cand = e; } }
   P.lock = cand;
   // gun
-  if (K.down('a') && P.gun > 0) {
+  // (bullets, missiles and bombs are unlimited; the fire rate is the only limit)
+  if (K.down('a')) {
     if (!gunOK(H0)) { P.limitT = 0.8; }
     else if (P.gunT <= 0) {
-      P.gunT += 1 / H0.rate; if (P.gunT < -0.05) P.gunT = 0; P.gun--; P.muzzle = 0.06;
+      P.gunT += 1 / H0.rate; if (P.gunT < -0.05) P.gunT = 0; P.shots++; P.muzzle = 0.06;
       const right = _v2.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
       let ox = P.x, oy = P.y - 0.6, oz = P.z;
       if (H0.door) { const side = head.yaw > 0 ? -1 : 1; ox += right.x * side * 1.4; oz += right.z * side * 1.4; oy = P.y + 0.3; } else { ox += -Math.sin(P.yaw) * 3; oz += -Math.cos(P.yaw) * 3; }
       aimDir(_v3); _v3.x += rnd(-1, 1) * H0.spread; _v3.y += rnd(-1, 1) * H0.spread; _v3.z += rnd(-1, 1) * H0.spread; _v3.normalize();
       const sp = 820; rounds.push({ x: ox, y: oy, z: oz, vx: _v3.x * sp + P.vx, vy: _v3.y * sp, vz: _v3.z * sp + P.vz, life: 1.7, dmg: H0.dmg, splash: H0.splash });
-      if (P.gun % 3 === 0) { K.noise(0.05, H0.door ? 0.08 : 0.16); K.beep(H0.door ? 220 : 90, 0.04, { type: 'square', vol: 0.03 }); }
+      if (P.shots % 3 === 0) { K.noise(0.05, H0.door ? 0.08 : 0.16); K.beep(H0.door ? 220 : 90, 0.04, { type: 'square', vol: 0.03 }); }
     }
   }
   // missiles
   if (K.hit('msl')) {
-    if (P.msl <= 0) warn('NO MISSILES — LAND AT THE FIREBASE TO REARM', 1.4);
-    else if (P.mslT <= 0) {
-      P.msl--; P.mslT = 0.4; const side = P.msl % 2 ? 1 : -1, right = _v2.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
+    if (P.mslT <= 0) {
+      P.mslT = 0.4; const side = P.mslN++ % 2 ? 1 : -1, right = _v2.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
       const m = new THREE.Mesh(GEO.msl, MAT);
       const x = P.x + right.x * side * 2.2, z = P.z + right.z * side * 2.2; m.position.set(x, P.y - 0.4, z); scene.add(m);
       aimDir(_v3); pmsl.push({ m, x, y: P.y - 0.4, z, dir: _v3.clone(), sp: Math.max(40, P.v + 30), target: P.lock, life: 7 });
@@ -700,9 +701,8 @@ function weapons(dt, H0) {
   }
   // bombs
   if (K.hit('bomb')) {
-    if (P.bomb <= 0) warn('NO BOMBS — LAND AT THE FIREBASE TO REARM', 1.4);
-    else if (P.landed) warn('LIFT OFF TO DROP BOMBS', 1);
-    else { P.bomb--; const m = new THREE.Mesh(GEO.bomb, MAT); m.position.set(P.x, P.y - 1.6, P.z); scene.add(m); bombs.push({ m, x: P.x, y: P.y - 1.6, z: P.z, vx: P.vx, vy: Math.min(0, P.vy) - 2, vz: P.vz }); K.beep(180, 0.2, { to: 90, vol: 0.04 }); }
+    if (P.landed) warn('LIFT OFF TO DROP BOMBS', 1);
+    else if (P.bombT <= 0) { P.bombT = 0.3; const m = new THREE.Mesh(GEO.bomb, MAT); m.position.set(P.x, P.y - 1.6, P.z); scene.add(m); bombs.push({ m, x: P.x, y: P.y - 1.6, z: P.z, vx: P.vx, vy: Math.min(0, P.vy) - 2, vz: P.vz }); K.beep(180, 0.2, { to: 90, vol: 0.04 }); }
   }
   // flares: hot decoys that pull enemy missiles away
   if (K.hit('flr')) {
@@ -1105,7 +1105,7 @@ function mfd(c, f, az, el, w, h, kind) {
   } else {
     c.fillStyle = GRN; c.font = '600 ' + Math.max(8, Math.min(13, Math.round(Hh / 8))) + 'px Rubik, system-ui, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'top';
     const H0 = HELIS[heliId], lh = Hh / 6.2;
-    c.fillText('ARMOR ' + Math.ceil(P.armor / H0.armor * 100) + '%', x + 6, y + 5); c.fillText('GUN ' + P.gun, x + 6, y + 5 + lh); c.fillText('MSL ' + P.msl + '  BMB ' + P.bomb, x + 6, y + 5 + lh * 2); c.fillText('FLR ' + P.flr, x + 6, y + 5 + lh * 3); c.fillText('ABOARD ' + aboard + '/' + H0.seats, x + 6, y + 5 + lh * 4);
+    c.fillText('ARMOR ' + Math.ceil(P.armor / H0.armor * 100) + '%', x + 6, y + 5); c.fillText('GUN ∞', x + 6, y + 5 + lh); c.fillText('MSL ∞  BMB ∞', x + 6, y + 5 + lh * 2); c.fillText('FLR ' + P.flr, x + 6, y + 5 + lh * 3); c.fillText('ABOARD ' + aboard + '/' + H0.seats, x + 6, y + 5 + lh * 4);
     c.fillStyle = P.armor / H0.armor < 0.35 ? REDC : GRN; c.fillRect(x + 6, y + Hh - 9, (W - 12) * P.armor / H0.armor, 4);
   }
   c.restore();
@@ -1174,7 +1174,7 @@ function drawHUD() {
   txt(c, String(score), W - 16, 18 + (land ? 0 : 0), GRN, 'right', 15, 700); txt(c, 'MISSION ' + (mi + 1) + '/' + MISSIONS.length, W - 16, 38, DIM, 'right', 11);
   // weapons and armour along the bottom of the sight
   const ap = P.armor / H0.armor;
-  txt(c, 'GUN ' + P.gun + '   MSL ' + P.msl + '   BOMB ' + P.bomb + '   FLR ' + P.flr, cx, wy, GRN, 'center', 12, 700);
+  txt(c, 'GUN ∞   MSL ∞   BOMB ∞   FLR ' + P.flr, cx, wy, GRN, 'center', 12, 700);
   c.strokeStyle = DIM; c.lineWidth = 1.5; c.strokeRect(cx - 70, wy + 12, 140, 7); c.fillStyle = ap < 0.35 ? REDC : ap < 0.6 ? AMBER : GRN; c.fillRect(cx - 69, wy + 13, 138 * c01(ap), 5);
   if (ap < 0.35 && Math.floor(clock * 3) % 2) txt(c, 'LOW ARMOR — LAND AT THE FIREBASE', cx, wy - 18, REDC, 'center', 12, 700);
   if (P.rpm < 0.97) txt(c, 'ROTOR ' + Math.round(P.rpm * 100) + '%', cx, cy - 70, AMBER, 'center', 14, 700);
