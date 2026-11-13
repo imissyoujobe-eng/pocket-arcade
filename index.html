@@ -13,7 +13,7 @@
 :root{
   --bg:#120d26; --panel:#1d1640; --line:#2f2660; --ink:#f3f0ff; --muted:#b4acd8;
   --shooter:#ff4f6d; --racing:#ffb02e; --sports:#2fd6a3; --arcade:#46a8ff; --puzzle:#c07bff;
-  --platform:#ff7ad8; --adventure:#9be15d; --action:#ff7f3f;
+  --platform:#ff7ad8; --adventure:#9be15d; --action:#ff7f3f; --word:#35e3e3;
   --display:'Bungee',Impact,system-ui,sans-serif; --body:'Rubik',system-ui,sans-serif;
   color-scheme:dark;
 }
@@ -79,7 +79,7 @@ footer a{color:var(--muted)}
 <body>
 <header>
   <h1>Pocket <span class="n">Arcade</span></h1>
-  <p class="sub">Shooters, racers, platformers, quests, sports and classics. Tap a game to play.</p>
+  <p class="sub">Shooters, racers, platformers, quests, sports, word games and classics. Tap a game to play.</p>
   <button class="mys" id="mys" type="button">★ My Scores</button>
 </header>
 <nav class="chips" id="chips" aria-label="Filter games"></nav>
@@ -105,7 +105,7 @@ footer a{color:var(--muted)}
 <script src="games.js"></script>
 <script>
 (function(){
-  var COLORS={Shooter:'var(--shooter)',Racing:'var(--racing)',Sports:'var(--sports)',Arcade:'var(--arcade)',Puzzle:'var(--puzzle)',Platform:'var(--platform)',Adventure:'var(--adventure)',Action:'var(--action)'};
+  var COLORS={Shooter:'var(--shooter)',Racing:'var(--racing)',Sports:'var(--sports)',Arcade:'var(--arcade)',Puzzle:'var(--puzzle)',Platform:'var(--platform)',Adventure:'var(--adventure)',Action:'var(--action)',Word:'var(--word)'};
   var games=window.ARCADE_GAMES, total=window.ARCADE_TOTAL, filter='All';
   var grid=document.getElementById('grid'), chips=document.getElementById('chips');
   var genres=['All'].concat(Object.keys(COLORS).filter(function(g){return games.some(function(x){return x.genre===g})}));
@@ -152,7 +152,7 @@ footer a{color:var(--muted)}
 
   // ---- My Scores: best score, times played and last played for every game (all stored on this phone) ----
   var sc=document.getElementById('scores'), scBack=document.getElementById('scback');
-  var LABEL={time:'BEST TIME',cs:'BEST TIME',ms:'BEST TIME',secs:'BEST TIME',mins:'FASTEST',par:'BEST ROUND',wins:'WINS',fights:'MOST WON',cup:'BEST CUP',cash:'MOST CASH',rally:'LONGEST RALLY',streak:'BEST STREAK'};
+  var LABEL={time:'BEST TIME',cs:'BEST TIME',ms:'BEST TIME',secs:'BEST TIME',mins:'FASTEST',par:'BEST ROUND',wins:'WINS',fights:'MOST WON',cup:'BEST CUP',cash:'MOST CASH',rally:'LONGEST RALLY',streak:'BEST STREAK',level:'HIGHEST LEVEL'};
   // the older games keep their own best score and don't log plays, so opening one from the menu counts as a play
   function noteOpen(id){
     var g=games.filter(function(x){return x.id===id})[0];if(!g||g.key)return;
@@ -172,6 +172,7 @@ footer a{color:var(--muted)}
     if(kind==='secs')return v.toFixed(2)+'s';
     if(kind==='cash')return '$'+v.toLocaleString();
     if(kind==='rally')return v+(v===1?' hit':' hits');
+    if(kind==='level')return 'Level '+v;
     return v.toLocaleString();
   }
   function ago(t){
