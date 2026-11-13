@@ -13,8 +13,12 @@
 // Copter Pack: fly a heli-pack down through the mine, blast critters with your helmet laser, dynamite the walls and rescue the trapped miner.
 K.theme({ bg: '#120c08', ink: '#fff2e0', accent: '#ffb02e', accentInk: '#2a1600' });
 const W = 320, H = 240, T = 16;          // one mine room, in world units
-const VW = 150, VH = 200;                  // camera window: zoomed in on the pilot, phone-shaped
+let VW = 150; const VH = 200;              // the screen, phone-shaped
+// close-up camera: the mine is drawn 1.45x bigger and follows the pilot (about 100 x 140 of the room shows standing up),
+// and the pilot is drawn 1.25x bigger on top of that
+const Z = 1.45, HERO = 1.25;
 K.screen(VW, VH);
+K.flex(150, VH, w => { VW = w; }, { maxW: Math.floor(W * Z) }); // phone on its side: wider view, up to one whole room
 let camX = 0, camY = 0, camRoom = -1;
 K.hud(['score', 'level', 'lives', 'tnt']);
 K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'TNT' }, { id: 'a', label: 'LASER' }] });
@@ -140,10 +144,11 @@ function over() { state = 'over'; best = K.saveBest('copter', score); K.card({ t
 function draw(c, t) {
   c.fillStyle = '#0a0604'; c.fillRect(0, 0, VW, VH);
   if (!rooms) return;
-  // follow camera, kept inside the room; snaps when you fly into a new room
-  const tx = K.clamp(p.x + 5 + p.face * 10 - VW / 2, 0, W - VW), ty = K.clamp(p.y + 7 - VH / 2, 0, H - VH);
+  // follow camera, kept inside the room, looking a little ahead (and further down while you drop); snaps in a new room
+  const ZW = VW / Z, ZH = VH / Z;
+  const tx = K.clamp(p.x + 5 + p.face * 10 - ZW / 2, 0, W - ZW), ty = K.clamp(p.y + 7 - ZH / 2 + K.clamp(p.vy * 0.12, -10, 20), 0, H - ZH);
   if (camRoom !== room) { camX = tx; camY = ty; camRoom = room; } else { camX += (tx - camX) * 0.12; camY += (ty - camY) * 0.12; }
-  c.save(); c.translate(-camX, -camY);
+  c.save(); c.scale(Z, Z); c.translate(-camX, -camY);
   const bgc = c.createLinearGradient(0, 0, 0, H); bgc.addColorStop(0, '#120a06'); bgc.addColorStop(1, '#2a1a10'); c.fillStyle = bgc; c.fillRect(0, 0, W, H);
   const g = rooms[room].g;
   for (let i = 0; i < 14; i++) { c.fillStyle = 'rgba(80,55,35,' + (0.2 + A.hash(i, room) * 0.2) + ')'; c.beginPath(); c.ellipse(A.hash(i, room, 1) * W, A.hash(i, room, 2) * H, 14 + A.hash(i, 3) * 20, 8 + A.hash(i, 4) * 10, A.hash(i, 5) * 3, 0, 7); c.fill(); }
@@ -167,8 +172,13 @@ function draw(c, t) {
     if (f.boom) { const k = 1 - f.l / 0.5, r = 34 * (0.3 + k * 0.7); A.glow(c, f.x, f.y, r * 1.6, '255,170,60', 0.7 * (1 - k)); c.fillStyle = 'rgba(255,120,40,' + (1 - k) + ')'; c.beginPath(); for (let i = 0; i < 16; i++) { const an = i / 16 * 6.283, rr = r * (i % 2 ? 0.7 : 1); c.lineTo(f.x + Math.cos(an) * rr, f.y + Math.sin(an) * rr); } c.fill(); c.fillStyle = 'rgba(255,240,170,' + (1 - k) + ')'; c.beginPath(); c.arc(f.x, f.y, r * 0.45, 0, 7); c.fill(); }
     else { c.fillStyle = A.INK; c.fillRect(f.x - 2.2, f.y - 2.2, 3.4, 3.4); c.fillStyle = f.c || '#8a6a3a'; c.fillRect(f.x - 1.7, f.y - 1.7, 2.4, 2.4); }
   }
-  if (dead <= 0) drawHero(c, p.x, p.y, p.face, t, K.down('up'));
-  if (dead <= 0 && beam) { const y = p.y + 5.2, bx = p.face > 0 ? p.x + 13 : p.x - 3 - beam; A.glow(c, bx + beam / 2, y, beam / 2 + 6, '120,255,110', 0.16); c.fillStyle = 'rgba(124,255,107,.55)'; c.fillRect(bx, y - 1.6, beam, 3.2); c.fillStyle = '#eaffe4'; c.fillRect(bx, y - 0.5, beam, 1); const ex = p.face > 0 ? bx + beam : bx; A.glow(c, ex, y, 6, '200,255,180', 0.8); }
+  // the pilot, drawn bigger around his boots (the hit box stays the same size)
+  if (dead <= 0) { const fx0 = p.x + 5, fy0 = p.y + 14; c.save(); c.translate(fx0, fy0); c.scale(HERO, HERO); c.translate(-fx0, -fy0); drawHero(c, p.x, p.y, p.face, t, K.down('up')); c.restore(); }
+  // laser from the (bigger) pistol out to where the beam stops
+  if (dead <= 0 && beam) {
+    const y = p.y + 14 - 8.8 * HERO, gx = p.x + 5 + p.face * 9.2 * HERO, ex = p.x + (p.face > 0 ? 10 : 0) + p.face * beam, bx = Math.min(gx, ex), bl = Math.abs(ex - gx);
+    A.glow(c, bx + bl / 2, y, bl / 2 + 6, '120,255,110', 0.16); c.fillStyle = 'rgba(124,255,107,.55)'; c.fillRect(bx, y - 1.6, bl, 3.2); c.fillStyle = '#eaffe4'; c.fillRect(bx, y - 0.5, bl, 1); A.glow(c, ex, y, 6, '200,255,180', 0.8);
+  }
   c.restore();
   // power bar
   c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(6, VH - 10, 80, 6); c.fillStyle = power < 25 ? '#ff3b5c' : '#ffd23f'; c.fillRect(7, VH - 9, 78 * power / 100, 4);
