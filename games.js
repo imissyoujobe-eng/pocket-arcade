@@ -1,4 +1,4 @@
-// The game list for the Pocket Arcade menu: the classic arcade games, then the console-style adventures
+// The game list for the Joystick Original Arcade menu: the classic arcade games, then the console-style adventures
 // (the games from Nine-10-Doe Arcade, merged in Nov 2026 so everything lives in one big app).
 // To add a game: put its file in games/ (games/<id>.html), add one line below and raise ARCADE_TOTAL to match.
 // My Scores: key = the name a kit game saves its best under (pa-<key>); store = where an older game saves its own best;

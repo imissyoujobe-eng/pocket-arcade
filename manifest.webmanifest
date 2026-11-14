@@ -1,7 +1,7 @@
 {
-  "name": "Pocket Arcade",
-  "short_name": "Pocket Arcade",
-  "description": "A pocket-sized arcade of 80+ games: shooters, racers, platformers, quests, sports and classics. Plays offline.",
+  "name": "Joystick Original Arcade",
+  "short_name": "Joystick",
+  "description": "Joystick Original Arcade: 80+ original games. Shooters, racers, platformers, quests, sports, word games and classics. Plays offline.",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
