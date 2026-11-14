@@ -42,7 +42,7 @@ window.ARCADE_GAMES = [
   { id: 'junk-planet', name: 'Junk Planet', genre: 'Arcade', tag: 'Rebuild your rocket, island by island' },
   { id: 'marsh-shot', name: 'Marsh Shot', genre: 'Shooter', tag: 'Tap the ducks, mind your shells', store: 'marshshot-best' },
   { id: 'echo-fin', name: 'Echo Fin', genre: 'Arcade', tag: 'Sonar swim, squid on your tail', key: 'echofin' },
-  { id: 'boot-camp-blitz', name: 'Boot Camp Blitz', genre: 'Shooter', tag: 'Push north to the gate', store: 'bootcamp-best' },
+  { id: 'boot-camp-blitz', name: 'Boot Camp Blitz', genre: 'Shooter', tag: 'Fight north to the gate in 3D', store: 'bootcamp-best' },
   { id: 'pot-drop', name: 'Pot Drop', genre: 'Arcade', tag: 'Drop flowerpots on climbing bugs', key: 'potdrop' },
   { id: 'fuel-run', name: 'Fuel Run', genre: 'Shooter', tag: 'Fly the river, blast the bridges', key: 'fuelrun' },
   { id: 'rodeo-roundup', name: 'Rodeo Roundup', genre: 'Arcade', tag: 'Rope the stampeding herd', key: 'rodeo' },
