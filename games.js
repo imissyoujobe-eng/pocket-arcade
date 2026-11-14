@@ -40,7 +40,7 @@ window.ARCADE_GAMES = [
   { id: 'spy-guy', name: 'Spy Guy', genre: 'Arcade', tag: 'Top-secret road chase', store: 'spyguy-best' },
   { id: 'space-cadet', name: 'Space Cadet', genre: 'Shooter', tag: 'Break the rocks, dodge the bits', store: 'spacecadet-best' },
   { id: 'junk-planet', name: 'Junk Planet', genre: 'Arcade', tag: 'Rebuild your rocket, island by island' },
-  { id: 'marsh-shot', name: 'Marsh Shot', genre: 'Shooter', tag: 'Tap the ducks, mind your shells', store: 'marshshot-best' },
+  { id: 'marsh-shot', name: 'Marsh Shot', genre: 'Shooter', tag: 'Pick a gun: ducks, dinos, bandits, zombies', store: 'marshshot-best' },
   { id: 'echo-fin', name: 'Echo Fin', genre: 'Arcade', tag: 'Sonar swim, squid on your tail', key: 'echofin' },
   { id: 'boot-camp-blitz', name: 'Boot Camp Blitz', genre: 'Shooter', tag: 'Fight north to the gate in 3D', store: 'bootcamp-best' },
   { id: 'pot-drop', name: 'Pot Drop', genre: 'Arcade', tag: 'Drop flowerpots on climbing bugs', key: 'potdrop' },
