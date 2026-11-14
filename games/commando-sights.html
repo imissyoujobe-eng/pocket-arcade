@@ -9,164 +9,339 @@
 <script src="../lib/kit.js"></script>
 <script src="../lib/art.js"></script>
 <script>
-// Commando Sights: a first-person gallery shooter. Move the crosshair, pick off soldiers and vehicles, rescue hostages and save your rockets for the big stuff.
+// Commando Sights: you hold a hilltop. The battlefield stays still; the enemy comes at you from far away, sprinting
+// from cover to cover (sandbags, rocks, barrels, barriers) and popping up to shoot. Tanks and jeeps roll in from the
+// distance, a few runners cut across, a chopper buzzes over. Rifle, grenades (they land behind cover) and rockets (for armor).
 K.theme({ bg: '#1a1408', ink: '#fff6e0', accent: '#ffb24a', accentInk: '#2a1600' });
-let W = 240; const H = 330, HY = 150, SZ = 2.1; // tall portrait view; SZ scales every character up
+let W = 240; const H = 330, HY = 132;
 K.screen(W, H, { smooth: true });
-K.flex(240, H, w => { W = w; }, { smooth: true }); // phone on its side: the battlefield widens to fill the screen
 K.hud(['score', 'ammo', 'hp']);
-K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'ROCKET' }, { id: 'a', label: 'FIRE' }] });
+K.pad({ dpad: '4', buttons: [{ id: 'c', label: 'GRENADE' }, { id: 'b', label: 'ROCKET' }, { id: 'a', label: 'FIRE' }] });
+addEventListener('keydown', e => { if (e.key === 'g' || e.key === 'G') K.press('c'); });
+addEventListener('keyup', e => { if (e.key === 'g' || e.key === 'G') K.release('c'); });
 
-let state = 'title', score, hp, ammo, mags, rockets, stage, kills, need, cx, cy, foes, pickups, flashes, parts, spawnT, reload, scroll, best = K.best('commandosights'), hurtFlash;
-function title() { K.card({ title: 'COMMANDO SIGHTS', text: 'Aim with the arrows or drag on the screen. FIRE shoots, ROCKET blows up anything near the crosshair. Shoot ammo crates for more bullets. Do NOT shoot the hostages in white! Clear the quota to finish each stage.', best: best ? 'BEST ' + best : '', button: 'Lock & Load', onStart: start }); }
-function start() { score = 0; hp = 10; stage = 1; ammo = 30; mags = 4; rockets = 3; cx = W / 2; cy = HY; hurtFlash = 0; startStage(); state = 'play'; }
-function startStage() { kills = 0; need = 15 + stage * 5; foes = []; pickups = []; flashes = []; parts = []; spawnT = 1; reload = 0; scroll = 0; }
-function boom(x, y, c, n) { for (let i = 0; i < (n || 10); i++) parts.push({ x, y, vx: K.rnd(-80, 80), vy: K.rnd(-100, 20), t: K.rnd(0.3, 0.8), c }); }
-function spawn() {
-  const r = Math.random(), side = Math.random() < 0.5 ? -1 : 1;
-  if (r < 0.62) { const d = Math.random() < 0.6 ? K.rnd(0.24, 0.5) : K.rnd(0.5, 0.85); // most soldiers stay far back near the bunkers
-    foes.push({ k: 'sol', x: side < 0 ? -20 : W + 20, y: HY + 14 + d * 150, d, vx: -side * K.rnd(18, 38) * d, hp: 1, cd: K.rnd(1, 3), duck: 0 }); }
-  else if (r < 0.75) { const d = K.rnd(0.3, 0.75); foes.push({ k: 'host', x: side < 0 ? -20 : W + 20, y: HY + 14 + d * 150, d, vx: -side * 26 * d, hp: 1 }); }
-  else if (r < 0.88) foes.push({ k: 'jeep', x: side < 0 ? -70 : W + 70, y: HY + 40, d: 0.45, vx: -side * 50, hp: 6, cd: 1 });
-  else if (r < 0.95) foes.push({ k: 'heli', x: side < 0 ? -80 : W + 80, y: 70, d: 0.8, vx: -side * 30, hp: 12, cd: 1.5 });
-  else foes.push({ k: 'crate', x: K.rnd(40, W - 40), y: HY + K.rnd(60, 150), d: 0.7, vx: 0, hp: 1, life: 5, give: Math.random() < 0.7 ? 'mag' : 'rocket' });
+// ---- depth: everything lives at a world spot (wx meters left/right, Z meters away) seen from a hilltop ----
+const GK = 1700, PK = 380;                       // ground drop and pixels-per-meter constants
+const gy = Z => HY + 4 + GK / Z;                // screen y of the ground at distance Z
+const ppm = Z => PK / Z;                         // pixels per meter at distance Z
+const sxw = (wx, Z) => W / 2 + wx * PK / Z;      // screen x
+const zAtY = y => y <= HY + 4 + GK / 70 ? 70 : K.clamp(GK / (y - HY - 4), 8, 70);
+const maxWx = Z => (W / 2 - 12) * Z / PK;        // how far left/right is still on screen at Z
+const ROWS = [47, 37, 29, 22, 16.5, 12.5];        // lines of cover, far to near
+
+let state = 'title', score, hp, ammo, mags, rockets, grenades, stage, kills, need, cx, cy, foes, covers, bunkers, wrecks, shots, parts, smoke, flashes, spawnT, vehT, sideT, heliT, reload, shake, best = K.best('commandosights'), hurtFlash, msgs;
+K.flex(240, H, w => { W = w; layout(); }, { smooth: true }); // phone on its side: the battlefield widens to fill the screen
+function title() { K.card({ title: 'COMMANDO SIGHTS', text: 'Hold the hill! Aim with the joystick or drag on the screen. FIRE shoots. The enemy comes from far away, running from cover to cover: shoot them while they\'re in the open or when they pop up to fire (a red ! means they\'re aiming at you). GRENADE lobs onto the spot in your sights and gets them behind cover. ROCKET is for tanks and jeeps. Don\'t shoot the hostages in white. Shoot crates for ammo.', best: best ? 'BEST ' + best : '', button: 'Lock & Load', onStart: start }); }
+function start() { score = 0; hp = 10; stage = 1; ammo = 30; mags = 4; rockets = 3; grenades = 4; cx = W / 2; cy = HY + 60; hurtFlash = 0; startStage(); state = 'play'; }
+function startStage() {
+  kills = 0; need = 12 + stage * 4; foes = []; shots = []; parts = []; smoke = []; flashes = []; wrecks = []; msgs = [];
+  spawnT = 1; vehT = stage >= 2 ? 9 : 14; sideT = 7; heliT = stage >= 3 ? 16 : 999; reload = 0; shake = 0;
+  covers = null; layout();
 }
-function hitTest(f, x, y, r) { const s = f.d * SZ; if (f.k === 'jeep') { const v = f.d * 1.6; return Math.abs(x - f.x) < 27 * v + r && Math.abs(y - (f.y - 15 * v)) < 15 * v + r; } if (f.k === 'heli') { const v = f.d * 1.5; return Math.abs(x - f.x) < 26 * v + r && Math.abs(y - f.y) < 12 * v + r; } if (f.k === 'crate') return Math.abs(x - f.x) < 16 + r && Math.abs(y - f.y + 13) < 14 + r; return Math.abs(x - f.x) < 6.5 * s + r && y < f.y + r && y > f.y - 28 * s - r; }
-function kill(f) {
-  f.dead = true; boom(f.x, f.y - 12 * f.d * SZ, f.k === 'host' ? '#fff' : '#ffb04a', f.k === 'sol' || f.k === 'host' ? 8 : 26);
-  if (f.k === 'host') { score = Math.max(0, score - 500); hp--; flashes.push({ t: 1.2, s: 'HOSTAGE HIT!' }); K.beep(150, 0.4, { to: 80 }); return; }
-  if (f.k === 'crate') { if (f.give === 'mag') { mags++; flashes.push({ t: 1, s: '+1 MAGAZINE' }); } else { rockets++; flashes.push({ t: 1, s: '+1 ROCKET' }); } K.tune([660, 880], 0.06); return; }
-  score += { sol: 100, jeep: 500, heli: 1000 }[f.k]; kills += f.k === 'sol' ? 1 : 3; K.noise(f.k === 'sol' ? 0.1 : 0.5, 0.3);
+// cover: sandbags, rocks, barrels, concrete barriers and crates on each row; two bunkers at the back
+function layout() {
+  if (!foes) return;
+  const keep = covers && covers._w === W; if (keep) return;
+  covers = []; covers._w = W; let seed = stage * 31;
+  const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  ROWS.forEach((Z, ri) => {
+    const m = maxWx(Z) * 0.92, n = Math.max(2, Math.round(m * 2 / (ri < 2 ? 5.5 : 4.6)));
+    for (let i = 0; i < n; i++) { const wx = -m + (i + 0.5) * (2 * m / n) + (rnd() - 0.5) * 1.6; const kind = ['sand', 'rock', 'barrel', 'wall', 'crates', 'sand'][Math.floor(rnd() * 6)];
+      const dims = { sand: [2.4, 0.95], rock: [1.9, 1.15], barrel: [1.3, 1.0], wall: [2.5, 1.0], crates: [1.7, 1.25] }[kind]; covers.push({ kind, wx, Z: Z + (rnd() - 0.5) * 1.2, w: dims[0], h: dims[1], seed: Math.floor(rnd() * 999) }); }
+  });
+  const bm = maxWx(55) * 0.55; bunkers = [{ wx: -bm, Z: 56, w: 7, h: 3 }, { wx: bm, Z: 58, w: 8, h: 3.2 }];
 }
-function hurt() { hp--; hurtFlash = 0.25; K.beep(120, 0.2, { to: 60, type: 'sawtooth' }); if (hp <= 0) { state = 'over'; best = K.saveBest('commandosights', score); K.card({ title: 'MISSION FAILED', text: 'You reached stage ' + stage + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); } }
+function say(s, t) { msgs.push({ s, t: t || 1.4 }); }
+function boom(x, y, c, n, sp) { for (let i = 0; i < (n || 10); i++) parts.push({ x, y, vx: K.rnd(-1, 1) * (sp || 80), vy: K.rnd(-1.2, 0.2) * (sp || 80), t: K.rnd(0.3, 0.8), c }); }
+function puff(x, y, r, l, dark) { smoke.push({ x, y, r, l, L: l, vx: K.rnd(-6, 6), vy: K.rnd(-14, -6), dark }); }
+const SKIN = ['#e2b08a', '#c8905a', '#8a5a3a', '#f0c8a0'];
+
+// ---- spawning ----
+function coverAt(Zmin, Zmax, nearWx) { const list = covers.filter(c => c.Z >= Zmin && c.Z <= Zmax); if (!list.length) return null; list.sort((a, b) => Math.abs(a.wx - nearWx) - Math.abs(b.wx - nearWx)); return list[Math.floor(Math.random() * Math.min(3, list.length))]; }
+function spawnSoldier() {
+  const b = bunkers[Math.random() < 0.5 ? 0 : 1], f = { k: 'sol', wx: b.wx + K.rnd(-1.5, 1.5), Z: b.Z - 1, st: 'run', t: 0, hp: 1, skin: SKIN[K.ri(0, 3)], seed: Math.random() * 10, cd: K.rnd(1.5, 3) };
+  goNext(f); foes.push(f);
+}
+// pick the next piece of cover a little closer, and sprint for it
+function goNext(f) {
+  const nextZ = ROWS.filter(z => z < f.Z - 3)[0] === undefined ? null : Math.max(...ROWS.filter(z => z < f.Z - 3));
+  const c = nextZ ? coverAt(nextZ - 1.5, nextZ + 1.5, f.wx + K.rnd(-4, 4)) : null;
+  if (!c) { f.st = 'hide'; f.t = K.rnd(1, 2); f.final = true; return; }
+  f.cover = c; f.tx = c.wx + K.rnd(-c.w * 0.3, c.w * 0.3); f.tZ = c.Z + 0.7; f.st = 'run'; f.spd = K.rnd(3.6, 5.2) * (1 + stage * 0.04);
+}
+function spawnSide() { const side = Math.random() < 0.5 ? -1 : 1, Z = K.rnd(14, 24), host = Math.random() < 0.3; foes.push({ k: host ? 'host' : 'side', wx: -side * (maxWx(Z) + 2), Z, dir: side, spd: K.rnd(5, 7), hp: 1, skin: SKIN[K.ri(0, 3)], cd: K.rnd(0.8, 1.6), seed: Math.random() * 10 }); }
+function spawnVehicle() {
+  const tank = stage >= 2 && Math.random() < 0.55, wx = K.rnd(-0.5, 0.5) * maxWx(60);
+  foes.push(tank ? { k: 'tank', wx, Z: 66, hp: 40, stopZ: K.rnd(20, 26), spd: 2.2, cd: 4, seed: Math.random() * 10 } : { k: 'jeep', wx, Z: 66, hp: 12, stopZ: K.rnd(16, 22), spd: 7, cd: 2.5, weave: Math.random() * 6, seed: Math.random() * 10 });
+  say(tank ? 'TANK INCOMING!' : 'JEEP INCOMING!', 1.6);
+}
+function spawnHeli() { const side = Math.random() < 0.5 ? -1 : 1; foes.push({ k: 'heli', x: side < 0 ? -80 : W + 80, y: 58, vx: -side * 32, hp: 15, cd: 2 }); }
+
+// ---- what's on screen where: bounding boxes for hits, nearest first ----
+function poseH(f) { return f.st === 'hide' ? 1.0 : f.st === 'dead' ? 0 : 1.8; }
+function boxOf(o) {
+  if (o.k === 'heli') return { x0: o.x - 30, x1: o.x + 30, y0: o.y - 14, y1: o.y + 12, Z: 30 };
+  if (o.k === 'crate') { const p = ppm(o.Z); return { x0: sxw(o.wx, o.Z) - 0.6 * p, x1: sxw(o.wx, o.Z) + 0.6 * p, y0: gy(o.Z) - 1.1 * p, y1: gy(o.Z), Z: o.Z }; }
+  const p = ppm(o.Z), x = sxw(o.wx, o.Z), y = gy(o.Z);
+  if (o.kind) return { x0: x - o.w / 2 * p, x1: x + o.w / 2 * p, y0: y - o.h * p, y1: y, Z: o.Z, cover: true };
+  if (o.k === 'tank') return { x0: x - 1.9 * p, x1: x + 1.9 * p, y0: y - 2.4 * p, y1: y, Z: o.Z };
+  if (o.k === 'jeep') return { x0: x - 1.1 * p, x1: x + 1.1 * p, y0: y - 1.9 * p, y1: y, Z: o.Z };
+  return { x0: x - 0.42 * p, x1: x + 0.42 * p, y0: y - poseH(o) * p - 0.1 * p, y1: y, Z: o.Z };
+}
+function hitAt(x, y) {
+  const cands = [];
+  foes.forEach(f => { if (f.dead || f.st === 'dead') return; const b = boxOf(f); if (x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) cands.push({ o: f, Z: b.Z }); });
+  covers.concat(wrecks).forEach(c => { const b = boxOf(c); if (x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1) cands.push({ o: c, Z: b.Z, cover: true }); });
+  cands.sort((a, b) => a.Z - b.Z); return cands[0] || null;
+}
+function damage(f, n, how) {
+  f.hp -= n; f.flash = 0.12;
+  if (f.hp > 0) return;
+  if (f.k === 'host') { f.st = 'dead'; f.dt = 0; score = Math.max(0, score - 500); hp--; say('HOSTAGE HIT!'); K.beep(150, 0.4, { to: 80 }); return; }
+  if (f.k === 'crate') { f.dead = true; if (f.give === 'mag') { mags++; say('+1 MAGAZINE'); } else if (f.give === 'gren') { grenades += 2; say('+2 GRENADES'); } else { rockets++; say('+1 ROCKET'); } K.tune([660, 880], 0.06); return; }
+  if (f.k === 'tank' || f.k === 'jeep') { f.dead = true; const x = sxw(f.wx, f.Z), y = gy(f.Z), p = ppm(f.Z); boom(x, y - p, '#ffb04a', 34, 120); for (let i = 0; i < 8; i++) puff(x + K.rnd(-1, 1) * p, y - p, 1.2 * p, 1.6, true); shake = 0.5; K.noise(0.9, 0.6); wrecks.push({ kind: 'wreck', tank: f.k === 'tank', wx: f.wx, Z: f.Z, w: f.k === 'tank' ? 3.4 : 2, h: f.k === 'tank' ? 1.4 : 1.2, seed: f.seed });
+    score += f.k === 'tank' ? 1500 : 500; kills += f.k === 'tank' ? 5 : 3; say(f.k === 'tank' ? 'TANK DESTROYED!' : 'JEEP DOWN!'); return; }
+  if (f.k === 'heli') { f.dead = true; boom(f.x, f.y, '#ffb04a', 34, 120); for (let i = 0; i < 6; i++) puff(f.x, f.y, 8, 1.4, true); score += 1000; kills += 4; K.noise(0.8, 0.5); say('CHOPPER DOWN!'); return; }
+  f.st = 'dead'; f.dt = 0; f.aim = 0; score += 100; kills += 1; K.noise(0.1, 0.25);
+}
+// ---- your weapons ----
+function fireRifle() {
+  ammo--; K.beep(180, 0.05, { type: 'sawtooth', vol: 0.04 }); const tx = cx + K.rnd(-2.5, 2.5), ty = cy + K.rnd(-2.5, 2.5);
+  flashes.push({ t: 0.05, x: tx, y: ty, shot: 1 });
+  const h = hitAt(tx, ty);
+  if (h) { if (h.cover) { boom(tx, ty, '#c8a878', 4, 30); } else if (h.o.k === 'tank') { boom(tx, ty, '#ffe08a', 4, 40); K.beep(1800, 0.03, { vol: 0.03 }); damage(h.o, 1); } else damage(h.o, h.o.k === 'jeep' ? 1 : 1); }
+  else if (ty > HY) boom(tx, ty, '#a88a5a', 3, 25);
+  if (ammo === 0 && mags > 0) { mags--; reload = 1.1; }
+}
+function aimPoint() { const h = hitAt(cx, cy); const Z = h ? h.Z : zAtY(cy); return { Z, wx: (cx - W / 2) * Z / PK, sx: cx, sy: cy }; }
+function throwGrenade() { if (grenades <= 0) { say('NO GRENADES'); return; } grenades--; const a = aimPoint(); shots.push({ k: 'gren', t: 0, T: 0.55 + a.Z / 60, Z: a.Z, wx: a.wx, sx: W / 2 + 30, sy: H - 10 }); K.beep(400, 0.12, { to: 250, vol: 0.04 }); }
+function fireRocket() { if (rockets <= 0) { say('NO ROCKETS'); return; } rockets--; const a = aimPoint(); shots.push({ k: 'rkt', t: 0, T: 0.15 + a.Z / 140, Z: a.Z, wx: a.wx, sx: W / 2 - 26, sy: H - 8 }); K.noise(0.4, 0.4); K.beep(250, 0.3, { to: 900, vol: 0.05 }); }
+function blast(wx, Z, r, dmgSol, dmgVeh) {
+  const x = sxw(wx, Z), y = gy(Z), p = ppm(Z); boom(x, y - 0.4 * p, '#ffd24a', 24, 100); for (let i = 0; i < 5; i++) puff(x + K.rnd(-0.8, 0.8) * p, y - 0.3 * p, 0.9 * p, 1.1); flashes.push({ t: 0.12, x, y: y - 0.5 * p, big: r * p }); shake = Math.max(shake, 0.25); K.noise(0.5, 0.5); K.beep(70, 0.3, { type: 'sawtooth', to: 40, vol: 0.06 });
+  foes.forEach(f => { if (f.dead || f.st === 'dead') return; if (f.k === 'heli') return; const d = Math.hypot(f.wx - wx, f.Z - Z); if (d < r) damage(f, f.k === 'tank' || f.k === 'jeep' ? dmgVeh : f.k === 'crate' ? 1 : dmgSol); });
+}
+function hurt(n) { hp -= n || 1; hurtFlash = 0.25; shake = Math.max(shake, 0.2 * (n || 1)); K.beep(120, 0.2, { to: 60, type: 'sawtooth' }); if (hp <= 0) { state = 'over'; best = K.saveBest('commandosights', score); K.card({ title: 'MISSION FAILED', text: 'You reached stage ' + stage + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Again', onStart: start }); } }
+
 function update(dt) {
   if (state !== 'play') return;
   const sp = 170; if (K.down('left')) cx -= sp * dt; if (K.down('right')) cx += sp * dt; if (K.down('up')) cy -= sp * dt; if (K.down('down')) cy += sp * dt;
   if (K.ptr.down) { cx += (K.ptr.x - cx) * Math.min(1, dt * 14); cy += (K.ptr.y - 34 - cy) * Math.min(1, dt * 14); }
   cx = K.clamp(cx, 0, W); cy = K.clamp(cy, 0, H);
-  scroll += dt * 8;
   if (reload > 0) { reload -= dt; if (reload <= 0) { ammo = 30; K.beep(500, 0.05); } }
-  const firing = K.down('a') || (K.ptr.down);
-  if (firing && reload <= 0 && Math.floor(performance.now() / 90) !== Math.floor((performance.now() - dt * 1000) / 90)) {
-    if (ammo > 0) { ammo--; K.beep(180, 0.05, { type: 'sawtooth', vol: 0.04 }); flashes.push({ t: 0.05, x: cx + K.rnd(-3, 3), y: cy + K.rnd(-3, 3), shot: 1 });
-      const tx = cx + K.rnd(-4, 4), ty = cy + K.rnd(-4, 4);
-      const hitList = foes.filter(f => !f.dead && hitTest(f, tx, ty, 0)).sort((a, b) => b.d - a.d);
-      if (hitList[0]) { const f = hitList[0]; if (--f.hp <= 0) kill(f); else boom(tx, ty, '#ccc', 3); }
-      if (ammo === 0) { if (mags > 0) { mags--; reload = 1.1; } }
-    }
-  }
-  if (K.hit('b') && rockets > 0) { rockets--; K.noise(0.6, 0.5); boom(cx, cy, '#ffe04a', 30); foes.forEach(f => { if (!f.dead && hitTest(f, cx, cy, 40)) { f.hp -= 8; if (f.hp <= 0) kill(f); } }); }
-  spawnT -= dt; if (spawnT <= 0 && foes.length < 6 + stage) { spawn(); spawnT = K.rnd(0.5, 1.4) - stage * 0.05; }
+  if (shake > 0) shake -= dt;
+  const firing = K.down('a') || K.ptr.down;
+  if (firing && reload <= 0 && ammo > 0 && Math.floor(performance.now() / 95) !== Math.floor((performance.now() - dt * 1000) / 95)) fireRifle();
+  if (K.hit('c')) throwGrenade();
+  if (K.hit('b')) fireRocket();
+  // grenades arc out and land; rockets streak straight in
+  shots.forEach(s => { s.t += dt; if (s.t >= s.T) { s.dead = true; if (s.k === 'gren') blast(s.wx, s.Z, 4.5, 99, 20); else blast(s.wx, s.Z, 3.2, 99, 34); } }); shots = shots.filter(s => !s.dead);
+  // who comes on
+  spawnT -= dt; const active = foes.filter(f => f.k === 'sol' && f.st !== 'dead').length;
+  if (spawnT <= 0 && active < 4 + stage) { spawnSoldier(); spawnT = K.rnd(0.9, 2.0) / (1 + stage * 0.08); }
+  sideT -= dt; if (sideT <= 0) { spawnSide(); sideT = K.rnd(7, 12); }
+  vehT -= dt; if (vehT <= 0 && !foes.some(f => (f.k === 'tank' || f.k === 'jeep') && !f.dead)) { spawnVehicle(); vehT = K.rnd(16, 24) - stage; }
+  heliT -= dt; if (heliT <= 0) { spawnHeli(); heliT = K.rnd(20, 30); }
+  if (Math.random() < dt * 0.06) { const Z = K.rnd(14, 30); foes.push({ k: 'crate', wx: K.rnd(-0.7, 0.7) * maxWx(Z), Z, hp: 1, life: 6, give: ['mag', 'mag', 'gren', 'rocket'][K.ri(0, 3)] }); }
+  if (ammo === 0 && mags === 0 && reload <= 0 && rockets === 0 && !foes.some(f => f.k === 'crate')) foes.push({ k: 'crate', wx: 0, Z: 18, hp: 1, life: 6, give: 'mag' });
   foes.forEach(f => {
-    f.x += f.vx * dt;
-    if (f.k === 'heli') f.y = 70 + Math.sin(performance.now() / 500) * 10;
-    if (f.k === 'crate') { f.life -= dt; if (f.life <= 0) f.dead = true; }
-    if (f.cd !== undefined && f.k !== 'host' && f.k !== 'crate' && f.x > 14 && f.x < W - 14) { f.cd -= dt; if (f.cd <= 0) { f.cd = K.rnd(1.5, 3.2) - stage * 0.1; f.aim = 0.5; } if (f.aim > 0) { f.aim -= dt; if (f.aim <= 0) { if (Math.random() < 0.45 + f.d * 0.3) hurt(); flashes.push({ t: 0.08, x: f.x + (f.k === 'sol' ? (f.vx > 0 ? 12 : -12) * f.d * SZ : 0), y: f.y - (f.k === 'sol' ? 17 : 18) * f.d * (f.k === 'sol' ? SZ : 1), muzzle: 1 }); if (state !== 'play') return; } } }
-    if (f.x < -100 || f.x > W + 100) f.dead = true;
+    if (f.flash > 0) f.flash -= dt;
+    if (f.st === 'dead') { f.dt += dt; if (f.dt > 1.4) f.dead = true; return; }
+    if (f.k === 'sol') {
+      if (f.st === 'run') {
+        const dx = f.tx - f.wx, dz = f.tZ - f.Z, d = Math.hypot(dx, dz);
+        if (d < 0.3) { f.st = 'hide'; f.t = K.rnd(0.8, 2.2); }
+        else { f.wx += dx / d * f.spd * dt; f.Z += dz / d * f.spd * dt; f.ph = (f.ph || 0) + dt * f.spd * 2.4; }
+        // now and then a runner snaps off a shot on the move
+        f.cd -= dt; if (f.cd <= 0 && !f.aim) { f.cd = K.rnd(2.5, 4); if (Math.random() < 0.35) f.aim = 0.45; }
+      } else if (f.st === 'hide') { f.t -= dt; if (f.t <= 0) { if (f.final || Math.random() < 0.55) { f.st = 'peek'; f.t = K.rnd(1.2, 2.0); f.aim = K.rnd(0.5, 0.8) - stage * 0.02; } else goNext(f); } }
+      else if (f.st === 'peek') { f.t -= dt; if (f.t <= 0) { f.st = 'hide'; f.aim = 0; f.t = K.rnd(0.8, 1.8); if (!f.final && Math.random() < 0.6) goNext(f); } }
+      if (f.aim > 0) { f.aim -= dt; if (f.aim <= 0) enemyShot(f, 0.2 + 9 / f.Z * 0.5); }
+    } else if (f.k === 'side' || f.k === 'host') {
+      f.wx += f.dir * f.spd * dt; f.ph = (f.ph || 0) + dt * f.spd * 2.4;
+      if (f.k === 'side') { f.cd -= dt; if (f.cd <= 0 && !f.aim) { f.cd = K.rnd(1.2, 2); f.aim = 0.4; } if (f.aim > 0) { f.aim -= dt; if (f.aim <= 0) enemyShot(f, 0.3); } }
+      if (Math.abs(f.wx) > maxWx(f.Z) + 3) f.dead = true;
+    } else if (f.k === 'tank' || f.k === 'jeep') {
+      if (f.Z > f.stopZ) { f.Z -= f.spd * dt; if (f.k === 'jeep') f.wx += Math.sin(performance.now() / 700 + f.weave) * 2.5 * dt; if (Math.random() < dt * 4) puff(sxw(f.wx, f.Z) + K.rnd(-1, 1) * ppm(f.Z), gy(f.Z), 0.5 * ppm(f.Z), 0.8); }
+      f.cd -= dt; if (f.cd <= 0 && f.Z < 50) { f.cd = f.k === 'tank' ? K.rnd(3.5, 4.5) : K.rnd(2, 3); f.aim = f.k === 'tank' ? 1.0 : 0.6; }
+      if (f.aim > 0) { f.aim -= dt; if (f.aim <= 0) { if (f.k === 'tank') { flashes.push({ t: 0.15, x: sxw(f.wx, f.Z), y: gy(f.Z) - 1.5 * ppm(f.Z), muzzle: 1, r: 1.2 * ppm(f.Z) }); K.noise(0.5, 0.5); if (Math.random() < 0.55) { hurt(2); say('TANK HIT YOU!'); } else boom(K.rnd(20, W - 20), K.rnd(HY + 60, H - 40), '#a88a5a', 20, 90); } else enemyShot(f, 0.45); } }
+      if (f.hp < (f.k === 'tank' ? 20 : 6) && Math.random() < dt * 6) puff(sxw(f.wx, f.Z), gy(f.Z) - 1.5 * ppm(f.Z), 0.6 * ppm(f.Z), 1.4, true);
+    } else if (f.k === 'heli') {
+      f.x += f.vx * dt; f.y = 58 + Math.sin(performance.now() / 500) * 8;
+      f.cd -= dt; if (f.cd <= 0 && f.x > 20 && f.x < W - 20) { f.cd = K.rnd(1.6, 2.6); f.aim = 0.6; } if (f.aim > 0) { f.aim -= dt; if (f.aim <= 0) enemyShot(f, 0.4); }
+      if (f.x < -120 || f.x > W + 120) f.dead = true;
+    } else if (f.k === 'crate') { f.life -= dt; if (f.life <= 0) f.dead = true; }
   });
   if (state !== 'play') return;
   foes = foes.filter(f => !f.dead);
-  if (ammo === 0 && mags === 0 && reload <= 0 && rockets === 0) { if (!foes.some(f => f.k === 'crate')) foes.push({ k: 'crate', x: K.rnd(40, W - 40), y: HY + 90, d: 0.7, vx: 0, hp: 1, life: 6, give: 'mag' }); }
+  wrecks.forEach(w => { if (Math.random() < 0.2) puff(sxw(w.wx, w.Z) + K.rnd(-0.6, 0.6) * ppm(w.Z), gy(w.Z) - w.h * ppm(w.Z), 0.5 * ppm(w.Z), 1.6, true); });
   flashes.forEach(f => f.t -= dt); flashes = flashes.filter(f => f.t > 0);
+  msgs.forEach(m => m.t -= dt); msgs = msgs.filter(m => m.t > 0);
   parts.forEach(p => { p.t -= dt; p.vy += 200 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
+  smoke.forEach(s => { s.l -= dt; s.x += s.vx * dt; s.y += s.vy * dt; s.r *= 1 + dt * 0.6; }); smoke = smoke.filter(s => s.l > 0);
   if (hurtFlash > 0) hurtFlash -= dt;
-  if (kills >= need) { score += 1000 + hp * 100; stage++; hp = Math.min(10, hp + 3); mags += 2; K.tune([523, 659, 784, 1046], 0.12); flashes.push({ t: 2, s: 'STAGE ' + stage }); startStage(); flashes.push({ t: 2, s: 'STAGE CLEAR!' }); }
-  K.set('score', score); K.set('ammo', (reload > 0 ? 'RELOAD' : ammo + '') + ' ×' + mags + ' R' + rockets); K.set('hp', 'HP ' + Math.max(0, hp));
+  if (kills >= need) { score += 1000 + hp * 100; stage++; hp = Math.min(10, hp + 3); mags += 2; grenades += 2; rockets += 1; K.tune([523, 659, 784, 1046], 0.12); startStage(); say('STAGE CLEAR! STAGE ' + stage, 2.4); }
+  K.set('score', score); K.set('ammo', (reload > 0 ? 'RELOAD' : ammo + '') + ' ×' + mags + ' G' + grenades + ' R' + rockets); K.set('hp', 'HP ' + Math.max(0, hp));
 }
-function drawSol(c, f, host) {
-  const s = f.d * SZ, x = f.x, y = f.y, dir = f.vx > 0 ? 1 : -1, ph = performance.now() / 110 + x * 0.05, step = Math.sin(ph) * 3 * s, bob = Math.abs(Math.cos(ph)) * 0.8 * s;
-  const ink = 'rgba(20,12,6,.9)', lw = Math.max(0.6, 0.35 * s);
-  const R = (col, rx, ry, rw, rh) => { c.fillStyle = ink; c.fillRect(x + rx * s - lw, y + ry * s - lw - bob, rw * s + lw * 2, rh * s + lw * 2); c.fillStyle = col; c.fillRect(x + rx * s, y + ry * s - bob, rw * s, rh * s); };
-  A.shadow(c, x, y + 0.5, 7 * s);
-  // legs + boots
-  const pant = host ? '#9a8a7a' : '#3e4e24', pantD = host ? '#7a6a5a' : '#2c3a18';
-  c.save(); c.translate(0, bob);
-  R(pantD, -3.6 + step / s, -9, 3, 8); R(pant, 0.6 - step / s, -9, 3, 8);
-  R('#2a1c10', -4.2 + step / s, -1.6, 4, 1.8); R('#2a1c10', 0.2 - step / s, -1.6, 4, 1.8);
-  c.restore();
-  // torso
-  if (host) {
-    R('#f0eee6', -4.5, -20, 9, 12); c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(x - 4.5 * s, y - 20 * s - bob, 2 * s, 12 * s);
-    c.fillStyle = '#c8c4b8'; c.fillRect(x - 0.4 * s, y - 19 * s - bob, 0.8 * s, 10 * s);
-    // arms raised, hands up
-    R('#f0eee6', -7.5, -27, 2.6, 9); R('#f0eee6', 4.9, -27, 2.6, 9);
-    c.fillStyle = '#e0b090'; c.beginPath(); c.arc(x - 6.2 * s, y - 28 * s - bob, 1.6 * s, 0, 7); c.arc(x + 6.2 * s, y - 28 * s - bob, 1.6 * s, 0, 7); c.fill();
+function enemyShot(f, chance) {
+  const x = f.k === 'heli' ? f.x : sxw(f.wx, f.Z), y = f.k === 'heli' ? f.y + 6 : gy(f.Z) - (f.k === 'jeep' ? 1.6 : 1.35) * ppm(f.Z);
+  flashes.push({ t: 0.08, x, y, muzzle: 1, r: Math.max(3, 0.25 * (f.k === 'heli' ? 12 : ppm(f.Z))) }); K.beep(300, 0.04, { type: 'square', vol: 0.03 });
+  if (Math.random() < chance) hurt(1);
+}
+
+// ---------------- drawing ----------------
+const INK = 'rgba(20,12,6,.9)';
+// a soldier facing you, feet at (x, y), s = pixels per meter. Poses: running at you, crouched behind cover, up and aiming, falling
+function soldier(c, f, x, y, p, t) {
+  const st = f.st, s = p * 1.8 / 28, lw = Math.max(0.5, 0.28 * s), dead = st === 'dead';
+  const R = (col, rx, ry, rw, rh) => { c.fillStyle = INK; c.fillRect(x + rx * s - lw, y + ry * s - lw, rw * s + lw * 2, rh * s + lw * 2); c.fillStyle = col; c.fillRect(x + rx * s, y + ry * s, rw * s, rh * s); };
+  if (dead) { c.save(); c.globalAlpha = Math.max(0, 1 - Math.max(0, f.dt - 0.8) / 0.6); c.translate(x, y); c.rotate((f.wx > 0 ? 1 : -1) * Math.min(1.4, f.dt * 4)); c.translate(-x, -y); }
+  const run = st === 'run', crouch = st === 'hide', aim = st === 'peek' || (f.aim > 0 && !crouch);
+  const ph = (f.ph || 0) + f.seed, l = run ? Math.sin(ph) * 2.2 : 0, bob = run ? Math.abs(Math.cos(ph)) * 0.8 : 0;
+  const UNI = '#5a6a32', UNI_D = '#44522a', VEST = '#3c4824', PANT = '#4e5c2c', BOOT = '#2a1c10';
+  y -= bob * s;
+  if (!crouch) {
+    R(PANT, -4, -11 + Math.max(0, l), 3.4, 10 - Math.max(0, l)); R(UNI_D, 0.6, -11 + Math.max(0, -l), 3.4, 10 - Math.max(0, -l));
+    R(BOOT, -4.4, -1.8 - Math.max(0, l) * 0.6, 4.2, 2); R(BOOT, 0.2, -1.8 - Math.max(0, -l) * 0.6, 4.2, 2);
+  } else { R(PANT, -4.6, -7, 4.2, 6); R(UNI_D, 0.6, -5, 4.2, 4); R(BOOT, -4.8, -1.6, 4.6, 1.8); }
+  const ty = crouch ? -16 : -22;
+  R(UNI, -5.2, ty, 10.4, 12); R(VEST, -4.3, ty + 1, 8.6, 9);
+  c.fillStyle = '#2c361a'; for (let k = 0; k < 3; k++) c.fillRect(x + (-3.9 + k * 2.7) * s, y + (ty + 6.2) * s, 2.2 * s, 2.8 * s);
+  c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(x - 5.2 * s, y + ty * s, 10.4 * s, 1.1 * s);
+  c.fillStyle = '#3a4a20'; c.fillRect(x - 5 * s, y + (ty + 0.6) * s, 2.2 * s, 2 * s); c.fillRect(x + 3 * s, y + (ty + 2) * s, 2 * s, 2.4 * s);
+  R('#3a2a14', -5.2, ty + 11, 10.4, 1.6); c.fillStyle = '#c8a040'; c.fillRect(x - 0.8 * s, y + (ty + 11.2) * s, 1.6 * s, 1.2 * s);
+  if (aim) {
+    // rifle up and pointed at you: stock in the shoulder, muzzle right at the camera
+    R(UNI, -7, ty + 1.5, 3, 6.5); R(UNI, 4, ty + 1.5, 3, 6.5);
+    R('#242426', -2.4, ty + 2.6, 6, 3.4); R('#5a3a1e', 2.6, ty + 2, 3.2, 3); R('#2a2a2c', 0, ty + 5.8, 1.6, 3);
+    c.fillStyle = '#d8a880'; c.beginPath(); c.arc(x - 2.6 * s, y + (ty + 5) * s, 1.3 * s, 0, 7); c.arc(x + 3.8 * s, y + (ty + 6.6) * s, 1.3 * s, 0, 7); c.fill();
+    c.fillStyle = '#111'; c.beginPath(); c.arc(x - 1.2 * s, y + (ty + 4.2) * s, 1.5 * s, 0, 7); c.fill(); c.fillStyle = '#4a4a4e'; c.beginPath(); c.arc(x - 1.2 * s, y + (ty + 4.2) * s, 0.7 * s, 0, 7); c.fill();
   } else {
-    R('#55682e', -4.5, -20, 9, 12);
-    c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(x - 4.5 * s, y - 20 * s - bob, 9 * s, 1.2 * s);
-    // camo blotches
-    c.fillStyle = '#3a4a20'; [[-3, -18, 2.5, 2], [1, -15, 3, 2], [-2, -12, 2, 2]].forEach(b => c.fillRect(x + b[0] * s, y + b[1] * s - bob, b[2] * s, b[3] * s));
-    R('#5a3a1a', -4.5, -10, 9, 1.6); c.fillStyle = '#c8a040'; c.fillRect(x - 0.8 * s, y - 10 * s - bob, 1.6 * s, 1.6 * s); // belt
-    R('#6a5a2a', dir > 0 ? -6.8 : 4.3, -19, 2.5, 7); // backpack
-    // rifle held forward
-    c.fillStyle = ink; c.fillRect(x + (dir > 0 ? -1 : -13) * s - lw, y - 17.6 * s - bob - lw, 14 * s + lw * 2, 2.2 * s + lw * 2);
-    c.fillStyle = '#2a2a2a'; c.fillRect(x + (dir > 0 ? -1 : -13) * s, y - 17.6 * s - bob, 14 * s, 2.2 * s);
-    c.fillStyle = '#6a4424'; c.fillRect(x + (dir > 0 ? -3 : 9) * s, y - 17 * s - bob, 4 * s, 3 * s);
-    c.fillStyle = '#1a1a1a'; c.fillRect(x + (dir > 0 ? 4 : -6) * s, y - 15.6 * s - bob, 2 * s, 3 * s);
-    // arm
-    R('#4a5c28', (dir > 0 ? 1 : -5), -19, 4, 2.6);
-    c.fillStyle = '#d8a880'; c.beginPath(); c.arc(x + dir * 5.5 * s, y - 16.5 * s - bob, 1.3 * s, 0, 7); c.fill();
+    // rifle carried across the chest
+    c.save(); c.translate(x, y + (ty + 6) * s); c.rotate(-0.55); c.fillStyle = INK; c.fillRect(-8 * s - lw, -1.2 * s - lw, 15 * s + lw * 2, 2.4 * s + lw * 2); c.fillStyle = '#26262a'; c.fillRect(-8 * s, -1.2 * s, 15 * s, 2.4 * s); c.fillStyle = '#5a3a1e'; c.fillRect(-8 * s, -1.2 * s, 4 * s, 2.4 * s); c.fillStyle = '#1c1c1e'; c.fillRect(1 * s, 1.2 * s, 1.6 * s, 2.6 * s); c.restore();
+    R(UNI, -6.8, ty + 1, 2.8, 7 + (run ? l * 0.5 : 0)); R(UNI, 4, ty + 1, 2.8, 7 - (run ? l * 0.5 : 0));
+    c.fillStyle = '#d8a880'; c.beginPath(); c.arc(x - 4.5 * s, y + (ty + 9) * s, 1.2 * s, 0, 7); c.arc(x + 4.2 * s, y + (ty + 3.5) * s, 1.2 * s, 0, 7); c.fill();
   }
-  // head
-  const hy = y - 23.5 * s - bob;
-  c.fillStyle = ink; c.beginPath(); c.arc(x, hy, 3.9 * s + lw, 0, 7); c.fill();
-  c.fillStyle = '#e2b08a'; c.beginPath(); c.arc(x, hy, 3.9 * s, 0, 7); c.fill();
-  c.fillStyle = 'rgba(150,80,50,.35)'; c.beginPath(); c.arc(x - dir * 1.2 * s, hy + 1 * s, 2.6 * s, 0, 7); c.fill();
-  if (host) {
-    c.fillStyle = '#5a3a20'; c.beginPath(); c.arc(x, hy - 1 * s, 4 * s, Math.PI, 0); c.fill(); // hair
-    c.fillStyle = '#c03030'; c.fillRect(x - 4 * s, hy - 0.8 * s, 8 * s, 1.6 * s); // blindfold
-    c.fillStyle = '#7a3a2a'; c.fillRect(x - 1.2 * s, hy + 2 * s, 2.4 * s, 0.7 * s);
-  } else {
-    c.fillStyle = '#1a1a1a'; c.fillRect(x + dir * 1.6 * s - 0.5 * s, hy - 0.4 * s, 1 * s, 1 * s); // eye
-    c.fillStyle = '#7a3a2a'; c.fillRect(x + dir * 1 * s - 0.6 * s, hy + 2 * s, 1.6 * s, 0.6 * s);
-    // helmet
-    c.fillStyle = ink; c.beginPath(); c.ellipse(x, hy - 1.3 * s, 5.3 * s + lw, 3.6 * s + lw, 0, Math.PI, 0); c.fill();
-    c.fillStyle = '#4a5a26'; c.beginPath(); c.ellipse(x, hy - 1.3 * s, 5.3 * s, 3.6 * s, 0, Math.PI, 0); c.fill();
-    c.fillStyle = '#5e7030'; c.beginPath(); c.ellipse(x - 1.4 * s, hy - 2.6 * s, 2.2 * s, 1.2 * s, 0, 0, 7); c.fill();
-    c.fillStyle = '#2c3814'; c.fillRect(x - 5.6 * s, hy - 1.6 * s, 11.2 * s, 0.9 * s);
-  }
+  // head: face, eyes on you, helmet with netting and chin strap
+  const hy = y + (ty - 4) * s; R(f.skin, -1.3, ty - 1.6, 2.6, 1.8);
+  c.fillStyle = INK; c.beginPath(); c.arc(x, hy, 3.7 * s + lw, 0, 7); c.fill(); c.fillStyle = f.skin; c.beginPath(); c.arc(x, hy, 3.7 * s, 0, 7); c.fill();
+  c.fillStyle = 'rgba(120,60,30,.25)'; c.beginPath(); c.arc(x + 1 * s, hy + 1.2 * s, 2.6 * s, 0, 7); c.fill();
+  if (s > 0.55) { c.fillStyle = '#1a1a1a'; c.fillRect(x - 2 * s, hy - 0.2 * s, 1.2 * s, 1 * s); c.fillRect(x + 0.8 * s, hy - 0.2 * s, 1.2 * s, 1 * s); c.fillStyle = '#5a2a1a'; c.fillRect(x - 1.2 * s, hy + 2 * s, 2.4 * s, 0.6 * s); }
+  c.fillStyle = INK; c.beginPath(); c.ellipse(x, hy - 1.2 * s, 5.2 * s + lw, 3.6 * s + lw, 0, Math.PI, 0); c.fill();
+  c.fillStyle = '#4a5626'; c.beginPath(); c.ellipse(x, hy - 1.2 * s, 5.2 * s, 3.6 * s, 0, Math.PI, 0); c.fill();
+  c.fillStyle = '#2c3814'; c.fillRect(x - 5.5 * s, hy - 1.5 * s, 11 * s, 0.9 * s);
+  if (s > 0.7) { c.strokeStyle = 'rgba(30,36,14,.6)'; c.lineWidth = Math.max(0.4, 0.25 * s); for (let k = -2; k <= 2; k++) { c.beginPath(); c.moveTo(x + k * 1.8 * s, hy - 4.6 * s); c.lineTo(x + (k * 1.8 + 1) * s, hy - 1.6 * s); c.stroke(); } c.strokeStyle = '#2a2a1a'; c.beginPath(); c.moveTo(x - 3.4 * s, hy - 1); c.lineTo(x - 2.4 * s, hy + 3 * s); c.moveTo(x + 3.4 * s, hy - 1); c.lineTo(x + 2.4 * s, hy + 3 * s); c.stroke(); }
+  c.fillStyle = 'rgba(255,255,255,.18)'; c.beginPath(); c.ellipse(x - 1.6 * s, hy - 3 * s, 1.8 * s, 0.8 * s, 0, 0, 7); c.fill();
+  if (f.flash > 0) { c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(x - 5 * s, y + (ty - 8) * s, 10 * s, (crouch ? 16 : 30) * s); }
+  if (dead) c.restore();
+}
+// side-view runner (crossing): enemy soldier, or a hostage in white with hands up
+function runner(c, f, x, y, p, t) {
+  const s = p * 1.8 / 28, host = f.k === 'host', dir = f.dir, ph = (f.ph || 0) + f.seed, step = Math.sin(ph) * 3 * s, bob = Math.abs(Math.cos(ph)) * 0.8 * s, lw = Math.max(0.5, 0.3 * s);
+  const R = (col, rx, ry, rw, rh) => { c.fillStyle = INK; c.fillRect(x + rx * s - lw, y + ry * s - lw - bob, rw * s + lw * 2, rh * s + lw * 2); c.fillStyle = col; c.fillRect(x + rx * s, y + ry * s - bob, rw * s, rh * s); };
+  if (f.st === 'dead') { c.save(); c.globalAlpha = Math.max(0, 1 - Math.max(0, f.dt - 0.8) / 0.6); c.translate(x, y); c.rotate(-dir * Math.min(1.5, f.dt * 4)); c.translate(-x, -y); }
+  const pant = host ? '#9a8a7a' : '#4e5c2c', pantD = host ? '#7a6a5a' : '#3a4622';
+  c.save(); c.translate(0, bob); R(pantD, -3.6 + step / s, -9, 3, 8); R(pant, 0.6 - step / s, -9, 3, 8); R('#2a1c10', -4.2 + step / s, -1.6, 4, 1.8); R('#2a1c10', 0.2 - step / s, -1.6, 4, 1.8); c.restore();
+  if (host) { R('#f0eee6', -4.5, -20, 9, 12); R('#f0eee6', -7.5, -27, 2.6, 9); R('#f0eee6', 4.9, -27, 2.6, 9); c.fillStyle = '#e0b090'; c.beginPath(); c.arc(x - 6.2 * s, y - 28 * s - bob, 1.6 * s, 0, 7); c.arc(x + 6.2 * s, y - 28 * s - bob, 1.6 * s, 0, 7); c.fill(); }
+  else { R('#5a6a32', -4.5, -20, 9, 12); R('#3c4824', -3.8, -19, 7.6, 8); R('#3a2a14', -4.5, -10, 9, 1.6); R('#6a5a2a', dir > 0 ? -6.8 : 4.3, -19, 2.5, 7);
+    c.fillStyle = INK; c.fillRect(x + (dir > 0 ? -1 : -13) * s - lw, y - 17.6 * s - bob - lw, 14 * s + lw * 2, 2.2 * s + lw * 2); c.fillStyle = '#26262a'; c.fillRect(x + (dir > 0 ? -1 : -13) * s, y - 17.6 * s - bob, 14 * s, 2.2 * s); c.fillStyle = '#5a3a1e'; c.fillRect(x + (dir > 0 ? -3 : 9) * s, y - 17 * s - bob, 4 * s, 3 * s);
+    R('#4a5c28', dir > 0 ? 1 : -5, -19, 4, 2.6); }
+  const hy = y - 23.5 * s - bob; c.fillStyle = INK; c.beginPath(); c.arc(x, hy, 3.9 * s + lw, 0, 7); c.fill(); c.fillStyle = f.skin; c.beginPath(); c.arc(x, hy, 3.9 * s, 0, 7); c.fill();
+  if (host) { c.fillStyle = '#5a3a20'; c.beginPath(); c.arc(x, hy - 1 * s, 4 * s, Math.PI, 0); c.fill(); c.fillStyle = '#c03030'; c.fillRect(x - 4 * s, hy - 0.8 * s, 8 * s, 1.6 * s); }
+  else { c.fillStyle = '#1a1a1a'; c.fillRect(x + dir * 1.6 * s - 0.5 * s, hy - 0.4 * s, 1 * s, 1 * s); c.fillStyle = INK; c.beginPath(); c.ellipse(x, hy - 1.3 * s, 5.3 * s + lw, 3.6 * s + lw, 0, Math.PI, 0); c.fill(); c.fillStyle = '#4a5626'; c.beginPath(); c.ellipse(x, hy - 1.3 * s, 5.3 * s, 3.6 * s, 0, Math.PI, 0); c.fill(); c.fillStyle = '#2c3814'; c.fillRect(x - 5.6 * s, hy - 1.6 * s, 11.2 * s, 0.9 * s); }
+  if (f.st === 'dead') c.restore();
+}
+// cover pieces
+function coverDraw(c, o, t) {
+  const p = ppm(o.Z), x = sxw(o.wx, o.Z), y = gy(o.Z), w = o.w * p, h = o.h * p, lw = Math.max(0.6, p * 0.03);
+  A.shadow(c, x, y, w * 0.55);
+  if (o.kind === 'sand') { const rows = 3, bw = w / 4; for (let r = 0; r < rows; r++) for (let i = 0; i < 4 + (r % 2 ? -1 : 0); i++) { const bx = x - w / 2 + i * bw + (r % 2 ? bw / 2 : 0), by = y - (r + 1) * h / rows; c.fillStyle = INK; c.beginPath(); c.roundRect(bx - lw, by - lw, bw + lw * 2, h / rows + lw * 2, h / rows * 0.4); c.fill(); const g = c.createLinearGradient(0, by, 0, by + h / rows); g.addColorStop(0, '#cdb88a'); g.addColorStop(1, '#8a7650'); c.fillStyle = g; c.beginPath(); c.roundRect(bx, by, bw, h / rows, h / rows * 0.4); c.fill(); } }
+  else if (o.kind === 'rock') { c.fillStyle = INK; c.beginPath(); c.moveTo(x - w / 2 - lw, y); c.lineTo(x - w * 0.42, y - h * 0.7); c.lineTo(x - w * 0.1, y - h - lw); c.lineTo(x + w * 0.3, y - h * 0.85); c.lineTo(x + w / 2 + lw, y - h * 0.3); c.lineTo(x + w / 2 + lw, y); c.fill(); const g = c.createLinearGradient(x - w / 2, y - h, x + w / 2, y); g.addColorStop(0, '#a89a8a'); g.addColorStop(1, '#5a4e44'); c.fillStyle = g; c.beginPath(); c.moveTo(x - w / 2, y); c.lineTo(x - w * 0.41, y - h * 0.68); c.lineTo(x - w * 0.1, y - h); c.lineTo(x + w * 0.3, y - h * 0.83); c.lineTo(x + w / 2, y - h * 0.3); c.lineTo(x + w / 2, y); c.fill(); c.strokeStyle = 'rgba(0,0,0,.25)'; c.lineWidth = lw; c.beginPath(); c.moveTo(x - w * 0.1, y - h); c.lineTo(x, y - h * 0.4); c.lineTo(x - w * 0.2, y); c.stroke(); }
+  else if (o.kind === 'barrel') { for (const k of [-1, 1]) { const bx = x + k * w * 0.24, bw = w * 0.44; c.fillStyle = INK; c.fillRect(bx - bw / 2 - lw, y - h - lw, bw + lw * 2, h + lw); const g = c.createLinearGradient(bx - bw / 2, 0, bx + bw / 2, 0); g.addColorStop(0, '#6a2a1a'); g.addColorStop(0.4, '#c8502a'); g.addColorStop(1, '#5a2010'); c.fillStyle = g; c.fillRect(bx - bw / 2, y - h, bw, h); c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(bx - bw / 2, y - h * 0.72, bw, h * 0.06); c.fillRect(bx - bw / 2, y - h * 0.32, bw, h * 0.06); c.fillStyle = '#d8d0b0'; c.beginPath(); c.ellipse(bx, y - h, bw / 2, bw * 0.16, 0, 0, 7); c.fill(); } }
+  else if (o.kind === 'wall') { c.fillStyle = INK; c.beginPath(); c.moveTo(x - w / 2 - lw, y); c.lineTo(x - w * 0.36, y - h - lw); c.lineTo(x + w * 0.36, y - h - lw); c.lineTo(x + w / 2 + lw, y); c.fill(); const g = c.createLinearGradient(0, y - h, 0, y); g.addColorStop(0, '#c8c4bc'); g.addColorStop(1, '#8a8680'); c.fillStyle = g; c.beginPath(); c.moveTo(x - w / 2, y); c.lineTo(x - w * 0.36, y - h); c.lineTo(x + w * 0.36, y - h); c.lineTo(x + w / 2, y); c.fill(); c.fillStyle = '#e8b830'; c.fillRect(x - w * 0.3, y - h * 0.55, w * 0.6, h * 0.12); c.fillStyle = 'rgba(0,0,0,.2)'; for (let k = 0; k < 3; k++) c.fillRect(x - w * 0.25 + k * w * 0.2, y - h * 0.55, w * 0.08, h * 0.12); }
+  else if (o.kind === 'crates') { [[-0.25, 0, 0.5, 0.55], [0.25, 0, 0.48, 0.5], [-0.02, 0.55, 0.46, 0.45]].forEach(([ox, oy, ww, hh]) => { const bx = x + ox * w - ww * w / 2, by = y - (oy + hh) * h; A.part(c, bx, by, ww * w, hh * h, '#a07a3a'); c.strokeStyle = '#6a4a1a'; c.lineWidth = lw; c.beginPath(); c.moveTo(bx, by); c.lineTo(bx + ww * w, by + hh * h); c.moveTo(bx + ww * w, by); c.lineTo(bx, by + hh * h); c.stroke(); }); }
+  else if (o.kind === 'wreck') { c.fillStyle = '#1e1c1a'; c.beginPath(); c.moveTo(x - w / 2, y); c.lineTo(x - w * 0.42, y - h * 0.6); c.lineTo(x - w * 0.2, y - h * 0.7); c.lineTo(x - w * 0.1, y - h); c.lineTo(x + w * 0.25, y - h * 0.9); c.lineTo(x + w * 0.45, y - h * 0.55); c.lineTo(x + w / 2, y); c.fill(); c.fillStyle = 'rgba(255,120,30,' + (0.5 + 0.3 * Math.sin(t / 80 + o.seed)) + ')'; c.beginPath(); c.ellipse(x - w * 0.05, y - h * 0.8, w * 0.12, h * 0.18, 0, 0, 7); c.fill(); }
+}
+// tank and jeep coming head-on
+function tank(c, f, x, y, p, t) {
+  const w = 3.6 * p, lw = Math.max(0.6, 0.04 * p);
+  A.shadow(c, x, y, w * 0.6);
+  for (const k of [-1, 1]) { const tx = x + k * w * 0.36; c.fillStyle = INK; c.beginPath(); c.roundRect(tx - 0.42 * p - lw, y - 1.15 * p - lw, 0.84 * p + lw * 2, 1.15 * p + lw * 2, 0.2 * p); c.fill(); c.fillStyle = '#2a2a24'; c.beginPath(); c.roundRect(tx - 0.42 * p, y - 1.15 * p, 0.84 * p, 1.15 * p, 0.2 * p); c.fill(); c.fillStyle = '#4a4a40'; for (let i = 0; i < 4; i++) c.fillRect(tx - 0.36 * p, y - (1.05 - i * 0.26) * p, 0.72 * p, 0.06 * p); }
+  c.fillStyle = INK; c.beginPath(); c.moveTo(x - w * 0.42, y - 0.7 * p); c.lineTo(x - w * 0.36, y - 1.5 * p); c.lineTo(x + w * 0.36, y - 1.5 * p); c.lineTo(x + w * 0.42, y - 0.7 * p); c.fill();
+  const hg = c.createLinearGradient(0, y - 1.5 * p, 0, y - 0.7 * p); hg.addColorStop(0, '#7a8450'); hg.addColorStop(1, '#4a5230'); c.fillStyle = hg; c.beginPath(); c.moveTo(x - w * 0.4, y - 0.72 * p); c.lineTo(x - w * 0.35, y - 1.47 * p); c.lineTo(x + w * 0.35, y - 1.47 * p); c.lineTo(x + w * 0.4, y - 0.72 * p); c.fill();
+  c.fillStyle = '#ffe9a0'; c.beginPath(); c.arc(x - w * 0.26, y - 0.95 * p, 0.12 * p, 0, 7); c.arc(x + w * 0.26, y - 0.95 * p, 0.12 * p, 0, 7); c.fill();
+  c.fillStyle = INK; c.beginPath(); c.roundRect(x - 1.05 * p - lw, y - 2.35 * p - lw, 2.1 * p + lw * 2, 0.95 * p + lw * 2, 0.35 * p); c.fill();
+  const tg = c.createLinearGradient(0, y - 2.35 * p, 0, y - 1.4 * p); tg.addColorStop(0, '#8a9458'); tg.addColorStop(1, '#525a34'); c.fillStyle = tg; c.beginPath(); c.roundRect(x - 1.05 * p, y - 2.35 * p, 2.1 * p, 0.95 * p, 0.35 * p); c.fill();
+  c.fillStyle = '#fff'; c.font = (0.5 * p) + 'px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('★', x + 0.6 * p, y - 1.9 * p);
+  c.fillStyle = '#3a4024'; c.fillRect(x - 0.32 * p, y - 2.05 * p, 0.64 * p, 0.5 * p); c.fillStyle = '#0a0a0a'; c.beginPath(); c.arc(x, y - 1.8 * p, 0.22 * p, 0, 7); c.fill(); c.fillStyle = '#3a3a34'; c.beginPath(); c.arc(x, y - 1.8 * p, 0.1 * p, 0, 7); c.fill();
+  c.fillStyle = '#e2b08a'; c.beginPath(); c.arc(x - 0.55 * p, y - 2.5 * p, 0.17 * p, 0, 7); c.fill(); c.fillStyle = '#2a2a1a'; c.beginPath(); c.arc(x - 0.55 * p, y - 2.55 * p, 0.19 * p, Math.PI, 0); c.fill();
+  if (f.aim > 0) { c.fillStyle = 'rgba(255,60,40,' + (0.5 + 0.5 * Math.sin(t / 50)) + ')'; c.beginPath(); c.arc(x, y - 1.8 * p, 0.3 * p, 0, 7); c.fill(); }
+  if (f.flash > 0) { c.fillStyle = 'rgba(255,240,200,.5)'; c.fillRect(x - w / 2, y - 2.4 * p, w, 2.4 * p); }
+}
+function jeep(c, f, x, y, p, t) {
+  const w = 2 * p, lw = Math.max(0.6, 0.04 * p);
+  A.shadow(c, x, y, w * 0.6);
+  for (const k of [-1, 1]) { c.fillStyle = '#1a1a1a'; c.beginPath(); c.roundRect(x + k * w * 0.4 - 0.18 * p, y - 0.7 * p, 0.36 * p, 0.7 * p, 0.12 * p); c.fill(); }
+  c.fillStyle = INK; c.fillRect(x - w / 2 - lw, y - 1.1 * p - lw, w + lw * 2, 0.6 * p + lw * 2); const bg = c.createLinearGradient(0, y - 1.1 * p, 0, y - 0.5 * p); bg.addColorStop(0, '#6e7a44'); bg.addColorStop(1, '#46502a'); c.fillStyle = bg; c.fillRect(x - w / 2, y - 1.1 * p, w, 0.6 * p);
+  c.fillStyle = '#2a2e1c'; for (let k = -3; k <= 3; k++) c.fillRect(x + k * 0.1 * p - 0.03 * p, y - 1.0 * p, 0.06 * p, 0.38 * p);
+  c.fillStyle = '#ffe9a0'; c.beginPath(); c.arc(x - w * 0.36, y - 0.82 * p, 0.12 * p, 0, 7); c.arc(x + w * 0.36, y - 0.82 * p, 0.12 * p, 0, 7); c.fill();
+  c.strokeStyle = '#2a2e1c'; c.lineWidth = Math.max(1, 0.06 * p); c.strokeRect(x - w * 0.42, y - 1.75 * p, w * 0.84, 0.6 * p); c.fillStyle = 'rgba(160,210,255,.45)'; c.fillRect(x - w * 0.42, y - 1.75 * p, w * 0.84, 0.6 * p);
+  c.fillStyle = '#e2b08a'; c.beginPath(); c.arc(x + 0.25 * p, y - 1.95 * p, 0.17 * p, 0, 7); c.fill(); c.fillStyle = '#4a5626'; c.beginPath(); c.arc(x + 0.25 * p, y - 2.0 * p, 0.19 * p, Math.PI, 0); c.fill();
+  c.fillStyle = '#1a1a1a'; c.fillRect(x - 0.05 * p, y - 1.85 * p, 0.2 * p, 0.2 * p); c.beginPath(); c.arc(x + 0.05 * p, y - 1.76 * p, 0.09 * p, 0, 7); c.fill();
+  if (f.aim > 0) { c.fillStyle = 'rgba(255,60,40,.8)'; c.beginPath(); c.arc(x + 0.05 * p, y - 1.76 * p, 0.12 * p, 0, 7); c.fill(); }
+  if (f.flash > 0) { c.fillStyle = 'rgba(255,240,200,.5)'; c.fillRect(x - w / 2, y - 2.2 * p, w, 2.2 * p); }
+}
+function heli(c, f, t) {
+  const s = 1.2, d = f.vx > 0 ? 1 : -1, x = f.x, y = f.y;
+  A.part(c, d > 0 ? x - 40 * s : x + 12 * s, y - 3 * s, 28 * s, 4 * s, '#34442f'); c.fillStyle = '#34442f'; c.fillRect(x - d * 40 * s - 2 * s, y - 10 * s, 4 * s, 10 * s);
+  c.strokeStyle = '#222'; c.lineWidth = 1.2; const tr = Math.sin(t / 25) * 6 * s; c.beginPath(); c.moveTo(x - d * 40 * s, y - 4 * s - tr); c.lineTo(x - d * 40 * s, y - 4 * s + tr); c.stroke();
+  c.fillStyle = INK; c.beginPath(); c.ellipse(x, y, 22.8 * s, 9.8 * s, 0, 0, 7); c.fill(); const hg = c.createLinearGradient(0, y - 9 * s, 0, y + 9 * s); hg.addColorStop(0, '#5a6a50'); hg.addColorStop(1, '#2a3626'); c.fillStyle = hg; c.beginPath(); c.ellipse(x, y, 22 * s, 9 * s, 0, 0, 7); c.fill();
+  c.fillStyle = 'rgba(150,210,255,.9)'; c.beginPath(); c.ellipse(x + d * 12 * s, y - 2 * s, 7 * s, 5 * s, 0, d > 0 ? -1.6 : Math.PI - 1.6, d > 0 ? 1.6 : Math.PI + 1.6); c.fill();
+  c.strokeStyle = '#1a1a1a'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x - 14 * s, y + 12 * s); c.lineTo(x + 14 * s, y + 12 * s); c.moveTo(x - 8 * s, y + 8 * s); c.lineTo(x - 8 * s, y + 12 * s); c.moveTo(x + 8 * s, y + 8 * s); c.lineTo(x + 8 * s, y + 12 * s); c.stroke();
+  c.strokeStyle = '#111'; c.lineWidth = 2; c.beginPath(); const r = Math.sin(t / 30) * 38 * s; c.moveTo(x - r, y - 14 * s); c.lineTo(x + r, y - 14 * s); c.stroke();
+  if (f.flash > 0) { c.fillStyle = 'rgba(255,255,255,.4)'; c.beginPath(); c.ellipse(x, y, 22 * s, 9 * s, 0, 0, 7); c.fill(); }
+}
+// the scene: a still desert at sunset, mesas on the horizon, bunkers at the back
+function backdrop(c, t) {
+  A.sky(c, W, HY, { top: '#4a3a7a', mid: '#e8885a', bottom: '#ffd890', sun: '#fff0b0', sunX: W * 0.7, sunY: 70, sunR: 18, clouds: false }, t);
+  c.fillStyle = 'rgba(255,220,200,.55)'; [[0.15, 30, 1], [0.45, 48, 0.8], [0.82, 26, 1.1]].forEach(([fx, y, s]) => { const x = fx * W; c.beginPath(); c.arc(x, y, 9 * s, 0, 7); c.arc(x + 10 * s, y - 5 * s, 11 * s, 0, 7); c.arc(x + 22 * s, y, 8 * s, 0, 7); c.fill(); c.beginPath(); c.ellipse(x + 11 * s, y + 3 * s, 15 * s, 6 * s, 0, 0, 7); c.fill(); });
+  A.ridge(c, 0, { factor: 1, base: HY, amp: 46, col: '#8a5a4a', bands: ['rgba(255,200,150,.2)', 'rgba(100,40,30,.2)'], mesa: true, edge: 'rgba(0,0,0,.25)', seed: 2 });
+  A.ridge(c, 0, { factor: 1, base: HY + 3, amp: 14, col: '#6a4a32', edge: 'rgba(0,0,0,.35)', seed: 6 });
+  const gg = c.createLinearGradient(0, HY, 0, H); gg.addColorStop(0, '#9a7444'); gg.addColorStop(1, '#5a4024'); c.fillStyle = gg; c.fillRect(0, HY, W, H - HY);
+  // furrows that run toward you, so the ground reads as depth
+  c.strokeStyle = 'rgba(60,40,20,.18)'; c.lineWidth = 1; for (let k = -12; k <= 12; k++) { c.beginPath(); c.moveTo(sxw(k * 6, 70), gy(70)); c.lineTo(sxw(k * 6, 8), gy(8)); c.stroke(); }
+  for (let k = 0; k < 220; k++) { const Z = 9 + A.hash(k, 2) * 60, x = sxw((A.hash(k, 1) - 0.5) * 2 * maxWx(Z) * 1.1, Z), y = gy(Z), s = Math.max(1, ppm(Z) * 0.08); c.fillStyle = k % 3 ? 'rgba(60,40,20,.35)' : 'rgba(255,230,180,.25)'; c.fillRect(x, y, s * 2, s * 0.7); }
+  for (let k = 0; k < 26; k++) { const Z = 10 + A.hash(k, 5) * 50, x = sxw((A.hash(k, 4) - 0.5) * 2 * maxWx(Z), Z), y = gy(Z), s = ppm(Z) * 0.06; c.fillStyle = '#6a7a3a'; c.fillRect(x, y, s, -5 * s); c.fillRect(x + 1.5 * s, y, s, -7 * s); c.fillRect(x + 3 * s, y, s, -4 * s); }
+  bunkers.forEach(b => { const p = ppm(b.Z), x = sxw(b.wx, b.Z), y = gy(b.Z), w = b.w * p, h = b.h * p; A.part(c, x - w / 2, y - h, w, h, '#5a4a32'); c.fillStyle = '#7a6a4a'; c.fillRect(x - w / 2, y - h, w, h * 0.18); c.fillStyle = '#1a1208'; c.fillRect(x - w * 0.3, y - h * 0.62, w * 0.6, h * 0.18); c.fillRect(x - w * 0.08, y - h * 0.4, w * 0.16, h * 0.4); for (let k = 0; k < w; k += 9) A.part(c, x - w / 2 + k - 2, y - 4, 10, 5, '#a8946a'); });
 }
 function draw(c, t) {
-  A.sky(c, W, HY, { top: '#4a3a7a', mid: '#e8885a', bottom: '#ffd890', sun: '#fff0b0', sunX: 170, sunY: 95, sunR: 20, cloud: 'rgba(255,220,200,.6)' }, t);
-  A.ridge(c, scroll * 20, { factor: 1, base: HY, amp: 50, col: '#8a5a4a', bands: ['rgba(255,200,150,.2)', 'rgba(100,40,30,.2)'], mesa: true, edge: 'rgba(0,0,0,.25)', seed: 2 });
-  A.ridge(c, scroll * 40, { factor: 1, base: HY + 6, amp: 18, col: '#6a4a32', edge: 'rgba(0,0,0,.35)', seed: 6 });
-  const gg = c.createLinearGradient(0, HY, 0, H); gg.addColorStop(0, '#8a6a3a'); gg.addColorStop(1, '#5a4024'); c.fillStyle = gg; c.fillRect(0, HY, W, H - HY);
-  for (let k = 0; k < 160; k++) { c.fillStyle = k % 3 ? 'rgba(60,40,20,.35)' : 'rgba(255,230,180,.25)'; c.fillRect(A.hash(k, 1) * W, HY + 4 + A.hash(k, 2) * (H - HY - 4), 2 + (k % 3), 1.5); }
-  for (let k = 0; k < 14; k++) { const x = A.hash(k, 4) * W, y = HY + 20 + A.hash(k, 5) * (H - HY - 30); c.fillStyle = '#6a7a3a'; c.fillRect(x, y, 1.5, -5); c.fillRect(x + 2, y, 1.5, -7); c.fillRect(x + 4, y, 1.5, -4); }
-  [[10, 46], [176, 54]].forEach(([bx, bw]) => { A.part(c, bx, HY - 20, bw, 20, '#5a4a32'); c.fillStyle = '#1a1208'; c.fillRect(bx + bw / 2 - 6, HY - 14, 12, 6); for (let k = 0; k < bw; k += 9) A.part(c, bx + k - 2, HY - 4, 10, 5, '#a8946a'); for (let k = 4; k < bw - 4; k += 9) A.part(c, bx + k - 2, HY - 8, 10, 5, '#b8a47a'); });
-  foes.slice().sort((a, b) => a.d - b.d).forEach(f => {
-    if (f.k === 'sol' || f.k === 'host') drawSol(c, f, f.k === 'host');
-    else if (f.k === 'jeep') { const s = f.d * 1.6, d = f.vx > 0 ? 1 : -1, x = f.x, y = f.y;
-      A.shadow(c, x, y, 30 * s);
-      A.part(c, x - 26 * s, y - 18 * s, 52 * s, 12 * s, '#5a6a3a');
-      A.part(c, x + (d > 0 ? 8 : -26) * s, y - 23 * s, 18 * s, 5 * s, '#4a5a2e'); // hood
-      c.fillStyle = 'rgba(160,210,255,.8)'; c.fillRect(x + (d > 0 ? 4 : -7) * s, y - 28 * s, 3 * s, 10 * s); // windshield
-      c.fillStyle = '#3a4628'; c.fillRect(x - 24 * s, y - 13 * s, 48 * s, 2 * s);
-      c.fillStyle = '#ffe080'; c.fillRect(x + (d > 0 ? 24 : -26) * s, y - 16 * s, 2 * s, 3 * s);
-      c.fillStyle = '#fff'; c.font = (7 * s) + 'px sans-serif'; c.textAlign = 'center'; c.fillText('★', x - 8 * s, y - 9 * s);
-      [-15, 15].forEach(o => { A.ball(c, x + o * s, y - 4 * s, 5.5 * s, '#262626'); c.fillStyle = '#888'; c.beginPath(); c.arc(x + o * s, y - 4 * s, 2 * s, 0, 7); c.fill(); });
-      // gunner + mounted gun
-      c.fillStyle = '#e2b08a'; c.beginPath(); c.arc(x - 6 * s, y - 27 * s, 3 * s, 0, 7); c.fill(); c.fillStyle = '#4a5a26'; c.beginPath(); c.arc(x - 6 * s, y - 28 * s, 3.4 * s, Math.PI, 0); c.fill();
-      A.part(c, x - 8 * s, y - 24 * s, 5 * s, 6 * s, '#55682e');
-      c.fillStyle = '#222'; c.fillRect(x - 4 * s, y - 25 * s, d * 14 * s, 2 * s); c.fillRect(x - 2 * s, y - 25 * s, 2 * s, 8 * s); }
-    else if (f.k === 'heli') { const s = f.d * 1.5, d = f.vx > 0 ? 1 : -1, x = f.x, y = f.y;
-      c.fillStyle = 'rgba(30,30,20,.8)'; c.fillRect(x - 2 * s, y - 15 * s, 4 * s, 5 * s);
-      A.part(c, d > 0 ? x - 40 * s : x + 12 * s, y - 3 * s, 28 * s, 4 * s, '#34442f'); // tail boom
-      c.fillStyle = '#34442f'; c.fillRect(x - d * 40 * s - 2 * s, y - 10 * s, 4 * s, 10 * s);
-      c.strokeStyle = '#222'; c.lineWidth = 1.2; const tr = Math.sin(t / 25) * 6 * s; c.beginPath(); c.moveTo(x - d * 40 * s, y - 4 * s - tr); c.lineTo(x - d * 40 * s, y - 4 * s + tr); c.stroke();
-      c.fillStyle = 'rgba(20,12,6,.9)'; c.beginPath(); c.ellipse(x, y, 22.8 * s, 9.8 * s, 0, 0, 7); c.fill();
-      const hg = c.createLinearGradient(0, y - 9 * s, 0, y + 9 * s); hg.addColorStop(0, '#5a6a50'); hg.addColorStop(1, '#2a3626'); c.fillStyle = hg; c.beginPath(); c.ellipse(x, y, 22 * s, 9 * s, 0, 0, 7); c.fill();
-      c.fillStyle = 'rgba(150,210,255,.9)'; c.beginPath(); c.ellipse(x + d * 12 * s, y - 2 * s, 7 * s, 5 * s, 0, d > 0 ? -1.6 : Math.PI - 1.6, d > 0 ? 1.6 : Math.PI + 1.6); c.fill();
-      c.fillStyle = '#e8e0c0'; c.fillRect(x - 6 * s, y - 1 * s, 6 * s, 3 * s);
-      c.strokeStyle = '#1a1a1a'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x - 14 * s, y + 12 * s); c.lineTo(x + 14 * s, y + 12 * s); c.moveTo(x - 8 * s, y + 8 * s); c.lineTo(x - 8 * s, y + 12 * s); c.moveTo(x + 8 * s, y + 8 * s); c.lineTo(x + 8 * s, y + 12 * s); c.stroke();
-      c.strokeStyle = '#111'; c.lineWidth = 2; c.beginPath(); const r = Math.sin(t / 30) * 38 * s; c.moveTo(x - r, y - 14 * s); c.lineTo(x + r, y - 14 * s); c.stroke();
-      c.fillStyle = 'rgba(200,200,200,.12)'; c.beginPath(); c.ellipse(x, y - 14 * s, 38 * s, 3 * s, 0, 0, 7); c.fill(); }
-    else if (f.k === 'crate') { const fl = f.life < 1.5 && Math.floor(t / 100) % 2; if (!fl) { A.shadow(c, f.x, f.y, 16); A.part(c, f.x - 15, f.y - 26, 30, 26, '#a07a3a'); c.strokeStyle = '#6a4a1a'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(f.x - 15, f.y - 26); c.lineTo(f.x + 15, f.y); c.moveTo(f.x + 15, f.y - 26); c.lineTo(f.x - 15, f.y); c.stroke(); c.fillStyle = '#c8a050'; c.fillRect(f.x - 15, f.y - 26, 30, 3); K.text(c, f.give === 'mag' ? 'AMMO' : 'RKT', f.x, f.y - 13, 7, f.give === 'mag' ? '#ffe070' : '#ff8a5a'); } }
-    if (f.aim > 0) { const s = f.d * (f.k === 'sol' ? SZ : 1.6); c.fillStyle = '#ff3030'; c.beginPath(); c.arc(f.x, f.y - 36 * s, 3.5, 0, 7); c.fill(); K.text(c, '!', f.x, f.y - 36 * s - 9, 10, '#ff4040'); }
+  c.save(); if (shake > 0) c.translate(K.rnd(-1, 1) * shake * 8, K.rnd(-1, 1) * shake * 8);
+  backdrop(c, t);
+  if (!foes) { c.restore(); return; }
+  // painter's order: far things first, so a soldier crouched behind sandbags is hidden by them
+  const items = [];
+  covers.forEach(o => items.push({ Z: o.Z, d: () => coverDraw(c, o, t) })); wrecks.forEach(o => items.push({ Z: o.Z, d: () => coverDraw(c, o, t) }));
+  foes.forEach(f => {
+    if (f.k === 'heli') return;
+    const x = sxw(f.wx, f.Z), y = gy(f.Z), p = ppm(f.Z);
+    items.push({ Z: f.Z, d: () => {
+      if (f.k === 'sol') { A.shadow(c, x, y, 0.5 * p); soldier(c, f, x, y, p, t); }
+      else if (f.k === 'side' || f.k === 'host') { A.shadow(c, x, y, 0.5 * p); runner(c, f, x, y, p, t); }
+      else if (f.k === 'tank') tank(c, f, x, y, p, t); else if (f.k === 'jeep') jeep(c, f, x, y, p, t);
+      else if (f.k === 'crate') { const fl = f.life < 1.5 && Math.floor(t / 100) % 2; if (!fl) { const w = 1.2 * p, h = 1.1 * p; A.shadow(c, x, y, w * 0.6); A.part(c, x - w / 2, y - h, w, h, '#a07a3a'); c.strokeStyle = '#6a4a1a'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x - w / 2, y - h); c.lineTo(x + w / 2, y); c.moveTo(x + w / 2, y - h); c.lineTo(x - w / 2, y); c.stroke(); K.text(c, f.give === 'mag' ? 'AMMO' : f.give === 'gren' ? 'GREN' : 'RKT', x, y - h / 2, Math.max(6, 0.32 * p), f.give === 'mag' ? '#ffe070' : '#ff8a5a'); } }
+      if (f.aim > 0 && f.st !== 'dead') { const top = y - (f.k === 'tank' ? 2.8 : f.k === 'jeep' ? 2.4 : 2.3) * p; c.fillStyle = '#ff3030'; c.beginPath(); c.arc(x, top - 4, Math.max(3, 0.12 * p), 0, 7); c.fill(); K.text(c, '!', x, top - 12, 10, '#ff4040'); }
+    } });
   });
+  items.sort((a, b) => b.Z - a.Z).forEach(i => i.d());
+  foes.forEach(f => { if (f.k === 'heli') { heli(c, f, t); if (f.aim > 0) K.text(c, '!', f.x, f.y - 26, 10, '#ff4040'); } });
+  smoke.forEach(s => { c.fillStyle = (s.dark ? 'rgba(40,36,32,' : 'rgba(200,190,170,') + (s.l / s.L * 0.5) + ')'; c.beginPath(); c.arc(s.x, s.y, s.r, 0, 7); c.fill(); });
+  // grenades and rockets in flight
+  shots.forEach(s => { const q = s.t / s.T, ex = sxw(s.wx, s.Z), ey = gy(s.Z), x = s.sx + (ex - s.sx) * q, size = Math.max(1.5, 7 * (1 - q) + ppm(s.Z) * 0.1 * q);
+    if (s.k === 'gren') { const y = s.sy + (ey - s.sy) * q - Math.sin(q * Math.PI) * 90; c.fillStyle = '#2a3a1a'; c.beginPath(); c.arc(x, y, size, 0, 7); c.fill(); c.fillStyle = '#9a9aa2'; c.fillRect(x - size * 0.3, y - size * 1.3, size * 0.6, size * 0.5); }
+    else { const y = s.sy + (ey - s.sy) * q; c.fillStyle = 'rgba(255,200,80,.8)'; c.beginPath(); c.arc(x, y, size * 1.2, 0, 7); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, size * 0.5, 0, 7); c.fill(); puffTrail(x, y, size); } });
   parts.forEach(p => { c.fillStyle = p.c; c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); });
-  flashes.forEach(f => { if (f.shot) { c.fillStyle = '#fff6a0'; c.beginPath(); c.arc(f.x, f.y, 4.5, 0, 7); c.fill(); } else if (f.muzzle) { c.fillStyle = '#ffec6a'; c.beginPath(); c.arc(f.x, f.y, 6, 0, 7); c.fill(); } });
-  const msgs = flashes.filter(f => f.s); if (msgs.length) K.text(c, msgs[msgs.length - 1].s, W / 2, 34, 16, '#fff');
+  flashes.forEach(f => { if (f.shot) { c.fillStyle = '#fff6a0'; c.beginPath(); c.arc(f.x, f.y, 4, 0, 7); c.fill(); } else if (f.muzzle) { c.fillStyle = '#ffec6a'; c.beginPath(); c.arc(f.x, f.y, f.r || 6, 0, 7); c.fill(); } else if (f.big) { A.glow(c, f.x, f.y, f.big * 1.6, '255,220,120', 0.8); } });
+  c.restore();
+  if (msgs.length) K.text(c, msgs[msgs.length - 1].s, W / 2, 30, 15, '#fff');
   if (hurtFlash > 0) { c.fillStyle = 'rgba(255,0,0,' + hurtFlash + ')'; c.fillRect(0, 0, W, H); }
   if (state === 'play') {
     const ch = (col, lw) => { c.strokeStyle = col; c.lineWidth = lw; c.beginPath(); c.arc(cx, cy, 16, 0, 7); c.moveTo(cx + 7, cy); c.arc(cx, cy, 7, 0, 7);
@@ -175,8 +350,10 @@ function draw(c, t) {
     c.fillStyle = '#ff2a2a'; c.beginPath(); c.arc(cx, cy, 1.8, 0, 7); c.fill();
     if (reload > 0) { c.strokeStyle = '#ffe070'; c.lineWidth = 2.5; c.beginPath(); c.arc(cx, cy, 20, -Math.PI / 2, -Math.PI / 2 + (1 - reload / 1.1) * 6.283); c.stroke(); }
     c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(8, H - 14, W - 16, 8); c.fillStyle = '#ffb24a'; c.fillRect(8, H - 14, (W - 16) * Math.min(1, kills / need), 8);
-    K.text(c, 'STAGE ' + stage + '  ' + kills + '/' + need, W / 2, H - 22, 8, '#fff'); }
+    K.text(c, 'STAGE ' + stage + '  ' + kills + '/' + need, W / 2, H - 22, 8, '#fff');
+  }
 }
+function puffTrail(x, y, s) { if (Math.random() < 0.6) smoke.push({ x, y, r: s, l: 0.4, L: 0.4, vx: 0, vy: -4 }); }
 { const _draw = draw; draw = function (c, t) { _draw(c, t); A.vignette(c, W, H, 0.3); }; }
 start(); state = 'title'; title(); K.run(update, draw);
 </script>
