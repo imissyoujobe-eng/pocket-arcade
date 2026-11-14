@@ -13,7 +13,7 @@
 K.theme({ bg: '#0e1a2a', ink: '#fff', accent: '#ff7a2a', accentInk: '#fff' });
 // tall portrait view with a zooming camera: close-up on the slingshot while aiming (big Puffs), pulls back to chase the Puff, shows the whole fort on arrival.
 // S = pixels per meter, changes with the camera zoom every frame
-let W = 240; const H = 330, GROUND = H - 46, ZSLING = 46, ZFLY = 28, ZWATCH = 30;
+let W = 240, H = 330, GROUND = H - 46; const ZSLING = 46, ZFLY = 28, ZWATCH = 30;
 let S = ZSLING;
 const cam = { x: 0, y: 0, z: ZSLING };
 K.screen(W, H, { smooth: true });
@@ -22,14 +22,19 @@ K.screen(W, H, { smooth: true });
 let FAR = false;
 K.fullLand();
 function setView() {
+  // upright: with no buttons at the bottom, the picture grows taller to fill the phone (more sky for high shots)
   const land = innerWidth > innerHeight * 1.15, st = K.stageSize();
-  const w = land ? Math.round(K.clamp(H * st.w / Math.max(1, st.h), 240, 900)) : 240;
+  const h = land ? 330 : Math.round(K.clamp(240 * st.h / Math.max(1, st.w), 330, 520));
+  const w = land ? Math.round(K.clamp(h * st.w / Math.max(1, st.h), 240, 900)) : 240;
   FAR = land;
-  if (w !== W) { W = w; K.screen(W, H, { smooth: true }); }
+  if (w !== W || h !== H) { W = w; H = h; GROUND = H - 46; K.screen(W, H, { smooth: true }); }
 }
 setView(); addEventListener('resize', () => setTimeout(setView, 60));
 K.hud(['score', 'level', 'puffs']);
-K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'FLING' }] });
+// no joystick or buttons: you fire it like a real slingshot. Put your finger down, drag back, let go.
+// The farther you stretch the band, the harder the Puff flies (keyboard: arrows aim, Space flings)
+const MAXPULL = 1.6;   // meters of stretch at full power
+let lastPath = [];
 const pl = planck, V = pl.Vec2;
 const SLING = { x: 4.2, y: 2.6 };
 const MAT = { wood: { d: 0.8, hp: 7, col: '#c08a4a', edge: '#7a5226', pts: 500 }, glass: { d: 0.5, hp: 2.2, col: '#9ad8ff', edge: '#5aa0d0', pts: 300 }, stone: { d: 2.2, hp: 18, col: '#9a9aa6', edge: '#5a5a66', pts: 800 } };
@@ -50,9 +55,9 @@ const LEVELS = [
 ];
 let intro = 0, watchT = 0, watchAt = null, shake = 0;
 let world, bodies, puffList, cur, state = 'title', lvl, score, levelScore, aim, settleT, flightT, restT, endT, fx, pops, abilityUsed, best = K.best('flingfrenzy'), unlocked = Math.max(1, K.best('flingfrenzy_lvl'));
-function title() { K.card({ title: 'FLING FRENZY', text: 'Drag back anywhere on the screen and let go to fling a Puff (or aim with the arrows and press FLING). Knock out every Gloomy hiding in the forts. Glass breaks easily, wood takes a few hits, stone is tough. Every Puff explodes when it lands, with a bigger blast on a direct hit. Special Puffs: yellow speeds up, blue splits in three, black is a super bomb. Tap the screen while it flies!', best: best ? 'BEST ' + best : '', button: 'Level ' + unlocked, onStart: () => { score = 0; load(unlocked - 1); state = 'play'; } }); }
+function title() { K.card({ title: 'FLING FRENZY', text: 'Fire it like a real slingshot: put your finger down, drag back to stretch the band, and let go. The farther you pull, the harder the Puff flies, so judge your distance (your last shot\'s path stays on screen to help). Knock out every Gloomy hiding in the forts. Glass breaks easily, wood takes a few hits, stone is tough. Every Puff explodes when it lands, with a bigger blast on a direct hit. Special Puffs: yellow speeds up, blue splits in three, black is a super bomb. Tap the screen while it flies!', best: best ? 'BEST ' + best : '', button: 'Level ' + unlocked, onStart: () => { score = 0; load(unlocked - 1); state = 'play'; } }); }
 function load(i) {
-  lvl = i % LEVELS.length; world = pl.World({ gravity: V(0, -10) }); bodies = []; fx = []; pops = []; levelScore = 0; settleT = 1.2; cur = null; aim = { ang: 0.6, pow: 0.75, drag: null }; endT = 0; intro = 2.4; watchT = 0; cam.y = 0;
+  lvl = i % LEVELS.length; world = pl.World({ gravity: V(0, -10) }); bodies = []; fx = []; pops = []; levelScore = 0; settleT = 1.2; cur = null; aim = { ang: 0.6, pow: 0.75, drag: null, pull: 0, live: false, kb: false, creak: 0 }; lastPath = []; endT = 0; intro = 2.4; watchT = 0; cam.y = 0;
   const g = world.createBody(); g.createFixture(pl.Edge(V(-20, 0), V(80, 0)), { friction: 0.9 }); g.setUserData({ kind: 'ground' });
   const L = []; LEVELS[lvl].build(L);
   L.forEach(it => {
@@ -67,11 +72,11 @@ function load(i) {
 }
 function nextPuff() { if (!puffList.length) { cur = null; return; } cur = { kind: puffList.shift(), body: null, state: 'ready' }; abilityUsed = false; flightT = 0; restT = 0; }
 function gloomsLeft() { return bodies.filter(b => b.getUserData().kind === 'gloom').length; }
-function launchVec() { const sp = 8 + aim.pow * 15; return V(Math.cos(aim.ang) * sp, Math.sin(aim.ang) * sp); }
+function launchVec() { const sp = 5 + aim.pow * 18; return V(Math.cos(aim.ang) * sp, Math.sin(aim.ang) * sp); }
 function fling() {
   const P = PUFF[cur.kind], b = world.createBody({ type: 'dynamic', position: V(SLING.x, SLING.y), bullet: true });
   b.createFixture(pl.Circle(P.r), { density: 3, friction: 0.5, restitution: 0.35 }); b.setUserData({ kind: 'puff', type: cur.kind, r: P.r }); b.setLinearVelocity(launchVec()); b.setAngularVelocity(-4);
-  cur.body = b; cur.extra = []; cur.state = 'fly'; intro = 0; watchT = 0; K.beep(300, 0.25, { to: 900, type: 'triangle' }); K.noise(0.15, 0.15);
+  cur.body = b; cur.extra = []; cur.state = 'fly'; cur.path = []; cur.pathT = 0; intro = 0; watchT = 0; aim.pull = 0; aim.live = false; K.beep(300, 0.25, { to: 900, type: 'triangle' }); K.noise(0.15, 0.15);
 }
 function ability() {
   if (abilityUsed || !cur || cur.state !== 'fly' || !cur.body) return; const b = cur.body, v = b.getLinearVelocity(), p = b.getPosition(); abilityUsed = true;
@@ -111,7 +116,7 @@ function moveCam(dt) {
     else if (watchAt) { tz = ZWATCH; ax = watchAt.x; ay = watchAt.y; }
     else ax = cam.x + W / S / 2;
   } else if (watchT > 0 && watchAt) { tz = ZWATCH; ax = watchAt.x; ay = watchAt.y; }
-  else { ax = SLING.x; fx = 0.42; }
+  else { ax = SLING.x; fx = 0.54; }   // leave room behind the slingshot to pull back
   if (FAR) {
     // far view: slingshot on the left, whole fort on the right; rises to keep a high-flying Puff in sight
     const fs = fortSpan(), x0 = SLING.x - 7, x1 = fs[1] + 3; tz = K.clamp(Math.min(W / (x1 - x0), GROUND / 9), 8, 40);
@@ -135,13 +140,21 @@ function update(dt) {
   if (cur && cur.state === 'ready') {
     // the joystick moves the Puff in the sling the same way you push it, like pulling back the band with your thumb:
     // pull it left (back) for more power, pull it down to aim higher
+    if (K.down('down') || K.down('up') || K.down('left') || K.down('right')) aim.kb = true;
     if (K.down('down')) aim.ang = Math.min(1.45, aim.ang + dt * 0.9); if (K.down('up')) aim.ang = Math.max(-0.4, aim.ang - dt * 0.9);
     if (K.down('left')) aim.pow = Math.min(1, aim.pow + dt * 0.6); if (K.down('right')) aim.pow = Math.max(0.1, aim.pow - dt * 0.6);
-    if (K.ptr.down) { if (!aim.drag) aim.drag = { x: K.ptr.x, y: K.ptr.y }; const dx = aim.drag.x - K.ptr.x, dy = K.ptr.y - aim.drag.y, d = Math.hypot(dx, dy); if (d > 6) { aim.ang = Math.atan2(dy, dx); aim.pow = Math.min(1, d / 90); intro = 0; } }
-    else if (aim.drag) { const moved = aim.pow; aim.drag = null; if (moved > 0.08) fling(); }
+    // slingshot: the Puff follows your finger back (up to full stretch); direction is opposite the pull
+    if (K.ptr.down) {
+      if (!aim.drag) { aim.drag = { x: K.ptr.x, y: K.ptr.y }; aim.kb = false; }
+      const dx = aim.drag.x - K.ptr.x, dy = K.ptr.y - aim.drag.y, d = Math.hypot(dx, dy);
+      if (d > 4) { aim.ang = K.clamp(Math.atan2(dy, dx), -0.7, 1.55); aim.pull = Math.min(d / S, MAXPULL); aim.pow = aim.pull / MAXPULL; aim.live = true; intro = 0;
+        const step = Math.floor(aim.pull / 0.35); if (step !== aim.creak) { if (step > aim.creak) K.beep(140 + step * 35, 0.05, { type: 'triangle', vol: 0.03 }); aim.creak = step; } }
+      else { aim.live = false; aim.pull = 0; }
+    } else if (aim.drag) { const ok = aim.live && aim.pull > 0.22; aim.drag = null; aim.creak = 0; if (ok) fling(); else { aim.live = false; aim.pull = 0; } }
     if (K.hit('a')) fling();
   } else if (cur && cur.state === 'fly') {
     flightT += dt; if (K.hit('a') || K.ptr.tapped) ability();
+    if (cur.body && (cur.pathT -= dt) <= 0 && cur.path.length < 160) { cur.pathT = 0.045; const p = cur.body.getPosition(); cur.path.push([p.x, p.y]); lastPath = cur.path; }
     const all = [cur.body, ...cur.extra].filter(Boolean); const moving = all.some(b => { const p = b.getPosition(); return b.getLinearVelocity().length() > 0.4 && p.x < 35 && p.y > -2; });
     if (!moving) restT += dt; else restT = 0;
     if (!all.length && watchT > 0) restT = 0;
@@ -233,13 +246,18 @@ function draw(c, t) {
   wood(bx, gy, bx, by + 24 * q, 11 * q); wood(bx, by + 26 * q, bx - 18 * q, by - 6 * q, 8 * q);
   c.fillStyle = '#d8c090'; for (let k = 0; k < 3; k++) c.fillRect(bx - 6 * q, by + (24 + k * 3.5) * q, 12 * q, 2 * q);
   c.fillStyle = '#6a4020'; c.beginPath(); c.arc(bx - 18 * q, by - 6 * q, 3 * q, 0, 7); c.arc(bx + 16 * q, by - 6 * q, 3 * q, 0, 7); c.fill();
-  // trajectory preview
-  if (cur && cur.state === 'ready' && state === 'play') { const v = launchVec(); for (let i = 1; i < 16; i++) { const tt = i * 0.055; const x = SLING.x + v.x * tt, y = SLING.y + v.y * tt - 5 * tt * tt; c.fillStyle = 'rgba(255,255,255,' + (0.95 - i * 0.05) + ')'; c.beginPath(); c.arc(sx(x), sy(y), (3.6 - i * 0.16) * Math.min(1.3, q), 0, 7); c.fill(); }
-    const pull = 1 + aim.pow * 1.4, px = bx - Math.cos(aim.ang) * pull * S * 0.6, py = by + Math.sin(aim.ang) * pull * S * 0.6;
-    c.strokeStyle = '#3a2210'; c.lineWidth = 4 * q; c.beginPath(); c.moveTo(bx - 18 * q, by - 4 * q); c.lineTo(px, py); c.stroke();
+  // the last shot's path stays as faint dots so you can judge the next pull
+  if (lastPath.length && !(cur && cur.state === 'fly')) lastPath.forEach((p, i) => { if (i % 2) return; c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.arc(sx(p[0]), sy(p[1]), 1.6 * Math.min(1.3, q), 0, 7); c.fill(); });
+  if (cur && cur.state === 'ready' && state === 'play') {
+    const pull = aim.live ? aim.pull : aim.kb ? aim.pow * MAXPULL : 0, px = bx - Math.cos(aim.ang) * pull * S, py = by + Math.sin(aim.ang) * pull * S;
+    // while stretching: just a short pointer for the direction; how far it goes is up to you
+    if (pull > 0.1) { const ca = Math.cos(aim.ang), sa = Math.sin(aim.ang); for (let i = 1; i <= 4; i++) { const d = (0.45 + i * 0.42) * S; c.fillStyle = 'rgba(255,255,255,' + (0.9 - i * 0.18) + ')'; c.beginPath(); c.arc(bx + ca * d, by - sa * d, (2.8 - i * 0.35) * Math.min(1.3, q), 0, 7); c.fill(); } }
+    const bandW = (4.6 - (pull / MAXPULL) * 2.2) * q;
+    c.strokeStyle = '#3a2210'; c.lineWidth = bandW; c.lineCap = 'round'; c.beginPath(); c.moveTo(bx - 18 * q, by - 4 * q); c.lineTo(px, py); c.stroke();
     c.fillStyle = '#5a3418'; c.beginPath(); c.ellipse(px - Math.cos(aim.ang) * 5 * q, py + Math.sin(aim.ang) * 5 * q, 6 * q, 9 * q, -aim.ang, 0, 7); c.fill();
     drawPuff(c, px, py, PUFF[cur.kind].r, cur.kind, 0);
-    c.strokeStyle = '#3a2210'; c.lineWidth = 4 * q; c.beginPath(); c.moveTo(px, py); c.lineTo(bx + 16 * q, by - 4 * q); c.stroke(); c.lineWidth = 1;
+    c.strokeStyle = '#3a2210'; c.lineWidth = bandW; c.beginPath(); c.moveTo(px, py); c.lineTo(bx + 16 * q, by - 4 * q); c.stroke(); c.lineWidth = 1;
+    if (!aim.live && !aim.kb && intro <= 0.9 && lastPath.length === 0) { const bob = (Math.sin(t / 260) + 1) * 0.5; c.globalAlpha = 0.8; K.text(c, '◀ PULL BACK & LET GO', bx + 70, by - 34 - bob * 3, 9, '#ffffff'); c.globalAlpha = 1; }
     if (PUFF[cur.kind].tip !== 'normal') K.text(c, PUFF[cur.kind].tip, W / 2, 22, 11, '#1a2a3a');
     if (intro <= 0.9) { const fxp = sx(fortX()); if (fxp > W - 10) { const ay = sy(1.6) - 30, bob = Math.sin(t / 200) * 3; c.fillStyle = 'rgba(20,30,50,.55)'; c.beginPath(); c.roundRect ? c.roundRect(W - 62 + bob, ay - 12, 56, 24, 8) : c.rect(W - 62 + bob, ay - 12, 56, 24); c.fill(); K.text(c, 'FORT ▶', W - 34 + bob, ay, 10, '#fff'); } } }
   // fort pieces and Gloomies
