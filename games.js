@@ -73,7 +73,7 @@ window.ARCADE_GAMES = [
   { id: 'deep-core', name: 'Deep Core', genre: 'Adventure', tag: 'Explore the alien base', key: 'deepcore', kind: 'time' },
   { id: 'jungle-fire', name: 'Jungle Fire', genre: 'Action', tag: 'Run-and-gun commando', key: 'junglefire' },
   { id: 'girder-gauntlet', name: 'Girder Gauntlet', genre: 'Platform', tag: 'Climb past rolling barrels', key: 'girder' },
-  { id: 'fairway-nine', name: 'Fairway Nine', genre: 'Sports', tag: 'Nine holes, wind and water', key: 'fairway9', kind: 'par' },
+  { id: 'fairway-nine', name: 'Fairway Nine', genre: 'Sports', tag: '3D golf through your own eyes', key: 'fairway9', kind: 'par' },
   { id: 'ramp-rally', name: 'Ramp Rally', genre: 'Racing', tag: '3D motocross, tricks and wrecks', key: 'ramprally3d', kind: 'cs' },
   { id: 'diamond-dash', name: 'Diamond Dash', genre: 'Sports', tag: 'Pitch, swing and win in three innings', key: 'diamond-wins', kind: 'wins' },
   { id: 'powder-peak', name: 'Powder Peak', genre: 'Sports', tag: 'Snowboard spins, grabs and rails', key: 'powderpeak' },
