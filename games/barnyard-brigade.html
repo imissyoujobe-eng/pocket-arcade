@@ -18,24 +18,27 @@ K.pad({ dpad: '4', buttons: [{ id: 'x', label: 'GUN' }, { id: 'b', label: 'AIM' 
 addEventListener('keydown', e => { if (e.key === 'c' || e.key === 'C') K.press('x'); });
 addEventListener('keyup', e => { if (e.key === 'c' || e.key === 'C') K.release('x'); });
 
-const SIZE = 300, N = 90, GRAV = 70, WALK = 46, TURN_T = 30, SPEED = 22;
+const SIZE = 300, N = 90, GRAV = 70, WALK = 46, TURN_T = 20, SPEED = 22;
+// launched weapons: point the soldier, then stop the bouncing POWER meter. Power sets the distance (range = full meter)
+const METER_T = 0.95;
 // rifle shoots straight (no kill cam); the others fly in an arc and get the kill cam
 const WEAPONS = [
   { n: 'RIFLE', r: 0, dmg: 24, ammo: 99, range: 150 },
-  { n: 'BAZOOKA', r: 22, dmg: 45, ammo: 99, elev: 0.6, cam: true },
-  { n: 'GRENADE', r: 24, dmg: 50, ammo: 3, elev: 0.95, fuse: 3, cam: true },
-  { n: 'MISSILE', r: 30, dmg: 60, ammo: 1, cam: true, missile: true },
+  { n: 'BAZOOKA', r: 34, cr: 22, dmg: 45, ammo: 99, elev: 0.6, cam: true, range: 260 },
+  { n: 'GRENADE', r: 42, cr: 24, dmg: 50, ammo: 3, elev: 0.95, fuse: 3, cam: true, range: 170 },
+  { n: 'MISSILE', r: 50, cr: 30, dmg: 60, ammo: 1, cam: true, missile: true, range: 300 },
   { n: 'MACHINE GUN', r: 0, dmg: 9, ammo: 99, range: 170, mg: true },
   { n: 'SHOTGUN', r: 0, dmg: 11, ammo: 99, range: 95, shotgun: true },
   { n: 'KNIFE', r: 0, dmg: 60, ammo: 99, knife: true },
-  { n: 'HELLFIRE', r: 22, dmg: 42, ammo: 1, cam: true, hellfire: true },
-  { n: 'AIRSTRIKE', r: 20, dmg: 40, ammo: 1, cam: true, airstrike: true }
+  { n: 'HELLFIRE', r: 30, cr: 22, dmg: 42, ammo: 1, cam: true, hellfire: true, range: 300 },
+  { n: 'AIRSTRIKE', r: 28, cr: 20, dmg: 40, ammo: 1, cam: true, airstrike: true, range: 300 }
 ];
 const NAMES = [['Sarge', 'Trotter', 'Butch', 'Hammer'], ['Billy', 'Nanny', 'Gruff', 'Colonel']];
 
+let aimA = 0, meter = null, lastPow = null, cpuMeter = null;
 let state = 'title', renderer, scene, camera, stageEl, hudC, hx, terrain, heights, colors, water, units = [], turnTeam, idx, phase, weapon, ammo, shots = [], fx = [], wind, turnT, walkLeft, reticle, aiming, msg, msgT, level = 1, wins = K.best('barnyard-wins'), settleT, slowT = 0, killCam = null, camPos, camLook, tapPt = null, thinkT = 0, cpuPlan = null, boomLights = [], turnDir = { x: 1, z: 0 }, menuRects = [];
 
-function title() { K.card({ title: 'BARNYARD BRIGADE', text: 'Pigs versus goats, one move at a time. On your turn walk your soldier with the joystick (a short way), then press AIM or tap the field to place the target, pick a gun with GUN and press FIRE. The rifle shoots straight; the bazooka, grenade and missile fly in and the camera rides along (tap to skip). Watch the wind. Knock every goat out or into the pond to win.', best: wins ? 'WINS ' + wins : '', button: 'Battle!', onStart: () => { if (!renderer) setup(); start(); } }); }
+function title() { K.card({ title: 'BARNYARD BRIGADE', text: 'Pigs versus goats, one move at a time, 20 seconds a turn. Walk your soldier with the joystick (a short way), press AIM (or tap the field) and turn with ◀ ▶ to point him. Guns fire straight on FIRE. For the bazooka, grenade and the big ones, FIRE starts the POWER meter bouncing and FIRE again stops it: more power flies farther, so judge the distance and the wind. Blasts hurt everyone nearby, more up close; a wounded soldier limps (shorter walk) or shakes (wobbly aim), and a blast can throw him into his buddy. Knock every goat out or into the pond to win.', best: wins ? 'WINS ' + wins : '', button: 'Battle!', onStart: () => { if (!renderer) setup(); start(); } }); }
 
 // ---------- 3D setup ----------
 function setup() {
@@ -46,7 +49,7 @@ function setup() {
   camera = new THREE.PerspectiveCamera(45, 1, 1, 3000); addEventListener('resize', fit); fit();
   renderer.domElement.addEventListener('pointerdown', e => { e.preventDefault(); K.press('__t'); K.release('__t'); const r = renderer.domElement.getBoundingClientRect(), lx = e.clientX - r.left, ly = e.clientY - r.top;
     const mb = menuRects.find(m => lx >= m.x - 4 && lx <= m.x + m.w + 4 && ly >= m.y - 4 && ly <= m.y + m.h + 4);
-    if (mb) { if (ammo[0][mb.i] > 0) { weapon = mb.i; K.beep(700, 0.04, { vol: 0.04 }); } return; }
+    if (mb) { if (ammo[0][mb.i] > 0) { weapon = mb.i; meter = null; K.beep(700, 0.04, { vol: 0.04 }); } return; }
     tapPt = { x: lx / r.width * 2 - 1, y: -ly / r.height * 2 + 1 }; });
 }
 function fit() { const r = stageEl.getBoundingClientRect(), w = Math.max(100, r.width), h = Math.max(100, r.height); renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 62 : 42; camera.updateProjectionMatrix(); const d = Math.min(devicePixelRatio || 1, 2.5); hudC.width = w * d; hudC.height = h * d; hx.setTransform(d, 0, 0, d, 0, 0); hudC._w = w; hudC._h = h; }
@@ -222,9 +225,10 @@ function nextTurn() {
   turnTeam = 1 - turnTeam;
   const team = units.filter(u => u.team === turnTeam);
   do { idx[turnTeam] = (idx[turnTeam] + 1) % team.length; } while (!team[idx[turnTeam]].alive);
-  const u = cur(); turnT = TURN_T; walkLeft = WALK; aiming = false; weapon = turnTeam === 0 ? (weapon && ammo[0][weapon] > 0 ? weapon : 0) : 0;
+  const u = cur(); turnT = TURN_T; walkLeft = WALK * (u.wounds && u.wounds.leg ? 0.5 : 1); aiming = false; meter = null; cpuMeter = null; weapon = turnTeam === 0 ? (weapon && ammo[0][weapon] > 0 ? weapon : 0) : 0;
   const foe = alive(1 - turnTeam).sort((a, b) => Math.hypot(a.x - u.x, a.z - u.z) - Math.hypot(b.x - u.x, b.z - u.z))[0]; reticle.position.set(foe.x, 0, foe.z); { const dx = foe.x - u.x, dz = foe.z - u.z, d = Math.hypot(dx, dz) || 1; turnDir = { x: dx / d, z: dz / d }; }
   const a = Math.random() * 6.28, s = K.rnd(0, 0.6 + level * 0.15); wind = { x: Math.cos(a) * s, z: Math.sin(a) * s };
+  aimA = Math.atan2(turnDir.z, turnDir.x);
   phase = turnTeam === 0 ? 'move' : 'cpu'; thinkT = 1.2; cpuPlan = null;
   say((turnTeam === 0 ? 'YOUR TURN: ' : 'CPU: ') + u.name.toUpperCase(), 1.4); hud();
 }
@@ -245,7 +249,7 @@ function ballistic(sx, sy, sz, tx, ty, tz, elev) {
 }
 function fire(u, tx, tz, wi) {
   const w = WEAPONS[wi]; if (ammo[u.team][wi] <= 0) return false;
-  ammo[u.team][wi]--; aiming = false;
+  ammo[u.team][wi]--; aiming = false; if (meter) { lastPow = { v: meter.v, t: 1.4 }; meter = null; }
   u.yaw = Math.atan2(-(tz - u.z), tx - u.x);
   const sx = u.x + Math.cos(u.yaw) * 11, sz = u.z - Math.sin(u.yaw) * 11, sy = u.y + 14, n0 = shots.length;
   if (w.knife) { // knife: close-range stab on the nearest enemy
@@ -323,14 +327,27 @@ function stepShot(s, dt) {
 }
 function damage(u, dmg, kx, kz) { u.hp = Math.max(0, u.hp - dmg); fx.push({ txt: '-' + dmg, x: u.x, y: u.y + 20, z: u.z, l: 1.3, col: u.team ? '#ff8a5a' : '#7ee0ff' }); u.vx += kx || 0; u.vz += kz || 0; hud(); }
 function explode(x, y, z, w) {
-  crater(x, z, w.r * 0.55, w.r * 0.28); K.noise(0.6, 0.5); K.beep(80, 0.4, { type: 'sawtooth', to: 40, vol: 0.07 });
+  crater(x, z, (w.cr || w.r) * 0.55, (w.cr || w.r) * 0.28); K.noise(0.6, 0.5); K.beep(80, 0.4, { type: 'sawtooth', to: 40, vol: 0.07 });
   // fireball, smoke and dirt
   const fb = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffb02e, transparent: true })); fb.position.set(x, y, z); scene.add(fb); fx.push({ mesh: fb, ball: true, l: 0.55, r: w.r });
   const light = new THREE.PointLight(0xffaa44, 3, w.r * 4); light.position.set(x, y + 6, z); scene.add(light); fx.push({ mesh: light, light: true, l: 0.4 });
   for (let i = 0; i < 16; i++) puff(x, y, z, i % 3 ? 0x6a4a2a : 0xffd23f, 2, 1.2, K.rnd(-35, 35), K.rnd(20, 60), K.rnd(-35, 35));
   for (let i = 0; i < 8; i++) puff(x + K.rnd(-6, 6), y + K.rnd(0, 6), z + K.rnd(-6, 6), 0x707070, 4, 1.6, K.rnd(-6, 6), K.rnd(6, 14), K.rnd(-6, 6), true);
-  for (const u of units) { if (!u.alive) continue; const d = Math.hypot(u.x - x, u.y + 6 - y, u.z - z); if (d < w.r) { const k = 1 - d / w.r, dd = Math.round(w.dmg * k + 6), a = Math.atan2(u.z - z, u.x - x); damage(u, dd, Math.cos(a) * 60 * k, Math.sin(a) * 60 * k); u.vy = 40 * k + 15; u.onG = false; } }
+  // everyone inside the blast gets hurt: full damage up close, less toward the edge. Survivors may be wounded,
+  // and a close blast throws a soldier hard enough to slam into whoever is nearby
+  for (const u of units) { if (!u.alive) continue; const d = Math.hypot(u.x - x, u.y + 6 - y, u.z - z); if (d < w.r) { const k = 1 - d / w.r, dd = Math.round(w.dmg * k + 6), a = Math.atan2(u.z - z, u.x - x); damage(u, dd, Math.cos(a) * 85 * k, Math.sin(a) * 85 * k); u.vy = 45 * k + 15; u.onG = false; if (k > 0.2) u.flung = 1.2;
+    if (u.hp > 0 && dd >= 16 && Math.random() < 0.65) { const low = y < u.y + 6; wound(u, low ? (u.wounds && u.wounds.leg ? 'arm' : 'leg') : (u.wounds && u.wounds.arm ? 'leg' : 'arm')); } } }
   if (killCam) { killCam.hit = { x, y, z }; killCam.t = 0; slowT = 0.9; }
+}
+// wounds: a hurt leg means a limp (half the walk, slower); a hurt front leg ("arm") means a shaky aim
+function wound(u, kind) {
+  u.wounds = u.wounds || {}; if (u.wounds[kind]) return; u.wounds[kind] = true;
+  const pig = u.team === 0, lx = kind === 'leg' ? (pig ? -2.4 : -2.2) : (pig ? 2.4 : 2.2), lz = kind === 'leg' ? 1.4 : -1.4;
+  const wrap = new THREE.Mesh(new THREE.CylinderGeometry(pig ? 0.8 : 0.66, pig ? 0.8 : 0.66, 1.3, 10), mat(0xf4f4f0)); wrap.position.set(lx, 1.5, lz); u.m.add(wrap);
+  const spot = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), mat(0xc81e1e)); spot.scale.set(1, 1, 0.5); spot.position.set(lx, 1.6, lz + (lz > 0 ? 0.72 : -0.72)); u.m.add(spot);
+  if (kind === 'arm') { const sling = new THREE.Mesh(new THREE.TorusGeometry(2.3, 0.22, 6, 18), mat(0xf4f4f0)); sling.position.set(1.6, 4.6, 0); sling.rotation.set(0.3, Math.PI / 2, 0.5); u.m.add(sling); }
+  fx.push({ txt: kind === 'leg' ? 'LEG WOUND' : 'ARM WOUND', x: u.x, y: u.y + 30, z: u.z, l: 1.6, col: '#ff5a5a' });
+  K.beep(300, 0.25, { type: 'triangle', to: 150, vol: 0.05 });
 }
 function puff(x, y, z, col, s, l, vx, vy, vz, smoke) { const m = new THREE.Mesh(new THREE.SphereGeometry(s * 0.5, 6, 5), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: smoke ? 0.55 : 0.9 })); m.position.set(x, y, z); scene.add(m); fx.push({ mesh: m, l: l || 0.5, L: l || 0.5, vx: vx || 0, vy: vy || 0, vz: vz || 0, smoke, grav: !smoke && vy }); }
 function splash(x, z) { K.noise(0.3, 0.2); for (let i = 0; i < 12; i++) puff(x, 0.5, z, 0xbfe6ff, 1.6, 0.8, K.rnd(-15, 15), K.rnd(20, 45), K.rnd(-15, 15)); }
@@ -347,19 +364,20 @@ function cpuThink(dt) {
     cpuPlan = { tgt, wi, dir: a, walkT: K.rnd(0.4, 1.4), aimT: 1.0 };
   }
   if (thinkT > 0) { thinkT -= dt; return; }
-  if (cpuPlan.walkT > 0) { cpuPlan.walkT -= dt; walk(u, Math.cos(cpuPlan.dir), Math.sin(cpuPlan.dir), dt); return; }
+  if (cpuPlan.walkT > 0) { cpuPlan.walkT -= dt * (u.wounds && u.wounds.leg ? 2 : 1); walk(u, Math.cos(cpuPlan.dir), Math.sin(cpuPlan.dir), dt); return; }
   if (cpuPlan.aimT > 0) {
     // aim error shrinks each battle you win; it also only half-allows for the wind
     const err = Math.max(3, 16 - level * 3), t = cpuPlan.tgt;
-    if (!cpuPlan.spot) { const comp = WEAPONS[cpuPlan.wi].cam && !WEAPONS[cpuPlan.wi].missile ? 0.55 : 0; const fl = Math.hypot(t.x - u.x, t.z - u.z) / 60; cpuPlan.spot = { x: t.x + K.rnd(-err, err) - wind.x * 22 * fl * fl * comp * 0.5, z: t.z + K.rnd(-err, err) - wind.z * 22 * fl * fl * comp * 0.5 }; aiming = true; }
-    reticle.position.x += (cpuPlan.spot.x - reticle.position.x) * Math.min(1, dt * 3); reticle.position.z += (cpuPlan.spot.z - reticle.position.z) * Math.min(1, dt * 3);
-    cpuPlan.aimT -= dt; if (cpuPlan.aimT <= 0) { weapon = cpuPlan.wi; if (!fire(u, cpuPlan.spot.x, cpuPlan.spot.z, cpuPlan.wi)) fire(u, cpuPlan.spot.x, cpuPlan.spot.z, 1); }
+    if (!cpuPlan.spot) { const errW = err + (u.wounds && u.wounds.arm ? 9 : 0) + Math.hypot(t.x - u.x, t.z - u.z) * 0.04; const comp = WEAPONS[cpuPlan.wi].cam && !WEAPONS[cpuPlan.wi].missile ? 0.55 : 0; const fl = Math.hypot(t.x - u.x, t.z - u.z) / 60; cpuPlan.spot = { x: t.x + K.rnd(-errW, errW) - wind.x * 22 * fl * fl * comp * 0.5, z: t.z + K.rnd(-errW, errW) - wind.z * 22 * fl * fl * comp * 0.5 }; aiming = true; const W2 = WEAPONS[cpuPlan.wi]; cpuPlan.pow = W2.cam ? K.clamp(Math.hypot(cpuPlan.spot.x - u.x, cpuPlan.spot.z - u.z) / W2.range, 0.05, 1) : 0; }
+    { const want = Math.atan2(cpuPlan.spot.z - u.z, cpuPlan.spot.x - u.x); let da = want - aimA; da = Math.atan2(Math.sin(da), Math.cos(da)); aimA += da * Math.min(1, dt * 4); u.yaw = -aimA; }
+    if (cpuPlan.pow) cpuMeter = Math.min(cpuPlan.pow, (1 - cpuPlan.aimT) * 1.6 * cpuPlan.pow);
+    cpuPlan.aimT -= dt; if (cpuPlan.aimT <= 0) { weapon = cpuPlan.wi; if (cpuPlan.pow) lastPow = { v: cpuPlan.pow, t: 1.4 }; cpuMeter = null; if (!fire(u, cpuPlan.spot.x, cpuPlan.spot.z, cpuPlan.wi)) fire(u, cpuPlan.spot.x, cpuPlan.spot.z, 1); }
   }
 }
 function walk(u, mx, mz, dt) {
   if (walkLeft <= 0 || !u.onG) return;
   const m = Math.hypot(mx, mz); if (m < 0.1) return; mx /= m; mz /= m;
-  const nx = u.x + mx * SPEED * dt, nz = u.z + mz * SPEED * dt, ny = hAt(nx, nz);
+  const sp = SPEED * (u.wounds && u.wounds.leg ? 0.6 : 1), nx = u.x + mx * sp * dt, nz = u.z + mz * sp * dt, ny = hAt(nx, nz);
   u.yaw = Math.atan2(-mz, mx);
   if (ny < 0.8 || ny - u.y > 2.5) return; // won't walk into the pond or up a cliff
   walkLeft -= Math.hypot(nx - u.x, nz - u.z); u.x = nx; u.z = nz; u.y = ny; u.step = (u.step || 0) + dt * 12;
@@ -378,26 +396,35 @@ function update(rdt) {
   let moving = false;
   for (const u of units) {
     if (!u.alive) continue;
+    if (u.bumpT > 0) u.bumpT -= dt;
     const gy = hAt(u.x, u.z);
     if (!u.onG || u.y > gy + 0.6 || Math.abs(u.vx) + Math.abs(u.vz) > 1) {
       u.onG = false; u.vy -= GRAV * dt; u.x += u.vx * dt; u.y += u.vy * dt; u.z += u.vz * dt; moving = true;
-      const g2 = hAt(u.x, u.z); if (u.y <= g2) { u.y = g2; if (u.vy < -55) damage(u, Math.round((-u.vy - 55) / 3)); u.vy = 0; u.vx *= 0.3; u.vz *= 0.3; if (Math.abs(u.vx) + Math.abs(u.vz) < 2) { u.vx = u.vz = 0; u.onG = true; } }
+      if (u.flung > 0) { u.flung -= dt; const sp = Math.hypot(u.vx, u.vy, u.vz); if (sp > 22) for (const o of units) {
+        if (o === u || !o.alive || o.bumpT > 0 || Math.hypot(o.x - u.x, o.y - u.y, o.z - u.z) > 13) continue;
+        const hit = Math.round(K.clamp(sp * 0.22, 6, 22)); damage(o, hit, u.vx * 0.55, u.vz * 0.55); o.vy = Math.max(o.vy, 24); o.onG = false; o.flung = 0.6; o.bumpT = 0.7;
+        damage(u, Math.round(hit * 0.6)); u.vx *= -0.25; u.vz *= -0.25; u.bumpT = 0.7; u.flung = 0;
+        for (let i = 0; i < 8; i++) puff((u.x + o.x) / 2, (u.y + o.y) / 2 + 9, (u.z + o.z) / 2, 0xfff2b0, 2, 0.5, K.rnd(-20, 20), K.rnd(5, 25), K.rnd(-20, 20));
+        say(u.name.toUpperCase() + ' SLAMMED INTO ' + o.name.toUpperCase() + '!', 1.3); K.noise(0.25, 0.35); K.beep(150, 0.15, { type: 'square', to: 50, vol: 0.06 }); break; } }
+      const g2 = hAt(u.x, u.z); if (u.y <= g2) { u.y = g2; if (u.vy < -55) damage(u, Math.round((-u.vy - 55) / 3)); u.vy = 0; u.vx *= 0.3; u.vz *= 0.3; if (Math.abs(u.vx) + Math.abs(u.vz) < 2) { u.vx = u.vz = 0; u.onG = true; u.flung = 0; } }
     } else u.y = gy;
     if (u.y < -1.5 || hAt(u.x, u.z) < -1 && u.y < 0.5) { u.alive = false; u.m.visible = false; splash(u.x, u.z); say(u.name.toUpperCase() + ' SANK!', 1.4); hud(); }
     if (u.alive && u.hp <= 0) { u.alive = false; say(u.name.toUpperCase() + ' IS OUT!', 1.4); K.tune([330, 262, 196], 0.1); hud(); u.dead = 1; }
   }
   const u = cur();
   if (phase === 'move' && u && u.alive) {
-    turnT -= rdt; if (turnT <= 0) { say('OUT OF TIME'); phase = 'settle'; settleT = 0.5; }
+    turnT -= rdt; if (turnT <= 0) { if (meter) shoot(u); else { say('OUT OF TIME'); phase = 'settle'; settleT = 0.5; } }
+    if (meter) { meter.v += meter.dir * rdt / METER_T * (u.wounds && u.wounds.arm ? 1.6 : 1); if (meter.v >= 1) { meter.v = 1; meter.dir = -1; } else if (meter.v <= 0) { meter.v = 0; meter.dir = 1; } }
     const sxi = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0), syi = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
     const mx = -turnDir.z * sxi - turnDir.x * syi, mz = turnDir.x * sxi - turnDir.z * syi;
-    if (K.hit('b')) { aiming = !aiming; K.beep(aiming ? 900 : 500, 0.04, { vol: 0.04 }); }
-    if (K.hit('x')) { do { weapon = (weapon + 1) % WEAPONS.length; } while (ammo[0][weapon] <= 0); K.beep(700, 0.04, { vol: 0.04 }); }
-    if (aiming) { reticle.position.x = K.clamp(reticle.position.x + mx * 80 * rdt, -SIZE / 2, SIZE / 2); reticle.position.z = K.clamp(reticle.position.z + mz * 80 * rdt, -SIZE / 2, SIZE / 2); u.yaw = Math.atan2(-(reticle.position.z - u.z), reticle.position.x - u.x); }
+    if (K.hit('b')) { aiming = !aiming; if (!aiming) meter = null; K.beep(aiming ? 900 : 500, 0.04, { vol: 0.04 }); }
+    if (K.hit('x')) { meter = null; do { weapon = (weapon + 1) % WEAPONS.length; } while (ammo[0][weapon] <= 0); K.beep(700, 0.04, { vol: 0.04 }); }
+    if (aiming) { if (!meter) aimA += (K.stick.x || sxi) * 1.15 * rdt; u.yaw = -aimEff(u); const f = { x: Math.cos(aimA), z: Math.sin(aimA) }; turnDir.x += (f.x - turnDir.x) * Math.min(1, rdt * 3); turnDir.z += (f.z - turnDir.z) * Math.min(1, rdt * 3); const L = Math.hypot(turnDir.x, turnDir.z) || 1; turnDir.x /= L; turnDir.z /= L; }
     else walk(u, mx, mz, rdt);
     // tap the field: first tap places the target, tapping again near it fires
-    if (tapPt) { const p = groundAt(tapPt); tapPt = null; if (p) { if (aiming && Math.hypot(p.x - reticle.position.x, p.z - reticle.position.z) < 10) fire(u, reticle.position.x, reticle.position.z, weapon); else { aiming = true; reticle.position.set(p.x, 0, p.z); } } }
-    else if (K.hit('a')) { if (!aiming) aiming = true; else fire(u, reticle.position.x, reticle.position.z, weapon); }
+    // tap the field to point that way (how far is still up to the meter); while the meter runs, a tap stops it
+    if (tapPt) { const p = meter ? null : groundAt(tapPt); if (meter) shoot(u); else if (p) { aiming = true; aimA = Math.atan2(p.z - u.z, p.x - u.x); } tapPt = null; }
+    else if (K.hit('a')) { if (!aiming) aiming = true; else if (!WEAPONS[weapon].cam) shoot(u); else if (!meter) { meter = { v: 0, dir: 1 }; K.beep(500, 0.05, { vol: 0.04 }); } else shoot(u); }
   }
   if (phase === 'cpu' && u && u.alive) cpuThink(dt);
   if (phase === 'fly' || phase === 'settle') {
@@ -419,7 +446,8 @@ function render(dt) {
     if (v.dead) { v.m.rotation.z = Math.min(Math.PI / 2, (v.m.rotation.z || 0) + dt * 4); v.m.position.y = v.y + 1; }
     else { v.m.rotation.z = 0; const bob = v === u && phase === 'move' ? Math.abs(Math.sin((v.step || 0))) * 0.6 : 0; v.m.position.y += bob; }
   }
-  reticle.visible = state === 'play' && aiming && (phase === 'move' || phase === 'cpu'); if (reticle.visible) { reticle.position.y = hAt(reticle.position.x, reticle.position.z) + 0.6; reticle.rotation.y = t / 900; reticle.children[0].material.color.setHex(turnTeam === 0 ? 0x8a0000 : 0xb01818); }
+  aimArrow(u);
+  reticle.visible = false; if (reticle.visible) { reticle.position.y = hAt(reticle.position.x, reticle.position.z) + 0.6; reticle.rotation.y = t / 900; reticle.children[0].material.color.setHex(turnTeam === 0 ? 0x8a0000 : 0xb01818); }
   water.position.y = Math.sin(t / 1200) * 0.15;
   // camera: high overhead over the whole battlefield; rides the projectile on kill-cam shots and zooms in on the hit
   let want, look;
@@ -431,7 +459,7 @@ function render(dt) {
     const portrait = camera.aspect < 1;
     if (state === 'play' && u && u.alive) {
       // zoomed in: camera behind and above the active soldier, framing him and the target together
-      const T = reticle.position, D = K.clamp(Math.hypot(T.x - u.x, T.z - u.z), 50, 230), f = turnDir;
+      const D = phase === 'cpu' && cpuPlan && cpuPlan.spot ? K.clamp(Math.hypot(cpuPlan.spot.x - u.x, cpuPlan.spot.z - u.z), 50, 230) : 130, f = turnDir;
       const cx = u.x + f.x * D * 0.5, cz = u.z + f.z * D * 0.5;
       const back = D * (portrait ? 0.42 : 0.55) + (portrait ? 48 : 60), up = D * (portrait ? 0.8 : 0.55) + (portrait ? 70 : 55);
       want = new THREE.Vector3(cx - f.x * back, Math.max(u.y, 0) + up, cz - f.z * back); look = new THREE.Vector3(cx + f.x * D * 0.06, 0, cz + f.z * D * 0.06);
@@ -505,6 +533,7 @@ function drawHud(t, u) {
   const w = hudC._w, h = hudC._h; hx.clearRect(0, 0, w, h); if (state !== 'play') return;
   // name tags and health bars over every soldier
   for (const v of units) { if (!v.alive) continue; const p = proj(v.x, v.y + 27, v.z); if (!p.on) continue; const active = v === u && phase !== 'fly' && phase !== 'settle';
+    if (v.wounds) txt((v.wounds.leg ? 'LIMP ' : '') + (v.wounds.arm ? 'SHAKY' : ''), p.x, p.y + 9, 7, '#ff6a6a');
     hx.fillStyle = 'rgba(0,0,0,.55)'; hx.fillRect(p.x - 17, p.y - 3, 34, 6); hx.fillStyle = v.team ? '#ff8a5a' : '#46a8ff'; hx.fillRect(p.x - 16, p.y - 2, 32 * v.hp / 100, 4); txt(v.name, p.x, p.y - 10, 9, active ? '#ffd23f' : '#fff');
     if (active) { const b = Math.sin(t / 150) * 3; hx.fillStyle = '#ffd23f'; hx.beginPath(); hx.moveTo(p.x - 6, p.y - 26 + b); hx.lineTo(p.x + 6, p.y - 26 + b); hx.lineTo(p.x, p.y - 19 + b); hx.fill(); } }
   for (const f of fx) if (f.txt) { const p = proj(f.x, f.y + (1.3 - f.l) * 8, f.z); txt(f.txt, p.x, p.y, 13, f.col); }
@@ -534,9 +563,44 @@ function drawHud(t, u) {
   }
   hx.fillStyle = 'rgba(0,0,0,.5)'; hx.beginPath(); hx.roundRect(w - 92, 8, 84, 46, 8); hx.fill(); txt('WIND', w - 50, 18, 9, '#fff');
   const ws = Math.hypot(wind.x, wind.z); hx.save(); hx.translate(w - 50, 37); const sp = proj(0, 0, 0), ep = proj(wind.x * 30, 0, wind.z * 30); hx.rotate(Math.atan2(ep.y - sp.y, ep.x - sp.x)); hx.fillStyle = '#9fd6ff'; const L = 6 + ws * 18; hx.fillRect(-L / 2, -2, L, 4); hx.beginPath(); hx.moveTo(L / 2 + 5, 0); hx.lineTo(L / 2 - 1, -5); hx.lineTo(L / 2 - 1, 5); hx.fill(); hx.restore();
-  if (turnTeam === 0 && phase === 'move') txt(aiming ? 'MOVE TARGET · FIRE TO SHOOT' : 'WALK · AIM OR TAP THE FIELD TO TARGET', w / 2, h - 16, 10, '#fff');
+  powerMeter(w, h, u);
+  if (turnTeam === 0 && phase === 'move') txt(!aiming ? 'WALK · AIM OR TAP THE FIELD TO POINT' : meter ? 'FIRE AGAIN TO STOP THE POWER' : WEAPONS[weapon].cam ? '◀ ▶ TURN · FIRE STARTS THE POWER METER' : '◀ ▶ TURN · FIRE TO SHOOT', w / 2, h - 16, 10, '#fff');
   if (killCam && (phase === 'fly' || phase === 'settle')) txt('TAP TO SKIP', w / 2, h - 16, 10, 'rgba(255,255,255,.8)');
   if (msgT > 0) txt(msg, w / 2, h * 0.22, 20, '#fff');
+}
+// the POWER meter: a tall bar on the right; the needle bounces until you stop it
+function powerMeter(w, h, u) {
+  if (lastPow && (lastPow.t -= 1 / 60) <= 0) lastPow = null;
+  const run = turnTeam === 0 ? meter : (cpuMeter != null ? { v: cpuMeter } : null), v = run ? run.v : lastPow ? lastPow.v : null;
+  const show = v != null || (turnTeam === 0 && phase === 'move' && aiming && WEAPONS[weapon].cam); if (!show) return;
+  const bh = Math.min(240, h * 0.42), bw = 22, x = w - bw - 16, y = h * 0.5 - bh / 2;
+  hx.fillStyle = 'rgba(0,0,0,.55)'; hx.beginPath(); hx.roundRect(x - 8, y - 26, bw + 16, bh + 40, 10); hx.fill();
+  const g = hx.createLinearGradient(0, y + bh, 0, y); g.addColorStop(0, '#5ad65a'); g.addColorStop(0.55, '#ffd23f'); g.addColorStop(1, '#ff4a3a');
+  hx.globalAlpha = v == null ? 0.35 : 1; hx.fillStyle = g; hx.fillRect(x, y, bw, bh); hx.globalAlpha = 1;
+  hx.strokeStyle = 'rgba(255,255,255,.7)'; hx.lineWidth = 1; for (let k = 1; k < 4; k++) { hx.beginPath(); hx.moveTo(x, y + bh * k / 4); hx.lineTo(x + 6, y + bh * k / 4); hx.stroke(); }
+  txt('POWER', x + bw / 2, y - 14, 8, '#fff');
+  if (v != null) { const ny = y + bh * (1 - v); hx.fillStyle = '#fff'; hx.fillRect(x - 5, ny - 2, bw + 10, 4); hx.beginPath(); hx.moveTo(x - 7, ny - 7); hx.lineTo(x - 7, ny + 7); hx.lineTo(x + 1, ny); hx.fill(); }
+}
+// a flat arrow on the ground showing which way the active soldier is pointed (direction only, not distance)
+let arrowM = null;
+function aimArrow(u) {
+  if (!arrowM) { const g = new THREE.Group(), m = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.9, depthTest: false });
+    const shaft = new THREE.Mesh(new THREE.PlaneGeometry(22, 2.6), m); shaft.rotation.x = -Math.PI / 2; shaft.position.x = 11; g.add(shaft);
+    const sh = new THREE.Shape(); sh.moveTo(0, -4.5); sh.lineTo(8, 0); sh.lineTo(0, 4.5); sh.closePath(); const head = new THREE.Mesh(new THREE.ShapeGeometry(sh), m); head.rotation.x = -Math.PI / 2; head.position.x = 22; g.add(head);
+    g.children.forEach(o => o.renderOrder = 6); scene.add(g); arrowM = g; }
+  const on = state === 'play' && u && u.alive && aiming && (phase === 'move' || phase === 'cpu'); arrowM.visible = on; if (!on) return;
+  const a = aimEff(u); arrowM.position.set(u.x + Math.cos(a) * 10, u.y + 1.2, u.z + Math.sin(a) * 10); arrowM.rotation.y = -a;
+  arrowM.children.forEach(o => o.material.color.setHex(turnTeam === 0 ? 0xffd23f : 0xff7a4a));
+}
+// the aim the soldier actually has: a hurt front leg makes it wobble
+function aimEff(u) { const t = performance.now() / 1000; return aimA + (u && u.wounds && u.wounds.arm ? 0.08 * Math.sin(t * 6.3) + 0.05 * Math.sin(t * 11.7) : 0); }
+// fire along the pointed direction: guns at their range, launched weapons as far as the meter says
+function shoot(u) {
+  const w = WEAPONS[weapon], a = aimEff(u); let D = w.cam ? Math.max(12, (meter ? meter.v : 0.5) * w.range) : (w.range || 60);
+  // guns: you pick the direction; they tilt up or down to whoever stands in that line
+  if (!w.cam) { const inLine = units.filter(v => v.alive && v.team !== u.team).map(v => ({ v, d: Math.hypot(v.x - u.x, v.z - u.z), da: Math.abs(Math.atan2(Math.sin(Math.atan2(v.z - u.z, v.x - u.x) - a), Math.cos(Math.atan2(v.z - u.z, v.x - u.x) - a))) })).filter(o => o.da < 0.14 && o.d < D).sort((p, q) => p.d - q.d)[0]; if (inLine) D = inLine.d; }
+  const tx = K.clamp(u.x + Math.cos(a) * D, -SIZE * 0.6, SIZE * 0.6), tz = K.clamp(u.z + Math.sin(a) * D, -SIZE * 0.6, SIZE * 0.6);
+  if (!fire(u, tx, tz, weapon)) meter = null;
 }
 function draw() {}
 title();
