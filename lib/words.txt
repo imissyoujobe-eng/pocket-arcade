@@ -1,4 +1,4 @@
-# Pocket Arcade word list. From SCOWL (wordlist.aspell.net), Copyright 2000-2016 Kevin Atkinson and others;
+# Joystik Original Arcade word list. From SCOWL (wordlist.aspell.net), Copyright 2000-2016 Kevin Atkinson and others;
 # permission to use, copy, modify, distribute and sell granted without fee (see the SCOWL Copyright file).
 # Sections: #10 most common words ... #70 rarest. "!" section: allowed but kept out of puzzles and computer plays.
 #10
