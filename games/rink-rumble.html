@@ -26,15 +26,16 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
 <div id="app">
   <div id="hud"><div><span class="lbl" id="l1">YOU</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">CLOCK</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">CPU</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
   <div id="stage"><canvas id="c" width="400" height="600"></canvas>
-    <div id="overlay"><h1>Rink Rumble</h1><p id="msg">Three-on-three arcade hockey. Outskate the red team and bury the puck in their net.</p><p class="how">Left side: drag to skate. Right side: tap to shoot, or point your stick at a teammate to pass. Tap near a carrier to check. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+    <div id="overlay"><h1>Rink Rumble</h1><p id="msg">Three-on-three arcade hockey. Outskate the red team and bury the puck in their net.</p><p class="how">Skate with the stick. Hold SHOOT to wind up and let go to fire: the longer you hold, the harder the shot (a full wind-up is a slap shot). Tap SHOOT near a carrier to check. PASS passes. Turn your phone sideways for the full rink. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
-<script src="../lib/fit.js" data-canvas="#c"></script>
+<script>if(innerWidth>innerHeight*1.15){const c=document.getElementById('c');c.width=600;c.height=400}</script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1" data-max="2.4"></script>
 <script src="../lib/art.js"></script>
 <script>
 const GAME_ID='rink-rumble';
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
-const W=cv.width,H=cv.height,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
+const CW=cv.width,CH=cv.height,ROT=!!(window.FIT&&FIT.land),W=ROT?400:CW,H=ROT?600:CH,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
 let AC,muted=false;
 try{muted=localStorage.getItem('arcade_muted')==='1'}catch(e){}
 function setMuteLabel(){$('mu').textContent=muted?'MUTE':'SND'}setMuteLabel();
@@ -46,8 +47,8 @@ const keys={};
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=1;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();if(state!=='play'&&k==='enter')startGame();if(k==='p'&&(state==='play'||state==='paused'))togglePause()});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0});
 let joy=null,fireId=null,prevPass=false;const coarse=matchMedia('(pointer:coarse)').matches;
-function cpos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
-cv.addEventListener('pointerdown',e=>{const p=cpos(e);try{cv.setPointerCapture(e.pointerId)}catch(_){}if((p.x<W*.55||!ACTION_LABEL)&&!joy)joy={id:e.pointerId,x0:p.x,y0:p.y,x:p.x,y:p.y};else{fireId=e.pointerId;tapPt=p}e.preventDefault()});
+function cpos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*CW,y:(e.clientY-r.top)/r.height*CH}}
+cv.addEventListener('pointerdown',e=>{const p=cpos(e);try{cv.setPointerCapture(e.pointerId)}catch(_){}if((p.x<CW*.55||!ACTION_LABEL)&&!joy)joy={id:e.pointerId,x0:p.x,y0:p.y,x:p.x,y:p.y};else{fireId=e.pointerId;tapPt=p}e.preventDefault()});
 cv.addEventListener('pointermove',e=>{if(joy&&e.pointerId===joy.id){const p=cpos(e);joy.x=p.x;joy.y=p.y;const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>55){joy.x0=joy.x-dx/m*55;joy.y0=joy.y-dy/m*55}}});
 function up(e){if(joy&&e.pointerId===joy.id)joy=null;if(e.pointerId===fireId)fireId=null}
 cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
@@ -56,17 +57,30 @@ function readInput(){let x=0,y=0;if(keys.arrowleft||keys.a)x--;if(keys.arrowrigh
  if(joy){const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>7){const k=Math.min(1,m/38);x=dx/m*k;y=dy/m*k}}
  const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f;const pz=!!keys.x||!!keys.l;inp.passTap=pz&&!prevPass;prevPass=pz}
 function drawJoy(){if(!joy&&!coarse)return;ctx.save();if(joy){ctx.globalAlpha=.3;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.x0,joy.y0,42,0,TAU);ctx.stroke();ctx.fillStyle='#fff';const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy),k=m>42?42/m:1;ctx.beginPath();ctx.arc(joy.x0+dx*k,joy.y0+dy*k,17,0,TAU);ctx.fill()}
- if(coarse&&state==='play'&&ACTION_LABEL){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(W-58,H-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,W-58,H-58)}ctx.restore()}
+ if(coarse&&state==='play'&&ACTION_LABEL&&!ROT){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(CW-58,CH-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,CW-58,CH-58)}ctx.restore()}
 let ACTION_LABEL='FIRE';
+// sideways the rink lies long-ways across the screen (your net on the left, theirs on the right), sized to fit between
+// the joystick on the left, the SHOOT and PASS buttons on the right and the score along the top
+let VS=1,VX=0,VY=0;
+if(ROT){const css=Math.min(innerWidth/CW,innerHeight/CH),offL=(innerWidth-CW*css)/2,mL=Math.max(8,(coarse?182:10)-offL)/css,mR=Math.max(8,(coarse?188:10)-offL)/css,mT=48/css,mB=4/css,aw=CW-mL-mR,ah=CH-mT-mB;VS=Math.min(aw/H,ah/W);VX=mL+(aw-H*VS)/2;VY=mT+(ah-W*VS)/2}
+function viewT(){if(ROT)ctx.transform(0,VS,-VS,0,VX+H*VS,VY)}
+function toScreen(x,y){return ROT?{x:VX+(H-y)*VS,y:VY+x*VS}:{x,y}}
+// the crowd fills the rest of the screen around the rink
+let _stands=null;
+function standsArt(){if(_stands)return _stands;const k=1.5,c0=document.createElement('canvas');c0.width=Math.round(CW*k);c0.height=Math.round(CH*k);const c=c0.getContext('2d');c.scale(k,k);c.fillStyle='#0a0e1c';c.fillRect(0,0,CW,CH);
+ for(let y=1;y<CH;y+=5)for(let x=1;x<CW;x+=5){const h=A.hash(x,y);c.fillStyle=['#2f7dff','#ff3d52','#f2f2f2','#ffd23f','#3a3a5a','#2a2a40'][Math.floor(h*6)];c.fillRect(x,y,4,3.4);c.fillStyle=['#e0b088','#a86a4a','#6a4028','#f0c8a0'][Math.floor(A.hash(y,x)*4)];c.beginPath();c.arc(x+2,y+1.4,1.3,0,7);c.fill()}
+ c.fillStyle='rgba(0,0,0,.35)';c.fillRect(0,0,CW,CH);for(let x=48;x<CW;x+=140){c.fillStyle='rgba(14,18,32,.9)';c.fillRect(x,0,7,CH)}
+ return(_stands=c0)}
 /* juice: particles, floating text, screen shake */
 let parts=[],floats=[],shake=0,flash=0,flashCol='#fff';
 function burst(x,y,col,n=18,sp=160,life=.7,size=3){for(let i=0;i<n;i++){const a=Math.random()*TAU,s=Math.random()*sp;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:life*rnd(.5,1),L:life,c:Array.isArray(col)?col[i%col.length]:col,s:size*rnd(.6,1.3)})}}
 function floatText(x,y,t,col='#fff'){floats.push({x,y,t,c:col,l:1})}
 function kick(s){shake=Math.max(shake,s)}
-function updFx(dt){for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.pow(.2,dt);p.vy*=Math.pow(.2,dt);p.vy+=(p.g||0)*dt;p.l-=dt}parts=parts.filter(p=>p.l>0);for(const f of floats){f.y-=40*dt;f.l-=dt}floats=floats.filter(f=>f.l>0);shake=Math.max(0,shake-dt*30);flash=Math.max(0,flash-dt*3)}
-function drawFx(){for(const p of parts){ctx.globalAlpha=Math.max(0,p.l/p.L);ctx.fillStyle=p.c;ctx.fillRect(p.x-p.s/2,p.y-p.s/2,p.s,p.s)}ctx.globalAlpha=1;ctx.textAlign='center';ctx.font='14px Bungee, Impact, sans-serif';for(const f of floats){ctx.globalAlpha=Math.min(1,f.l*2);ctx.fillStyle='#000';ctx.fillText(f.t,f.x+1.5,f.y+1.5);ctx.fillStyle=f.c;ctx.fillText(f.t,f.x,f.y)}ctx.globalAlpha=1;if(flash>0){ctx.globalAlpha=flash*.5;ctx.fillStyle=flashCol;ctx.fillRect(0,0,W,H);ctx.globalAlpha=1}}
+function updFx(dt){for(const p of parts){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=Math.pow(.2,dt);p.vy*=Math.pow(.2,dt);p.vy+=(p.g||0)*dt;p.l-=dt}parts=parts.filter(p=>p.l>0);for(const f of floats){f.oy=(f.oy||0)+40*dt;f.l-=dt}floats=floats.filter(f=>f.l>0);shake=Math.max(0,shake-dt*30);flash=Math.max(0,flash-dt*3)}
+function drawFx(){for(const p of parts){ctx.globalAlpha=Math.max(0,p.l/p.L);ctx.fillStyle=p.c;ctx.fillRect(p.x-p.s/2,p.y-p.s/2,p.s,p.s)}ctx.globalAlpha=1}
+function drawTop(){ctx.textAlign='center';ctx.font='14px Bungee, Impact, sans-serif';for(const f of floats){const p=toScreen(f.x,f.y),y=p.y-(f.oy||0);ctx.globalAlpha=Math.min(1,f.l*2);ctx.fillStyle='#000';ctx.fillText(f.t,p.x+1.5,y+1.5);ctx.fillStyle=f.c;ctx.fillText(f.t,p.x,y)}ctx.globalAlpha=1;if(flash>0){ctx.globalAlpha=flash*.5;ctx.fillStyle=flashCol;ctx.fillRect(0,0,CW,CH);ctx.globalAlpha=1}}
 let banner=null;function showBanner(t,sub='',dur=1.6){banner={t,sub,l:dur,L:dur}}
-function drawBanner(dt){if(!banner)return;banner.l-=dt;if(banner.l<=0){banner=null;return}const a=Math.min(1,banner.l*3,(banner.L-banner.l)*6);ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,H/2-46,W,banner.sub?84:64);ctx.textAlign='center';ctx.font='30px Bungee, Impact, sans-serif';ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc');ctx.fillText(banner.t,W/2,H/2-4);if(banner.sub){ctx.font='14px Rubik, sans-serif';ctx.fillStyle='#fff';ctx.fillText(banner.sub,W/2,H/2+24)}ctx.restore()}
+function drawBanner(dt){if(!banner)return;banner.l-=dt;if(banner.l<=0){banner=null;return}const a=Math.min(1,banner.l*3,(banner.L-banner.l)*6);ctx.save();ctx.globalAlpha=a;ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,CH/2-46,CW,banner.sub?84:64);ctx.textAlign='center';ctx.font='30px Bungee, Impact, sans-serif';ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc');ctx.fillText(banner.t,CW/2,CH/2-4);if(banner.sub){ctx.font='14px Rubik, sans-serif';ctx.fillStyle='#fff';ctx.fillText(banner.sub,CW/2,CH/2+24)}ctx.restore()}
 function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
 let state='menu',score=0,best=0;
 try{best=+localStorage.getItem('best_'+GAME_ID)||0}catch(e){}
@@ -80,15 +94,16 @@ $('pz').onclick=togglePause;
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause()});
 let last=performance.now(),T=0;
 function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(state==='play'){T+=dt;update(dt);updFx(dt)}else if(state==='over'||state==='menu')updFx(dt);
- ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
- if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',W/2,H/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',W/2,H/2+28)}
+ if(ROT)ctx.drawImage(standsArt(),0,0,CW,CH);
+ ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));viewT();draw(state==='play'?dt:0);drawFx();ctx.restore();drawTop();if(typeof drawOver==='function')drawOver();drawBanner(state==='play'?dt:0);drawJoy();
+ if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,CW,CH);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',CW/2,CH/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',CW/2,CH/2+28)}
  requestAnimationFrame(frame)}
 </script>
 <script>
 // RINK RUMBLE — 3-on-3 arcade hockey (two skaters + goalie per side). You control the blue skater nearest the puck.
 const RX0=22,RX1=378,RY0=22,RY1=578,GL=166,GR=234,GOALT=58,GOALB=542,CX=200,CY=300;
 const BLUE='#2f7dff',RED='#ff3d52',GAMELEN=150;
-let sk,puck,pause,goals,clock,ctrl,sudden,trail=[];
+let sk,puck,pause,goals,clock,ctrl,sudden,trail=[],charge=null,hadPuck=false;
 ACTION_LABEL='SHOOT';
 function mk(x,y,team,role){return{x,y,vx:0,vy:0,team,role,fx:0,fy:team===0?-1:1,cd:0,t:Math.random()*9,check:0}}
 function faceoff(){sk=[mk(150,350,0,'f'),mk(250,380,0,'f'),mk(CX,GOALB-16,0,'g'),mk(250,250,1,'f'),mk(150,220,1,'f'),mk(CX,GOALT+16,1,'g')];
@@ -113,12 +128,20 @@ function update(dt){
  const p=ctrl,mate=p===mine[0]?mine[1]:mine[0];
  p.vx+=inp.x*1000*dt;p.vy+=inp.y*1000*dt;if(!inp.x&&!inp.y){const k=Math.pow(.08,dt);p.vx*=k;p.vy*=k}cap(p,200);
  if(inp.x||inp.y){const m=Math.hypot(inp.x,inp.y);p.fx=inp.x/m;p.fy=inp.y/m}
- if(inp.passTap&&puck.owner===p)pass(p,mate);
- if(inp.fireTap&&puck.owner===p){
-   // aim: if stick points at an open teammate, pass; otherwise shoot at the net, aimed by the stick's sideways lean
-   const tx=mate.x-p.x,ty=mate.y-p.y,tm=Math.hypot(tx,ty);const dot=(tx*p.fx+ty*p.fy)/(tm||1);
-   if((inp.x||inp.y)&&dot>.82&&tm>50&&tm<260)pass(p,mate);
-   else shoot(p,CX+clamp(p.fx*40,-28,28)+rnd(-8,8),GOALT-6,560)}
+ if(inp.passTap&&puck.owner===p){charge=null;pass(p,mate)}
+ // SHOOT: hold it to wind up (you coast while you load up), let go to fire at the net. The longer you hold, the harder
+ // the shot; a full wind-up is a slap shot that can beat the goalie. A quick tap still passes to a teammate your
+ // stick points at, or snaps off a wrist shot. Holding SHOOT as a pass arrives winds up a one-timer.
+ const own=puck.owner===p;
+ if(!own)charge=null;
+ else if(inp.fire&&charge===null&&(inp.fireTap||!hadPuck))charge=0;
+ if(charge!==null){
+   if(inp.fire){charge=Math.min(1,charge+dt/1.1);const k=Math.pow(.3,dt);p.vx*=k;p.vy*=k;if(charge>=1&&Math.random()<dt*10)burst(p.x,p.y,'#ffd23f',2,70,.3,2)}
+   else{const c=charge;charge=null;const tx=mate.x-p.x,ty=mate.y-p.y,tm=Math.hypot(tx,ty);const dot=(tx*p.fx+ty*p.fy)/(tm||1);
+     if(c<.15&&(inp.x||inp.y)&&dot>.82&&tm>50&&tm<260)pass(p,mate);
+     else{const spread=8+c*10;shoot(p,CX+clamp(p.fx*40,-28,28)+rnd(-spread,spread),GOALT-6,560+c*560);
+       if(c>.55){kick(3+c*5);noise(.14,.11,2400);beep(105,.2,.09,'sawtooth',55);burst(puck.x,puck.y,['#ffffff','#cfe8ff','#ffd23f'],14,220,.45,3);floats.push({x:p.x,y:p.y-22,t:c>.92?'SLAP SHOT!':'BOOM!',c:'#ffd23f',l:1})}}}}
+ hadPuck=own;
  if(inp.fireTap&&puck.owner&&puck.owner.team===1&&dist(p.x,p.y,puck.x,puck.y)<34&&p.check<=0){p.check=.6;p.vx+=p.fx*160;p.vy+=p.fy*160;beep(140,.06,.06)}
  // teammate AI: get open ahead of the play, or chase a loose puck
  if(puck.owner===p||(puck.owner&&puck.owner.team===0))steer(mate,clamp(p.x<CX?p.x+120:p.x-120,60,340),clamp(p.y-110,GOALT+70,GOALB-60),700,170,dt);
@@ -160,7 +183,9 @@ function update(dt){
    for(const ny of[GOALT,GOALB]){const back=ny===GOALT?ny-22:ny+22;if(puck.x>GL-3&&puck.x<GR+3&&puck.y>Math.min(ny,back)-3&&puck.y<Math.max(ny,back)+3&&!(inMouth&&Math.abs(puck.y-ny)<4)){if(Math.abs(puck.x-GL)<5||Math.abs(puck.x-GR)<5)puck.vx*=-1;else puck.vy*=-1;puck.x+=puck.vx*dt;puck.y+=puck.vy*dt}}}
   const fr=Math.pow(.6,dt);puck.vx*=fr;puck.vy*=fr;
   if(sp>250)trail.push({x:puck.x,y:puck.y,l:.25});
-  if(puck.cd<=0)for(const s of sk){if(dist(s.x,s.y,puck.x,puck.y)<16){puck.owner=s;beep(520,.03,.03);break}}
+  if(puck.cd<=0){const ps=Math.hypot(puck.vx,puck.vy);for(const s of sk){if(dist(s.x,s.y,puck.x,puck.y)<16){
+    if(ps>620&&Math.random()>(s.role==='g'?.86-(ps-620)/1400:.5)){puck.cd=.12;puck.vx=puck.vx*.86+rnd(-50,50);puck.vy*=.86;burst(puck.x,puck.y,'#cfe8ff',6,100,.3,2);beep(240,.04,.06,'triangle');break}
+    puck.owner=s;beep(520,.03,.03);break}}}
  }
  for(const t of trail)t.l-=dt;trail=trail.filter(t=>t.l>0);
 }
@@ -191,7 +216,7 @@ function drawRink(){ctx.drawImage(arenaArt(),0,0,W,H);
  ctx.strokeStyle='#2a6fe0';ctx.lineWidth=2;ctx.beginPath();ctx.arc(CX,CY,46,0,TAU);ctx.stroke();ctx.fillStyle='#2a6fe0';ctx.beginPath();ctx.arc(CX,CY,4,0,TAU);ctx.fill();
  for(const [x,y]of[[100,130],[300,130],[100,470],[300,470]]){ctx.strokeStyle='#e8344a';ctx.beginPath();ctx.arc(x,y,30,0,TAU);ctx.stroke();ctx.fillStyle='#e8344a';ctx.beginPath();ctx.arc(x,y,4,0,TAU);ctx.fill()}
  ctx.fillStyle='rgba(80,150,255,.28)';ctx.beginPath();ctx.arc(CX,GOALT,40,0,Math.PI);ctx.fill();ctx.beginPath();ctx.arc(CX,GOALB,40,Math.PI,TAU);ctx.fill();
- ctx.font='22px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.globalAlpha=.12;ctx.fillStyle='#0b3a8f';ctx.fillText('RINK RUMBLE',CX,CY+70);ctx.globalAlpha=1;ctx.restore();
+ ctx.font='22px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.globalAlpha=.12;ctx.fillStyle='#0b3a8f';if(ROT){ctx.save();ctx.translate(CX+78,CY);ctx.rotate(-Math.PI/2);ctx.fillText('RINK RUMBLE',0,8);ctx.restore()}else ctx.fillText('RINK RUMBLE',CX,CY+70);ctx.globalAlpha=1;ctx.restore();
  ctx.lineWidth=5;ctx.strokeStyle='#ffd23f';rr(RX0,RY0,RX1-RX0,RY1-RY0,46);ctx.stroke();ctx.lineWidth=1.2;ctx.strokeStyle='rgba(255,255,255,.55)';rr(RX0+3,RY0+3,RX1-RX0-6,RY1-RY0-6,43);ctx.stroke();
  for(const [ny,dir]of[[GOALT,-1],[GOALB,1]]){ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(GL,Math.min(ny,ny+dir*22),GR-GL,22);
   ctx.strokeStyle='rgba(120,120,140,.6)';ctx.lineWidth=1;for(let x=GL;x<=GR;x+=6){ctx.beginPath();ctx.moveTo(x,ny);ctx.lineTo(x,ny+dir*22);ctx.stroke()}for(let k=0;k<=22;k+=6){ctx.beginPath();ctx.moveTo(GL,ny+dir*k);ctx.lineTo(GR,ny+dir*k);ctx.stroke()}
@@ -200,7 +225,8 @@ function drawSkater(s){ctx.save();ctx.translate(s.x,s.y);ctx.scale(1.2,1.2);ctx.
 function drawSkater0(s){const col=s.team===0?BLUE:RED,dark=s.team===0?'#123a8c':'#8c1222';
  ctx.fillStyle='rgba(0,30,60,.18)';ctx.beginPath();ctx.ellipse(s.x+3,s.y+6,12,6,0,0,TAU);ctx.fill();
  if(s===ctrl&&state==='play'){ctx.strokeStyle='#ffd23f';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(s.x,s.y,17+Math.sin(T*8)*1.5,0,TAU);ctx.stroke()}
- const sx=s.x+s.fx*16,sy=s.y+s.fy*16;ctx.strokeStyle='#5b3a1a';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(s.x+s.fy*6,s.y-s.fx*6);ctx.lineTo(sx,sy);ctx.stroke();ctx.strokeStyle='#222';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(sx+s.fy*5,sy-s.fx*5);ctx.stroke();
+ const wnd=s===ctrl&&charge!==null?charge*2.1:0,wc=Math.cos(wnd),ws=Math.sin(wnd),kx=s.fx*wc-s.fy*ws,ky=s.fx*ws+s.fy*wc,sl=16+(wnd?4:0);
+ const sx=s.x+kx*sl,sy=s.y+ky*sl;ctx.strokeStyle='#5b3a1a';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(s.x+s.fy*6,s.y-s.fx*6);ctx.lineTo(sx,sy);ctx.stroke();ctx.strokeStyle='#222';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(sx+ky*5,sy-kx*5);ctx.stroke();
  if(s.role==='g'){ctx.fillStyle='#f2f2f2';rr(s.x-15,s.y-6,30,12,5);ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke()}
  const ang=Math.atan2(s.fy,s.fx);ctx.save();ctx.translate(s.x,s.y);ctx.rotate(ang);
  // skates
@@ -219,8 +245,10 @@ function drawSkater0(s){const col=s.team===0?BLUE:RED,dark=s.team===0?'#123a8c':
 function draw(){drawRink();
  for(const t of trail){ctx.globalAlpha=t.l*2;ctx.fillStyle='#4a5a7a';ctx.beginPath();ctx.arc(t.x,t.y,3,0,TAU);ctx.fill()}ctx.globalAlpha=1;
  const order=[...sk].sort((a,b)=>a.y-b.y);for(const s of order)drawSkater(s);
+ if(charge!==null&&ctrl){const c=charge,col=c<.5?'#ffd23f':c<.92?'#ff9a1a':'#ff3d52';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.arc(ctrl.x,ctrl.y,24,0,TAU);ctx.stroke();ctx.strokeStyle=col;ctx.beginPath();ctx.arc(ctrl.x,ctrl.y,24,-Math.PI/2,-Math.PI/2+c*TAU);ctx.stroke();if(c>=1){ctx.globalAlpha=.4+.3*Math.sin(T*30);ctx.lineWidth=2;ctx.beginPath();ctx.arc(ctrl.x,ctrl.y,29,0,TAU);ctx.stroke();ctx.globalAlpha=1}}
  ctx.fillStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.ellipse(puck.x+2,puck.y+3,6,3,0,0,TAU);ctx.fill();ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(puck.x,puck.y+1,6.4,5,0,0,TAU);ctx.fill();{const g=ctx.createLinearGradient(0,puck.y-4,0,puck.y+4);g.addColorStop(0,'#4a4a52');g.addColorStop(1,'#111');ctx.fillStyle=g;}ctx.beginPath();ctx.ellipse(puck.x,puck.y,6,4.5,0,0,TAU);ctx.fill();ctx.fillStyle='rgba(255,255,255,.45)';ctx.beginPath();ctx.ellipse(puck.x-2,puck.y-2,2.2,1,0,0,TAU);ctx.fill();
- if(state==='play'&&pause>0&&!banner){ctx.fillStyle='#0b3a8f';ctx.font='26px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillText('READY',CX,CY-60)}}
+}
+function drawOver(){if(state==='play'&&pause>0&&!banner){const p=toScreen(CX,CY);ctx.fillStyle='#0b3a8f';ctx.font='26px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillText('READY',p.x,p.y-60*VS)}}
 
 reset();requestAnimationFrame(frame);
 </script>

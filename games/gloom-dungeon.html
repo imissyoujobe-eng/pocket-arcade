@@ -26,10 +26,11 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
 <div id="app">
   <div id="hud"><div><span class="lbl" id="l1">SCORE</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">DUNGEON</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">LIVES</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
   <div id="stage"><canvas id="c" width="400" height="600"></canvas>
-    <div id="overlay"><h1>Gloom Dungeon</h1><p id="msg">Hunt the creatures through the dungeon. Some fade from sight, so trust your radar. Then catch the Shade Lord.</p><p class="how">Left side: drag to walk. Right side: tap to fire the way you face. Side doors wrap around. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+    <div id="overlay"><h1>Gloom Dungeon</h1><p id="msg">Hunt the creatures through the dungeon. Some fade from sight, so trust your radar. Then catch the Shade Lord.</p><p class="how">Left side: drag to walk. Right side: tap to fire the way you face. Side doors wrap around. Turn your phone sideways for a bigger dungeon. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
-<script src="../lib/fit.js" data-canvas="#c"></script>
+<script>if(innerWidth>innerHeight*1.15){const c=document.getElementById('c');c.width=720;c.height=420}</script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1" data-max="2.4"></script>
 <script src="../lib/art.js"></script>
 <script>
 const GAME_ID='gloom-dungeon';
@@ -56,7 +57,7 @@ function readInput(){let x=0,y=0;if(keys.arrowleft||keys.a)x--;if(keys.arrowrigh
  if(joy){const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>7){const k=Math.min(1,m/38);x=dx/m*k;y=dy/m*k}}
  const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f}
 function drawJoy(){if(!joy&&!coarse)return;ctx.save();if(joy){ctx.globalAlpha=.3;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.x0,joy.y0,42,0,TAU);ctx.stroke();ctx.fillStyle='#fff';const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy),k=m>42?42/m:1;ctx.beginPath();ctx.arc(joy.x0+dx*k,joy.y0+dy*k,17,0,TAU);ctx.fill()}
- if(coarse&&state==='play'&&ACTION_LABEL){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(W-58,H-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,W-58,H-58)}ctx.restore()}
+ if(coarse&&state==='play'&&ACTION_LABEL&&!(window.FIT&&FIT.land)){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(W-58,H-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,W-58,H-58)}ctx.restore()}
 let ACTION_LABEL='FIRE';
 /* juice: particles, floating text, screen shake */
 let parts=[],floats=[],shake=0,flash=0,flashCol='#fff';
@@ -86,7 +87,12 @@ function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(st
 </script>
 <script>
 // GLOOM DUNGEON — maze shooter. Hunt the creatures through a shifting dungeon; some fade from sight. Use the radar, and the side doors.
-const CS=40,GC=9,GR=11,X0=20,Y0=18,DIRS=[[0,-1],[1,0],[0,1],[-1,0]],BIT=[1,2,4,8];
+// sideways the dungeon is built wider and fills the screen: rooms run from the joystick on the left to the FIRE button on
+// the right, under the score, and the radar moves to the left above the joystick
+const LAND=!!(window.FIT&&FIT.land),CS=40,LAY=(()=>{if(!LAND)return{GC:9,GR:11,X0:20,Y0:18};
+ const touch=matchMedia('(pointer:coarse)').matches,css=Math.min(innerWidth/W,innerHeight/H),offL=(innerWidth-W*css)/2,mL=Math.max(10,190-offL)/css,mR=Math.max(10,(touch?188:16)-offL)/css,mT=50/css,mB=8;
+ const GC=clamp(Math.floor((W-mL-mR)/CS),9,19),GR=clamp(Math.floor((H-mT-mB)/CS),6,11);return{GC,GR,X0:Math.round(mL+(W-mL-mR-GC*CS)/2),Y0:Math.round(mT+(H-mT-mB-GR*CS)/2),mL}})();
+const GC=LAY.GC,GR=LAY.GR,X0=LAY.X0,Y0=LAY.Y0,DIRS=[[0,-1],[1,0],[0,1],[-1,0]],BIT=[1,2,4,8];
 let open,pl,pbul,mons,mbul,queue,lives,level,deadT,lord,lordT,doorT,radarFlash;
 ACTION_LABEL='FIRE';
 const TYPES={g:{col:'#4fa3ff',sp:1.6,pts:100,name:'Gloomer'},s:{col:'#ffd23f',sp:2.2,pts:200,name:'Shrieker'},k:{col:'#ff4f6b',sp:2.6,pts:500,name:'Grimlock',fade:true},L:{col:'#c08bff',sp:3.4,pts:2500,name:'Shade Lord',fade:true}};
@@ -226,11 +232,11 @@ function draw(){ctx.fillStyle='#04030a';ctx.fillRect(0,0,W,H);
  for(const t of torches)A.torch(ctx,t.x,t.y,T*1000+t.x*13);
  A.vignette(ctx,W,H,.5);
  // radar in a carved stone frame
- const ry=Y0+GR*CS+14,rs=6,rx=W/2-GC*rs-6,rw=GC*rs*2+12,rh=GR*rs*.9+8;ctx.fillStyle='#07060c';rr(rx-4,ry-8,rw+8,rh+8,7);ctx.fill();const fg=ctx.createLinearGradient(0,ry-6,0,ry+rh);fg.addColorStop(0,'#4a4560');fg.addColorStop(1,'#221f30');ctx.fillStyle=fg;rr(rx-3,ry-7,rw+6,rh+6,6);ctx.fill();ctx.fillStyle='#071812';rr(rx,ry-4,rw,rh,4);ctx.fill();
+ const rs=LAND?Math.min(6,(LAY.mL-30)/(GC*2)):6,RCX=LAND?LAY.mL/2:W/2,ry=LAND?Y0+30:Y0+GR*CS+14,rx=RCX-GC*rs-6,rw=GC*rs*2+12,rh=GR*rs*.9+8;ctx.fillStyle='#07060c';rr(rx-4,ry-8,rw+8,rh+8,7);ctx.fill();const fg=ctx.createLinearGradient(0,ry-6,0,ry+rh);fg.addColorStop(0,'#4a4560');fg.addColorStop(1,'#221f30');ctx.fillStyle=fg;rr(rx-3,ry-7,rw+6,rh+6,6);ctx.fill();ctx.fillStyle='#071812';rr(rx,ry-4,rw,rh,4);ctx.fill();
  ctx.strokeStyle='rgba(124,255,178,.12)';ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(rx+rw*i/4,ry-4);ctx.lineTo(rx+rw*i/4,ry-4+rh);ctx.stroke()}const sw=(T*.6)%1;ctx.fillStyle='rgba(124,255,178,.18)';ctx.fillRect(rx+sw*rw-6,ry-4,6,rh);
- ctx.fillStyle='#8f9bbd';ctx.font='10px Rubik, sans-serif';ctx.textAlign='left';ctx.fillText('RADAR',X0,ry+8);ctx.textAlign='right';ctx.fillText((mons.length+queue.length)+' LEFT',X0+GC*CS,ry+8);
- for(const m of[...mons,lord].filter(Boolean)){const q=pos(m),mx=W/2-GC*rs+(q.x-X0)/CS*rs*2,my=ry+(q.y-Y0)/CS*rs*.9;A.glow(ctx,mx,my,6,'255,255,255',.3);ctx.fillStyle=TYPES[m.t].col;ctx.fillRect(mx-2,my-2,4,4)}
- ctx.fillStyle='#7cffb2';ctx.fillRect(W/2-GC*rs+(pq.x-X0)/CS*rs*2-2,ry+(pq.y-Y0)/CS*rs*.9-2,4,4)}
+ ctx.fillStyle='#8f9bbd';ctx.font='10px Rubik, sans-serif';if(LAND){ctx.textAlign='center';ctx.fillText('RADAR',RCX,ry-14);ctx.fillText((mons.length+queue.length)+' LEFT',RCX,ry+rh+12)}else{ctx.textAlign='left';ctx.fillText('RADAR',X0,ry+8);ctx.textAlign='right';ctx.fillText((mons.length+queue.length)+' LEFT',X0+GC*CS,ry+8)}
+ for(const m of[...mons,lord].filter(Boolean)){const q=pos(m),mx=RCX-GC*rs+(q.x-X0)/CS*rs*2,my=ry+(q.y-Y0)/CS*rs*.9;A.glow(ctx,mx,my,6,'255,255,255',.3);ctx.fillStyle=TYPES[m.t].col;ctx.fillRect(mx-2,my-2,4,4)}
+ ctx.fillStyle='#7cffb2';ctx.fillRect(RCX-GC*rs+(pq.x-X0)/CS*rs*2-2,ry+(pq.y-Y0)/CS*rs*.9-2,4,4)}
 
 reset();requestAnimationFrame(frame);
 </script>
