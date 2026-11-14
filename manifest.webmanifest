@@ -1,7 +1,7 @@
 {
-  "name": "Joystick Original Arcade",
-  "short_name": "Joystick",
-  "description": "Joystick Original Arcade: 80+ original games. Shooters, racers, platformers, quests, sports, word games and classics. Plays offline.",
+  "name": "Joystik Original Arcade",
+  "short_name": "Joystik",
+  "description": "Joystik Original Arcade: 80+ original games. Shooters, racers, platformers, quests, sports, word games and classics. Plays offline.",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
