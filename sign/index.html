@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Joystik App Signer</title>
+<link rel="icon" href="../icons/icon-192.png">
+<style>
+  /* One dark screen in the arcade's colors: a short form, top to bottom, the way you'd do it with the zip open beside you. */
+  :root {
+    --bg: #120d26; --panel: #1d1640; --line: #3a2f72; --ink: #f3f0ff; --muted: #b4acd8;
+    --green: #3dff3d; --amber: #ffb02e; --bad: #ff6b81; --good: #2fd6a3;
+    --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--ui); }
+  main { max-width: 620px; margin: 0 auto; padding-block: 28px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 20px; }
+  header { display: flex; gap: 16px; align-items: center; }
+  header img { width: 72px; height: 72px; border-radius: 18px; flex: none; box-shadow: 0 4px 0 rgba(0,0,0,.35); }
+  h1 { margin: 0; font-size: 1.6rem; line-height: 1.15; text-wrap: balance; }
+  h1 span { color: var(--green); }
+  .lead { margin: 4px 0 0; color: var(--muted); font-size: .95rem; }
+  .step { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 10px; min-width: 0; }
+  .step h2 { margin: 0; font-size: 1rem; display: flex; gap: 10px; align-items: center; }
+  .step h2 b { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--amber); color: var(--bg); font-size: .85rem; flex: none; }
+  .hint { margin: 0; color: var(--muted); font-size: .9rem; }
+  .hint code, .mono { font-family: var(--mono); font-size: .85rem; overflow-wrap: anywhere; }
+  label { font-size: .9rem; color: var(--muted); display: grid; gap: 6px; }
+  input[type=file] { color: var(--muted); max-width: 100%; }
+  input[type=file]::file-selector-button { font: 600 .95rem var(--ui); background: var(--ink); color: var(--bg); border: 0; border-radius: 10px; padding: 10px 14px; margin-right: 10px; cursor: pointer; }
+  input[type=password], select { font: 1rem var(--mono); background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 12px; width: 100%; }
+  input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+  .chosen { font-size: .85rem; color: var(--good); min-height: 1.2em; overflow-wrap: anywhere; }
+  .go { font: 700 1.1rem var(--ui); background: var(--green); color: #07140a; border: 0; border-radius: 14px; padding: 16px; cursor: pointer; box-shadow: 0 4px 0 #148a14; }
+  .go:disabled { opacity: .5; cursor: default; }
+  .msg { border-radius: 12px; padding: 12px 14px; font-size: .95rem; }
+  .msg.bad { background: rgba(255,107,129,.12); border: 1px solid var(--bad); color: #ffd7de; }
+  .msg.work { background: rgba(255,176,46,.10); border: 1px solid var(--amber); color: #ffe7bd; }
+  .done { background: rgba(47,214,163,.10); border: 1px solid var(--good); border-radius: 16px; padding: 16px; display: grid; gap: 10px; }
+  .done h2 { margin: 0; font-size: 1.1rem; color: var(--good); }
+  .save { display: block; text-align: center; font: 700 1.05rem var(--ui); background: var(--amber); color: var(--bg); border-radius: 12px; padding: 14px; text-decoration: none; }
+  dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: .85rem; }
+  dt { color: var(--muted); } dd { margin: 0; min-width: 0; }
+  .safe { color: var(--muted); font-size: .85rem; margin: 0; }
+  @media (prefers-reduced-motion: no-preference) { .go:not(:disabled):active { transform: translateY(2px); box-shadow: 0 2px 0 #148a14; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="../icons/icon-192.png" alt="">
+    <div>
+      <h1><span>Joystik</span> App Signer</h1>
+      <p class="lead">Signs your new app file with your upload key, right here on this device. Your key and passwords are never uploaded.</p>
+    </div>
+  </header>
+
+  <section class="step">
+    <h2><b>1</b> Your new app file</h2>
+    <p class="hint">The <code>.aab</code> file Claude sent you (for example <code>Joystik-1.1-unsigned.aab</code>).</p>
+    <input type="file" id="aab" accept=".aab,application/octet-stream,application/zip">
+    <div class="chosen" id="aab-name"></div>
+  </section>
+
+  <section class="step">
+    <h2><b>2</b> Your signing key</h2>
+    <p class="hint">From the PWABuilder zip you downloaded in October: the file named <code>signing.keystore</code>.</p>
+    <input type="file" id="ks">
+    <div class="chosen" id="ks-name"></div>
+  </section>
+
+  <section class="step">
+    <h2><b>3</b> Your key passwords</h2>
+    <p class="hint">Open <code>signing-key-info.txt</code> from the same zip and copy the two passwords.</p>
+    <label for="storepass">Key store password
+      <input type="password" id="storepass" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <label for="keypass">Key password
+      <input type="password" id="keypass" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
+    <label for="alias" id="alias-wrap" hidden>Key
+      <select id="alias"></select>
+    </label>
+  </section>
+
+  <button class="go" id="go" type="button">Sign my app</button>
+  <div class="msg" id="msg" role="status" hidden></div>
+
+  <section class="done" id="done" hidden>
+    <h2>Signed and ready to upload</h2>
+    <a class="save" id="save" href="#">Save the signed app</a>
+    <dl>
+      <dt>File</dt><dd class="mono" id="out-name"></dd>
+      <dt>Key</dt><dd class="mono" id="out-alias"></dd>
+      <dt>SHA-1</dt><dd class="mono" id="out-sha1"></dd>
+    </dl>
+    <p class="hint">Next: in Play Console, go to Test and release → Testing → Closed testing, open your track, tap <b>Create new release</b> and upload this file. If Play says it was signed with the wrong key, compare the SHA-1 above with <b>Upload key certificate</b> under Test and release → App integrity → App signing.</p>
+  </section>
+
+  <p class="safe">This page works offline once it's open, and its security settings block it from sending anything over the internet. It forgets your files and passwords when you close it.</p>
+</main>
+<script src="forge-1.4.0.min.js"></script>
+<script src="jszip-3.10.1.min.js"></script>
+<script src="sign-core.js"></script>
+<script src="sign-ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.imissyoujobe.pocketarcade'
+    compileSdk 36
+
+    defaultConfig {
+        // Same package as the Play listing (it started as a PWABuilder app). Raise versionCode for every upload.
+        applicationId 'io.github.imissyoujobe.pocketarcade'
+        minSdk 26
+        targetSdk 36
+        versionCode 10
+        versionName '1.1.0'
+        resValue 'string', 'app_name', 'Joystik'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+        debug {
+            // side-by-side test copy: installs next to the Play version
+            applicationIdSuffix '.preview'
+            versionNameSuffix '-preview'
+            resValue 'string', 'app_name', 'Joystik test'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

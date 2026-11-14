@@ -1,0 +1,9 @@
+.gradle/
+build/
+app/build/
+local.properties
+# never commit signing keys
+*.keystore
+*.jks
+*.p12
+signing-key-info.txt
