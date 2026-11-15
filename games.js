@@ -3,7 +3,7 @@
 // To add a game: put its file in games/ (games/<id>.html), add one line below and raise ARCADE_TOTAL to match.
 // My Scores: key = the name a kit game saves its best under (pa-<key>); store = where an older game saves its own best;
 // kind = how that score reads (time, cs, ms, secs, mins, par, wins, fights, cup, cash, rally, streak, level; blank = points).
-window.ARCADE_TOTAL = 84;
+window.ARCADE_TOTAL = 86;
 window.ARCADE_GAMES = [
   { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue' },
   { id: 'word-clash', name: 'Word Clash', genre: 'Word', tag: 'Crossword tile duel vs the computer or friends', key: 'wordclash' },
@@ -88,5 +88,7 @@ window.ARCADE_GAMES = [
   { id: 'juice-slash', name: "Juice Slash", genre: 'Action', tag: "Swipe to slice, dodge the bombs", key: 'juiceslash' },
   { id: 'puff-pal', name: "Puff Pal", genre: 'Platform', tag: "Float, inhale and copy powers", key: 'puffpal' },
   { id: 'doodle-dino', name: "Doodle Dino", genre: 'Platform', tag: "Gulp critters, throw eggs, save the storybook", key: 'doodledino' },
-  { id: 'claw-fury', name: "Claw Fury", genre: 'Action', tag: "Claw combos vs a robot army", key: 'clawfury' }
+  { id: 'claw-fury', name: "Claw Fury", genre: 'Action', tag: "Claw combos vs a robot army", key: 'clawfury' },
+  { id: 'check-these-pawns', name: 'Check These Pawns', genre: 'Puzzle', tag: 'Chess vs the computer or a friend', key: 'pawns-wins', kind: 'wins' },
+  { id: 'bubble-blitz', name: 'Bubble Blitz', genre: 'Puzzle', tag: 'Tap bubble groups, beat the clock', key: 'bubbleblitz' }
 ];

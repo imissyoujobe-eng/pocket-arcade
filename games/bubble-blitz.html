@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Bubble Blitz</title>
+<style>
+  .bm{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;overflow-y:auto;
+    padding:max(56px,calc(env(safe-area-inset-top,0px) + 50px)) 16px max(24px,env(safe-area-inset-bottom,0px));box-sizing:border-box;
+    background:radial-gradient(120% 90% at 50% 10%,rgba(10,70,110,.86),rgba(6,22,48,.93) 60%,rgba(4,10,26,.96));color:#eafaff;font-family:Rubik,system-ui,sans-serif;text-align:center}
+  .bm[hidden]{display:none}
+  .bm h1{margin:0;font-family:Bungee,Impact,sans-serif;font-weight:400;font-size:clamp(38px,12vw,64px);line-height:.95;color:#7fe7ff;text-shadow:0 4px 0 rgba(0,0,0,.45),0 0 30px rgba(80,220,255,.45)}
+  .bm p{margin:0;max-width:40ch;line-height:1.45;color:#cfeef8}
+  .bm .modes{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;width:100%;max-width:620px}
+  .bm .mode{flex:1 1 240px;max-width:300px;border:0;border-radius:20px;padding:16px 14px;cursor:pointer;color:#06202c;box-shadow:0 6px 0 rgba(0,0,0,.4);display:grid;gap:4px;text-align:center;font-family:Rubik,system-ui,sans-serif}
+  .bm .mode b{font-family:Bungee,Impact,sans-serif;font-weight:400;font-size:24px}
+  .bm .mode span{font-size:14px;line-height:1.35}
+  .bm .mode i{font-style:normal;font-family:Bungee,Impact,sans-serif;font-size:13px;opacity:.75}
+  .bm .blitz{background:linear-gradient(160deg,#ffd45c,#ff8a3d)}
+  .bm .chill{background:linear-gradient(160deg,#9ff0ff,#4fb8ff)}
+  .bm .mode:active,.bm .btn:active{transform:translateY(3px);box-shadow:0 3px 0 rgba(0,0,0,.4)}
+  .bm .tips{font-size:13px;color:#9cc9d8}
+  .bm .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+  .bm .btn{font-family:Bungee,Impact,sans-serif;font-size:18px;border:0;border-radius:999px;min-height:50px;padding:10px 26px;background:#ffd45c;color:#3a1d00;box-shadow:0 5px 0 rgba(0,0,0,.4);cursor:pointer}
+  .bm .btn.ghost{background:transparent;color:#eafaff;border:1px solid rgba(234,250,255,.4);box-shadow:none}
+  .bm .big{font-family:Bungee,Impact,sans-serif;font-size:48px;line-height:1;color:#ffd45c;text-shadow:0 4px 0 rgba(0,0,0,.4)}
+  button:focus-visible{outline:3px solid #fff;outline-offset:2px}
+  html body{background:linear-gradient(180deg,#0d4f7a 0,#0d4f7a 12%,#051733 100%)}
+  body #ks canvas{border-radius:0}
+  /* standing up, the score strip sits just under the app's ARCADE button instead of behind it */
+  body #kh{padding-top:max(8px,calc(env(safe-area-inset-top,0px) + 48px))}
+  @media (max-height:520px){
+    .bm{gap:10px;padding-top:max(14px,env(safe-area-inset-top,0px));padding-bottom:max(14px,env(safe-area-inset-bottom,0px))}
+    .bm h1{font-size:34px}.bm h1 br{display:none}.bm p{max-width:56ch}.bm .tips{display:none}.bm .mode{padding:10px 12px}.bm .big{font-size:40px}
+  }
+</style>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script>
+// Bubble Blitz: tap 2 or more touching bubbles of the same color to pop them; the rest float up into the gaps.
+// BLITZ: 60 seconds, quick pops chain into combos, clock bubbles add time, power bubbles left at the end go off.
+// CHILL: no clock and no refills; empty columns close up; clear the tank for a big bonus.
+// Same 9 x 9 honeycomb standing up or on its side: on its side the tank fills the height and the score sits beside it.
+'use strict';
+K.theme({ bg: '#0d4f7a', ink: '#eafaff', accent: '#7fe7ff', accentInk: '#06202c' });
+const COLS = 9, ROWS = 9, S3 = Math.sqrt(3), PADG = 7;
+// red, yellow, green, blue, purple, and orange as a sixth color where a mode uses six
+const COLORS = [['#ff4f6d', '#ffc2cf', '#a8143a'], ['#ffd23a', '#fff3b5', '#a87a00'], ['#3fe08a', '#c4ffd9', '#0c7a3f'], ['#43aaff', '#c8e8ff', '#0a4a9a'], ['#b973ff', '#ead6ff', '#5a1a9e'], ['#ff8a2e', '#ffd3ad', '#a84300']];
+const ZAP = 1, BOOM = 2, PRISM = 3, CLOCK = 4;
+// how big a group makes each power bubble, and how many colors, in each mode
+const RULES = { blitz: { pow: [5, 8, 11], colors: 5 }, chill: { pow: [5, 8, 11], colors: 6 } };
+const POW = b => !!b && (b.sp === ZAP || b.sp === BOOM || b.sp === PRISM);
+
+// ---------- glossy bubble sprites, drawn once per color ----------
+const SPR = COLORS.map(([mid, hi, lo]) => {
+  const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s; const g = cv.getContext('2d');
+  const r = s / 2 - 3, x = s / 2, y = s / 2;
+  const grd = g.createRadialGradient(x - r * .35, y - r * .4, r * .1, x, y, r);
+  grd.addColorStop(0, hi); grd.addColorStop(.38, mid); grd.addColorStop(1, lo);
+  g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+  g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,.35)'; g.stroke();
+  g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.ellipse(x - r * .38, y - r * .42, r * .28, r * .16, -.7, 0, Math.PI * 2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.ellipse(x + r * .4, y + r * .45, r * .12, r * .07, -.7, 0, Math.PI * 2); g.fill();
+  return cv;
+});
+
+// ---------- layout: standing up the tank sits under the timer; on its side it fills the height ----------
+let W = 360, H = 600, LAND = false, R = 19, DX = R * S3, DY = 2 * R, GX = 0, GY = 0, TS = 1, TANK = { x: 0, y: 0, w: 0, h: 0 }, hudOff = false;
+// the picture always fills the screen: standing up it is 360 wide and as tall as the phone allows,
+// on its side it is 600 tall and as wide as the phone allows
+function view() {
+  const land = innerWidth > innerHeight * 1.15;
+  document.body.classList.add('lfull'); document.body.classList.toggle('land', land);
+  // on its side the score, time and best are drawn beside the tank, so the strip on top goes away
+  if (land !== hudOff) { hudOff = land; K.hud(land ? [] : ['score', 'clock', 'best']); }
+  const s = K.stageSize(), sw = Math.max(50, s.w - 8), sh = Math.max(50, s.h - 8);
+  const w = land ? Math.round(Math.min(1500, Math.max(400, 600 * sw / sh))) : 360;
+  const h = land ? 600 : Math.round(Math.min(800, Math.max(560, 360 * sh / sw)));
+  if (w === W && h === H && land === LAND && TANK.w) return;
+  W = w; H = h; layout(land); K.screen(W, H, { smooth: true }); hud();
+}
+function layout(land) {
+  LAND = land;
+  if (!LAND) {
+    R = Math.min((W - 2 * 10 - 2 * PADG) / ((COLS - 1) * S3 + 2), (H - 72 - 96 - 2 * PADG) / (ROWS * 2 + 1));
+    GY = 72 + Math.max(0, H - 72 - 96 - (ROWS * 2 + 1) * R - 2 * PADG) * .4 + PADG + R;
+  } else {
+    R = Math.min((H - 2 * 14 - 2 * PADG) / (ROWS * 2 + 1), (W - 2 * 150 - 2 * PADG) / ((COLS - 1) * S3 + 2));
+    GY = (H - (ROWS * 2 + 1) * R) / 2 + R;
+  }
+  DX = R * S3; DY = 2 * R; TS = R / 19;
+  const bw = (COLS - 1) * DX + 2 * R, bh = ROWS * DY + R;
+  GX = (W - bw) / 2 + R;
+  TANK = { x: GX - R - PADG, y: GY - R - PADG, w: bw + 2 * PADG, h: bh + 2 * PADG };
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) { const b = grid[c] && grid[c][r]; if (b) { b.x = cx(c); b.y = cy(c, r); b.vx = b.vy = 0; } }
+  amb = Array.from({ length: Math.round(26 * W / 360) }, () => ({ x: Math.random() * W, y: Math.random() * H, r: 1 + Math.random() * 3, v: 10 + Math.random() * 30 }));
+}
+function cx(c) { return GX + c * DX; }
+function cy(c, r) { return GY + r * DY + (c & 1 ? R : 0); }
+
+// ---------- board ----------
+let grid = [], amb = [], state = 'menu', mode = 'blitz', score = 0, timeLeft = 60, lastSec = 60, combo = 0, comboT = 0, idle = 0, left = 0;
+let bigGroup = 0, topCombo = 0, pops = [], fx = [], floats = [], queue = [], shake = 0, shuffleT = 0, endT = 0, ver = 0, hintVer = -1, hintSet = null;
+const best = { blitz: K.best('bubbleblitz'), chill: K.best('bubbleblitz-chill') };
+function inb(c, r) { return c >= 0 && c < COLS && r >= 0 && r < ROWS; }
+function nbrs(c, r) {
+  const out = [[c, r - 1], [c, r + 1]];
+  if (!(c & 1)) out.push([c - 1, r - 1], [c - 1, r], [c + 1, r - 1], [c + 1, r]);
+  else out.push([c - 1, r], [c - 1, r + 1], [c + 1, r], [c + 1, r + 1]);
+  return out.filter(([a, b]) => inb(a, b));
+}
+function newBubble(c, r, below, fresh) {
+  const b = { k: K.ri(0, RULES[mode].colors - 1), sp: 0, x: cx(c), y: cy(c, r), vx: 0, vy: 0, wob: Math.random() * 6 };
+  // clock bubbles only rise in during play, so you earn them by popping
+  if (!fresh && mode === 'blitz' && state === 'play' && Math.random() < 1 / 70) b.sp = CLOCK;
+  if (below != null) b.y = TANK.y + TANK.h + R + below;
+  return b;
+}
+function fill() {
+  grid = [];
+  for (let c = 0; c < COLS; c++) { grid[c] = []; for (let r = 0; r < ROWS; r++) grid[c][r] = newBubble(c, r, r * DY * 1.1 + c * 9, true); }
+  // a fresh tank always has a few pairs to start on
+  if (!anyMove()) return fill();
+  ver++; count();
+}
+function group(c, r) {
+  const s = grid[c][r]; if (!s || POW(s)) return [];
+  const out = [], seen = new Set([c * 32 + r]), q = [[c, r]];
+  while (q.length) {
+    const [a, b] = q.pop(); out.push([a, b]);
+    for (const [x, y] of nbrs(a, b)) { const k = x * 32 + y, t = grid[x][y]; if (!seen.has(k) && t && t.k === s.k && !POW(t)) { seen.add(k); q.push([x, y]); } }
+  }
+  return out;
+}
+function anyMove() {
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) { const b = grid[c][r]; if (!b) continue; if (POW(b)) return true; for (const [x, y] of nbrs(c, r)) { const t = grid[x][y]; if (t && !POW(t) && t.k === b.k) return true; } }
+  return false;
+}
+function count() { left = 0; for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (grid[c][r]) left++; }
+function find(b) { for (let c = 0; c < COLS; c++) { const r = grid[c].indexOf(b); if (r >= 0) return [c, r]; } return null; }
+// after a few quiet seconds the biggest group glows (or a power bubble, if there are no pairs)
+function hint() {
+  if (hintVer === ver) return hintSet;
+  let top = [], seen = new Set(), pow = null;
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    const b = grid[c][r]; if (!b || seen.has(c * 32 + r)) continue;
+    if (POW(b)) { pow = pow || [c, r]; continue; }
+    const g = group(c, r); g.forEach(([a, q]) => seen.add(a * 32 + q)); if (g.length > top.length) top = g;
+  }
+  if (top.length < 2) top = pow ? [pow] : [];
+  hintVer = ver; hintSet = new Set(top.map(([a, q]) => a * 32 + q));
+  return hintSet;
+}
+function hitCell(x, y) {
+  let bd = 1e9, hit = null;
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) { const b = grid[c][r]; if (!b) continue; const d = Math.hypot(x - b.x, y - b.y); if (d < bd) { bd = d; hit = [c, r]; } }
+  return bd < R * 1.15 ? hit : null;
+}
+
+// ---------- popping ----------
+const mult = () => 1 + Math.min(combo, 10) * .2, multText = () => 'COMBO x' + (+mult().toFixed(1));
+function bump() { if (mode === 'blitz' && state === 'play') { combo = comboT > 0 ? combo + 1 : 0; comboT = 1.2; topCombo = Math.max(topCombo, combo); } }
+function tap(x, y) {
+  const h = hitCell(x, y); if (!h) return;
+  const [c, r] = h, b = grid[c][r];
+  idle = 0;
+  if (POW(b)) { bump(); fireSpecial(c, r); return; }
+  const g = group(c, r);
+  if (g.length < 2) { b.nope = .35; combo = 0; comboT = 0; K.beep(150, .08, { type: 'sine', vol: .04, to: 110 }); return; }
+  bump();
+  const n = g.length, m = mult(), pts = Math.round(n * n * 5 * m);
+  score += pts; bigGroup = Math.max(bigGroup, n);
+  // a big group leaves a power bubble where you tapped
+  const th = RULES[mode].pow, sp = n >= th[2] ? PRISM : n >= th[1] ? BOOM : n >= th[0] ? ZAP : 0;
+  const d2 = ([a, q]) => (cx(a) - cx(c)) ** 2 + (cy(a, q) - cy(c, r)) ** 2;
+  g.sort((p, q) => d2(p) - d2(q));
+  let clocks = 0;
+  g.forEach(([a, q], i) => {
+    const t = grid[a][q]; if (t.sp === CLOCK) clocks++;
+    if (sp && a === c && q === r) { grid[a][q] = { k: t.k, sp, x: t.x, y: t.y, vx: 0, vy: 0, wob: 0, born: .45 }; return; }
+    popAt(a, q, i * .018, 1 + Math.min(i, 24) * .05);
+  });
+  if (clocks && mode === 'blitz') { timeLeft += 3 * clocks; float(b.x, b.y - 30 * TS, '+' + 3 * clocks + ' SEC', '#9fffb0', 18); K.tune([880, 1175], .07, { type: 'sine', vol: .05, at: .05 }); }
+  float(b.x, b.y, '+' + pts, COLORS[b.k][1], n >= 8 ? 24 : 18);
+  if (sp) { float(b.x, b.y + 26 * TS, sp === PRISM ? 'PRISM!' : sp === BOOM ? 'BOOM!' : 'ZAP!', '#fff', 15); K.tune([660, 880, 1320], .06, { type: 'triangle', vol: .05, at: .1 }); }
+  shake = Math.min(6, n * .5);
+  settle();
+}
+function popAt(a, q, delay, pitch) {
+  const t = grid[a][q]; grid[a][q] = null;
+  pops.push({ x: t.x, y: t.y, k: t.k, t: -delay });
+  K.beep(440 * pitch, .06, { type: 'sine', vol: .045, to: 990 * pitch, at: delay });
+}
+function fireSpecial(c, r) {
+  const b = grid[c][r], x0 = cx(c), y0 = cy(c, r), cells = [];
+  grid[c][r] = null;
+  pops.push({ x: b.x, y: b.y, k: b.k, t: 0 });
+  for (let a = 0; a < COLS; a++) for (let q = 0; q < ROWS; q++) {
+    const t = grid[a][q]; if (!t) continue;
+    if (b.sp === ZAP ? Math.abs(cy(a, q) - y0) < R * 1.1 : b.sp === BOOM ? Math.hypot(cx(a) - x0, cy(a, q) - y0) < R * 4.1 : t.k === b.k && !POW(t)) cells.push([a, q]);
+  }
+  if (b.sp === ZAP) { fx.push({ type: 'zap', y: y0, t: 0 }); K.beep(1400, .25, { type: 'sawtooth', vol: .035, to: 300 }); shake = 4; }
+  else if (b.sp === BOOM) { fx.push({ type: 'boom', x: x0, y: y0, t: 0 }); K.noise(.35, .45); K.beep(90, .3, { type: 'sine', vol: .08, to: 40 }); shake = 10; }
+  else { fx.push({ type: 'prism', x: x0, y: y0, t: 0, k: b.k }); K.tune([523, 659, 784, 1047, 1319], .05, { type: 'triangle', vol: .05 }); shake = 5; }
+  cells.sort((p, q) => Math.hypot(cx(p[0]) - x0, cy(p[0], p[1]) - y0) - Math.hypot(cx(q[0]) - x0, cy(q[0], q[1]) - y0));
+  let n = 0, i = 0;
+  for (const [a, q] of cells) {
+    const t = grid[a][q];
+    if (POW(t)) { queue.push({ b: t, t: .28 + queue.length * .22 }); continue; } // other power bubbles go off next
+    if (t.sp === CLOCK && mode === 'blitz' && state === 'play') { timeLeft += 3; float(t.x, t.y - 20 * TS, '+3 SEC', '#9fffb0', 15); }
+    popAt(a, q, i * .014, 1 + (i % 14) * .05); n++; i++;
+  }
+  const pts = Math.round((n + 1) * 20 * mult());
+  score += pts; float(x0, y0, '+' + pts, '#fff', 24);
+  settle();
+}
+// bubbles float up into the gaps; in BLITZ new ones rise in from below, in CHILL empty columns close up
+function settle() {
+  for (let c = 0; c < COLS; c++) {
+    const col = grid[c].filter(Boolean);
+    if (mode === 'blitz') for (let i = 0; col.length < ROWS; i++) col.push(newBubble(c, col.length, i * DY * 1.05 + 10));
+    for (let r = 0; r < ROWS; r++) grid[c][r] = col[r] || null;
+  }
+  if (mode === 'chill') { const cols = grid.filter(col => col.some(Boolean)); while (cols.length < COLS) cols.push(new Array(ROWS).fill(null)); grid = cols; }
+  ver++; count();
+  if (state === 'play' && !queue.length && !anyMove()) { if (mode === 'blitz') shuffleT = .5; else endT = .9; }
+}
+function shuffle() {
+  let tries = 0;
+  do { for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) { const b = grid[c][r]; if (b && !b.sp) b.k = K.ri(0, RULES[mode].colors - 1); } } while (!anyMove() && ++tries < 20);
+  ver++; float(W / 2, TANK.y + TANK.h / 2, 'SHUFFLE!', '#fff', 22); K.tune([392, 523, 659], .06, { type: 'triangle', vol: .04 });
+}
+function float(x, y, text, color, size) { floats.push({ x, y: Math.max(y, 40 * TS), text, color, size: size * TS, t: 0 }); }
+
+// ---------- game flow ----------
+function start(m) {
+  mode = m; score = 0; bigGroup = 0; topCombo = 0; timeLeft = 60; lastSec = 60; combo = 0; comboT = 0; idle = 0; shuffleT = 0; endT = 0;
+  pops = []; fx = []; floats = []; queue = [];
+  state = 'play'; fill(); hud(); hideMenu();
+  K.tune([523, 659, 784, 1047], .08, { type: 'triangle', vol: .05 });
+}
+function hud() {
+  K.set('score', 'SCORE ' + score);
+  K.set('clock', mode === 'blitz' ? 'TIME ' + Math.max(0, Math.ceil(timeLeft)) : 'LEFT ' + left);
+  K.set('best', 'BEST ' + Math.max(best[mode] || 0, score));
+}
+function timeUp() {
+  // BLITZ ends with a last hurrah: every power bubble still in the tank goes off for bonus points
+  state = 'hurrah'; timeLeft = 0; combo = 0; comboT = 0;
+  const pw = []; for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (POW(grid[c][r])) pw.push(grid[c][r]);
+  K.tune([784, 659, 523], .09, { type: 'square', vol: .04 });
+  if (!pw.length) { endT = .7; return; }
+  float(W / 2, TANK.y + TANK.h / 2, 'LAST POPS!', '#ffd45c', 26);
+  pw.forEach((b, i) => queue.push({ b, t: .7 + i * .45 }));
+}
+function finish() {
+  state = 'over';
+  let title, text;
+  if (mode === 'blitz') { title = 'Time!'; text = 'Biggest group ' + bigGroup + '.' + (topCombo ? ' Top combo x' + (+(1 + Math.min(topCombo, 10) * .2).toFixed(1)) + '.' : ''); }
+  else {
+    const bonus = left === 0 ? 2000 : Math.max(0, 1000 - left * 60);
+    score += bonus;
+    title = left ? 'No more pairs' : 'Tank cleared!';
+    text = (left ? left + (left === 1 ? ' bubble' : ' bubbles') + ' left.' : 'Every bubble popped!') + (bonus ? ' Bonus +' + bonus + '.' : '');
+  }
+  const key = mode === 'blitz' ? 'bubbleblitz' : 'bubbleblitz-chill', prev = best[mode] || 0;
+  best[mode] = K.saveBest(key, score);
+  hud();
+  K.tune(score > prev ? [523, 659, 784, 1047, 1319] : [659, 523, 392], .1, { type: 'triangle', vol: .06 });
+  setTimeout(() => showOver(title, text, score > prev && prev > 0), 500);
+}
+
+// ---------- input: every tap counts, even two fingers in one frame ----------
+const taps = [], cvs = document.querySelector('#ks canvas');
+cvs.addEventListener('pointerdown', e => { const r = cvs.getBoundingClientRect(); taps.push({ x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }); });
+
+// ---------- loop ----------
+function spring(b, tx, ty, dt) {
+  b.vy += (ty - b.y) * 80 * dt; b.vy *= Math.pow(.0009, dt); b.y += b.vy * dt;
+  b.vx += (tx - b.x) * 80 * dt; b.vx *= Math.pow(.0009, dt); b.x += b.vx * dt;
+}
+function update(dt) {
+  while (taps.length) { const p = taps.shift(); if (state === 'play') tap(p.x, p.y); }
+  if (state === 'play') {
+    if (mode === 'blitz') {
+      timeLeft -= dt;
+      const s = Math.ceil(timeLeft); if (s < lastSec) { lastSec = s; if (s <= 10 && s > 0) K.beep(s <= 5 ? 1046 : 784, .05, { type: 'square', vol: .03 }); }
+      if (timeLeft <= 0) timeUp();
+    }
+    if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
+    if (shuffleT > 0 && (shuffleT -= dt) <= 0) shuffle();
+    idle += dt;
+  }
+  if (endT > 0 && (endT -= dt) <= 0 && (state === 'play' || state === 'hurrah')) finish();
+  // power bubbles waiting their turn (chain reactions and the last hurrah)
+  const due = []; queue = queue.filter(q => (q.t -= dt) > 0 || (due.push(q.b), false));
+  due.forEach(b => { const at = find(b); if (at) fireSpecial(at[0], at[1]); });
+  if (state === 'hurrah' && !queue.length && !due.length && endT <= 0) endT = .9;
+  if (state === 'play' && mode === 'chill' && !queue.length && !due.length && endT <= 0 && !anyMove()) endT = .9;
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    const b = grid[c] && grid[c][r]; if (!b) continue;
+    spring(b, cx(c), cy(c, r), dt); b.wob += dt;
+    if (b.nope) b.nope = Math.max(0, b.nope - dt); if (b.born) b.born = Math.max(0, b.born - dt);
+  }
+  pops = pops.filter(q => (q.t += dt) < .45);
+  fx = fx.filter(f => (f.t += dt) < .6);
+  floats = floats.filter(f => (f.t += dt) < 1.1);
+  if (shake > 0) shake = Math.max(0, shake - dt * 30);
+  amb.forEach(a => { a.y -= a.v * dt; if (a.y < -10) { a.y = H + 10; a.x = Math.random() * W; } });
+  hud();
+}
+function draw(c, t) {
+  // water, light rays, drifting specks
+  const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#0d4f7a'); g.addColorStop(.5, '#08305a'); g.addColorStop(1, '#051733');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  c.save(); c.globalAlpha = .06; c.fillStyle = '#bff3ff';
+  for (let x = -170 + (t / 60) % 130; x < W + 40; x += 130) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 46, 0); c.lineTo(x + 160, H); c.lineTo(x + 100, H); c.closePath(); c.fill(); }
+  c.restore();
+  c.fillStyle = 'rgba(200,245,255,.18)'; amb.forEach(a => { c.beginPath(); c.arc(a.x, a.y, a.r * TS, 0, Math.PI * 2); c.fill(); });
+  // the glass tank
+  c.fillStyle = 'rgba(255,255,255,.05)'; rr(c, TANK.x, TANK.y, TANK.w, TANK.h, 18 * TS); c.fill();
+  c.strokeStyle = 'rgba(160,230,255,.3)'; c.lineWidth = 2 * TS; c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,.16)'; c.lineWidth = 4 * TS; c.beginPath(); c.moveTo(TANK.x + 9 * TS, TANK.y + 26 * TS); c.lineTo(TANK.x + 9 * TS, TANK.y + TANK.h * .45); c.stroke();
+  c.save(); if (shake) c.translate((Math.random() - .5) * shake * TS, (Math.random() - .5) * shake * TS);
+  const glow = state === 'play' && idle > 4 ? hint() : null;
+  for (let col = 0; col < COLS; col++) for (let r = 0; r < ROWS; r++) {
+    const b = grid[col] && grid[col][r]; if (!b) continue;
+    const x = b.x + (b.nope ? Math.sin(b.nope * 60) * 3 * TS : 0), y = b.y, s = 1 + Math.sin(b.wob * 2.2) * .025 - (b.born || 0) * .6;
+    if (y > H + R) continue;
+    if (glow && glow.has(col * 32 + r)) { c.fillStyle = 'rgba(255,255,255,' + (.2 + .15 * Math.sin(t / 150)) + ')'; c.beginPath(); c.arc(x, y, R * 1.14, 0, Math.PI * 2); c.fill(); }
+    c.drawImage(SPR[b.k], x - R * s, y - R * s, R * 2 * s, R * 2 * s);
+    if (b.sp) icon(c, b.sp, x, y, R / 20, t);
+  }
+  for (const q of pops) {
+    if (q.t < 0) continue;
+    const k = q.t / .45;
+    c.globalAlpha = 1 - k; c.strokeStyle = COLORS[q.k][0]; c.lineWidth = 3 * TS * (1 - k); c.beginPath(); c.arc(q.x, q.y, R * (.7 + k * 1.1), 0, Math.PI * 2); c.stroke();
+    c.fillStyle = COLORS[q.k][1];
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + q.x; c.beginPath(); c.arc(q.x + Math.cos(a) * R * (.5 + k * 1.6), q.y + Math.sin(a) * R * (.5 + k * 1.6) + k * k * R, 3 * TS * (1 - k), 0, Math.PI * 2); c.fill(); }
+    c.globalAlpha = 1;
+  }
+  for (const f of fx) {
+    const k = f.t / .6; c.globalAlpha = 1 - k;
+    if (f.type === 'zap') { c.strokeStyle = '#fffbd0'; c.lineWidth = 6 * TS * (1 - k); c.beginPath(); for (let x = TANK.x; x <= TANK.x + TANK.w; x += 16 * TS) c.lineTo(x, f.y + (Math.random() - .5) * 14 * TS); c.stroke(); }
+    else if (f.type === 'boom') { const rad = R * 5 * (.4 + k), rg = c.createRadialGradient(f.x, f.y, 4, f.x, f.y, rad); rg.addColorStop(0, 'rgba(255,240,180,.9)'); rg.addColorStop(1, 'rgba(255,120,40,0)'); c.fillStyle = rg; c.beginPath(); c.arc(f.x, f.y, rad, 0, Math.PI * 2); c.fill(); }
+    else { c.strokeStyle = COLORS[f.k][1]; c.lineWidth = 4 * TS; for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 + k * 2; c.beginPath(); c.moveTo(f.x, f.y); c.lineTo(f.x + Math.cos(a) * TANK.w * k, f.y + Math.sin(a) * TANK.w * k); c.stroke(); } }
+    c.globalAlpha = 1;
+  }
+  c.restore();
+  for (const f of floats) { const k = f.t / 1.1; c.globalAlpha = 1 - k * k; K.text(c, f.text, f.x, f.y - k * 34 * TS, Math.round(f.size), f.color); c.globalAlpha = 1; }
+  if (LAND) sides(c, t); else topBottom(c, t);
+}
+// standing up: the timer bar over the tank, the power-bubble guide under it
+function topBottom(c, t) {
+  const x = TANK.x + 6, w = TANK.w - 12;
+  if (mode === 'blitz') {
+    const fr = Math.max(0, Math.min(1, timeLeft / 60));
+    c.fillStyle = 'rgba(255,255,255,.12)'; rr(c, x, 18, w, 12, 6); c.fill();
+    if (fr > 0) { c.fillStyle = timeLeft < 10 ? (Math.sin(t / 90) > 0 ? '#ff6b6b' : '#ff9a9a') : '#ffd45c'; rr(c, x, 18, Math.max(12, w * fr), 12, 6); c.fill(); }
+  } else {
+    const fr = left / (COLS * ROWS);
+    c.fillStyle = 'rgba(255,255,255,.12)'; rr(c, x, 18, w, 12, 6); c.fill();
+    if (fr > 0) { c.fillStyle = '#7fe7ff'; rr(c, x, 18, Math.max(12, w * fr), 12, 6); c.fill(); }
+  }
+  if (combo >= 1 && state === 'play') { K.text(c, multText(), W / 2, 47, 17, '#ffd45c'); c.fillStyle = 'rgba(255,212,92,.6)'; rr(c, W / 2 - 50, 59, 100 * Math.max(0, comboT / 1.2), 4, 2); c.fill(); }
+  else K.text(c, state === 'hurrah' ? 'LAST POPS!' : mode === 'blitz' ? 'POP FAST FOR COMBOS' : 'CLEAR THE TANK', W / 2, 48, 13, 'rgba(234,250,255,.6)');
+  const y = TANK.y + TANK.h + Math.max(40, (H - TANK.y - TANK.h) * .42), list = guide(), n = list.length;
+  list.forEach(([sp, k, a, b], i) => {
+    const x = W * (i * 2 + 1) / (n * 2);
+    c.drawImage(SPR[k], x - 17, y - 17, 34, 34); icon(c, sp, x, y, .85, t);
+    K.text(c, a, x, y + 32, 13, '#eafaff');
+    c.font = '12px Rubik, system-ui, sans-serif'; c.fillStyle = 'rgba(234,250,255,.65)'; c.textAlign = 'center'; c.fillText(b, x, y + 50);
+  });
+}
+// the power bubbles (and in BLITZ the clock) explained under or beside the tank
+function guide() {
+  const g = [[ZAP, 3, 'POP 5', 'clears a row'], [BOOM, 1, 'POP 8', 'blasts around'], [PRISM, 4, 'POP 11', 'pops its color']];
+  if (mode === 'blitz') g.push([CLOCK, 2, 'CLOCK', '+3 seconds']);
+  return g;
+}
+// on its side: score and timer on the left, best, combo and the power-bubble guide on the right
+function sides(c, t) {
+  const lw = TANK.x, rx = TANK.x + TANK.w, rw = W - rx, f = Math.min(TS, lw / 150), lc = lw / 2, rc = rx + rw / 2;
+  K.text(c, 'SCORE', lc, 140, Math.round(15 * f), 'rgba(234,250,255,.7)');
+  K.text(c, String(score), lc, 182, Math.round(34 * f), '#fff');
+  const rad = Math.min(lw * .3, 66 * f), ry = 370;
+  c.lineWidth = 11 * f; c.strokeStyle = 'rgba(255,255,255,.12)'; c.beginPath(); c.arc(lc, ry, rad, 0, Math.PI * 2); c.stroke();
+  const fr = mode === 'blitz' ? Math.max(0, Math.min(1, timeLeft / 60)) : left / (COLS * ROWS);
+  if (fr > 0) { c.strokeStyle = mode === 'chill' ? '#7fe7ff' : timeLeft < 10 ? (Math.sin(t / 90) > 0 ? '#ff6b6b' : '#ff9a9a') : '#ffd45c'; c.lineCap = 'round'; c.beginPath(); c.arc(lc, ry, rad, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * fr); c.stroke(); c.lineCap = 'butt'; }
+  K.text(c, mode === 'blitz' ? String(Math.max(0, Math.ceil(timeLeft))) : String(left), lc, ry - 2 * f, Math.round(36 * f), '#fff');
+  K.text(c, mode === 'blitz' ? 'SECONDS' : 'LEFT', lc, ry + rad + 30 * f, Math.round(13 * f), 'rgba(234,250,255,.7)');
+  const g = Math.min(TS, rw / 150);
+  K.text(c, 'BEST', rc, 140, Math.round(15 * g), 'rgba(234,250,255,.7)');
+  K.text(c, String(Math.max(best[mode] || 0, score)), rc, 182, Math.round(30 * g), '#ffd45c');
+  if (combo >= 1 && state === 'play') { K.text(c, multText(), rc, 248, Math.round(18 * g), '#ffd45c'); c.fillStyle = 'rgba(255,212,92,.6)'; rr(c, rc - 55 * g, 266, 110 * g * Math.max(0, comboT / 1.2), 5 * g, 2); c.fill(); }
+  else K.text(c, state === 'hurrah' ? 'LAST POPS!' : mode === 'blitz' ? 'POP FAST' : 'CLEAR IT', rc, 248, Math.round(13 * g), 'rgba(234,250,255,.55)');
+  guide().forEach(([sp, k, a, b], i) => {
+    const y = 318 + i * 70 * Math.min(1, g), x = rc - 44 * g;
+    c.drawImage(SPR[k], x - 17 * g, y - 17 * g, 34 * g, 34 * g); icon(c, sp, x, y, .85 * g, t);
+    K.text(c, a, x + 30 * g, y - 8 * g, Math.round(13 * g), '#eafaff', 'left');
+    c.font = Math.round(12 * g) + 'px Rubik, system-ui, sans-serif'; c.fillStyle = 'rgba(234,250,255,.65)'; c.textAlign = 'left'; c.fillText(b, x + 30 * g, y + 12 * g);
+  });
+}
+function icon(c, sp, x, y, s, t) {
+  c.save(); c.translate(x, y); c.scale(s, s);
+  c.fillStyle = 'rgba(255,255,255,.92)'; c.strokeStyle = 'rgba(0,0,0,.45)'; c.lineWidth = 2;
+  if (sp === ZAP) { c.beginPath(); c.moveTo(-2, -12); c.lineTo(-8, 2); c.lineTo(-1, 2); c.lineTo(-4, 12); c.lineTo(8, -3); c.lineTo(1, -3); c.lineTo(4, -12); c.closePath(); c.fill(); c.stroke(); }
+  else if (sp === BOOM) { c.beginPath(); c.arc(0, 2, 8.5, 0, Math.PI * 2); c.fillStyle = '#1c1c22'; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke(); c.strokeStyle = '#ffd45c'; c.lineWidth = 2; c.beginPath(); c.moveTo(4, -5); c.quadraticCurveTo(8, -12, 12, -10); c.stroke(); c.fillStyle = '#fff3a0'; c.beginPath(); c.arc(12, -10, 2 + Math.sin(t / 60) * .8, 0, Math.PI * 2); c.fill(); }
+  else if (sp === PRISM) { c.rotate(t / 700); c.beginPath(); for (let i = 0; i < 10; i++) { const r = i & 1 ? 5 : 12, a = i / 10 * Math.PI * 2 - Math.PI / 2; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); const pg = c.createLinearGradient(-12, -12, 12, 12); pg.addColorStop(0, '#ff9ad5'); pg.addColorStop(.5, '#fff7a8'); pg.addColorStop(1, '#8ff0ff'); c.fillStyle = pg; c.fill(); c.stroke(); }
+  else if (sp === CLOCK) { c.beginPath(); c.arc(0, 0, 9, 0, Math.PI * 2); c.fillStyle = '#fff'; c.fill(); c.stroke(); c.strokeStyle = '#0a6a3a'; c.lineWidth = 2; c.beginPath(); c.moveTo(0, 0); c.lineTo(0, -6); c.moveTo(0, 0); c.lineTo(4, 2); c.stroke(); }
+  c.restore();
+}
+function rr(c, x, y, w, h, r) { r = Math.min(r, h / 2, w / 2); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+
+// ---------- menus ----------
+const menu = document.createElement('div'); menu.className = 'bm'; document.body.appendChild(menu);
+function showMenu() {
+  state = 'menu';
+  menu.innerHTML = '<h1>BUBBLE <br>BLITZ</h1><p>Tap 2 or more touching bubbles of the same color to pop them. Pop 5 at once for a ZAP bubble, 8 for a BOOM and 11 for a PRISM. Tap a power bubble to set it off.</p>' +
+    '<div class="modes"><button class="mode blitz" id="mB"><b>BLITZ</b><span>60 seconds. Pop fast for combos. Clock bubbles add time.</span><i>BEST ' + (best.blitz || 0) + '</i></button>' +
+    '<button class="mode chill" id="mC"><b>CHILL</b><span>No clock, no refills. Clear the tank for a big bonus.</span><i>BEST ' + (best.chill || 0) + '</i></button></div>' +
+    '<p class="tips">Stuck? Wait a moment and the biggest group glows.</p>';
+  menu.hidden = false;
+  menu.querySelector('#mB').onclick = () => { wake(); start('blitz'); };
+  menu.querySelector('#mC').onclick = () => { wake(); start('chill'); };
+}
+function showOver(title, text, record) {
+  menu.innerHTML = '<h1>' + title.toUpperCase() + '</h1><div class="big">' + score + '</div><p>' + text + (record ? ' New best!' : ' Best: ' + (best[mode] || 0) + '.') + '</p>' +
+    '<div class="row"><button class="btn" id="again">Play again</button><button class="btn ghost" id="toMenu">Menu</button></div>';
+  menu.hidden = false;
+  menu.querySelector('#again').onclick = () => { wake(); start(mode); };
+  menu.querySelector('#toMenu').onclick = () => showMenu();
+  menu.querySelector('#again').focus();
+}
+function hideMenu() { menu.hidden = true; }
+function wake() { K.press('unlock'); K.release('unlock'); }
+
+K.hud(['score', 'clock', 'best']);
+view(); addEventListener('resize', () => { view(); setTimeout(view, 150); });
+fill(); hud(); showMenu();
+K.run(update, draw);
+</script>
+</body>
+</html>

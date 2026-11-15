@@ -1,5 +1,5 @@
 // Offline cache for Joystik Original Arcade (formerly Pocket Arcade). Bump VERSION whenever you add or change a game.
-const VERSION = "arcade-v44";
+const VERSION = "arcade-v45";
 const FILES = [
  "./",
  "./games.js",
@@ -12,7 +12,9 @@ const FILES = [
  "./games/boot-camp-blitz.html",
  "./games/bounce-breaker.html",
  "./games/box-out.html",
+ "./games/bubble-blitz.html",
  "./games/bug-bloom.html",
+ "./games/check-these-pawns.html",
  "./games/city-smash.html",
  "./games/claw-fury.html",
  "./games/coast-rush.html",
@@ -93,6 +95,7 @@ const FILES = [
  "./index.html",
  "./lib/art.js",
  "./lib/brawl.js",
+ "./lib/chess-engine.js",
  "./lib/fit.js",
  "./lib/joy.js",
  "./lib/kit.js",
