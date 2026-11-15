@@ -55,6 +55,7 @@ cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
 let tapPt=null;const inp={x:0,y:0,fire:false,fireTap:false,up:false,upTap:false};let prevFire=false,prevUp=false;
 function readInput(){let x=0,y=0;if(keys.arrowleft||keys.a)x--;if(keys.arrowright||keys.d)x++;if(keys.arrowup||keys.w)y--;if(keys.arrowdown||keys.s)y++;
  if(joy){const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>7){const k=Math.min(1,m/38);x=dx/m*k;y=dy/m*k}}
+ if(ROT){const t=x;x=y;y=-t} // the rink is turned a quarter turn sideways, so screen right = toward their net
  const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f;const pz=!!keys.x||!!keys.l;inp.passTap=pz&&!prevPass;prevPass=pz}
 function drawJoy(){if(!joy&&!coarse)return;ctx.save();if(joy){ctx.globalAlpha=.3;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.x0,joy.y0,42,0,TAU);ctx.stroke();ctx.fillStyle='#fff';const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy),k=m>42?42/m:1;ctx.beginPath();ctx.arc(joy.x0+dx*k,joy.y0+dy*k,17,0,TAU);ctx.fill()}
  if(coarse&&state==='play'&&ACTION_LABEL&&!ROT){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(CW-58,CH-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,CW-58,CH-58)}ctx.restore()}
@@ -62,7 +63,17 @@ let ACTION_LABEL='FIRE';
 // sideways the rink lies long-ways across the screen (your net on the left, theirs on the right), sized to fit between
 // the joystick on the left, the SHOOT and PASS buttons on the right and the score along the top
 let VS=1,VX=0,VY=0;
-if(ROT){const css=Math.min(innerWidth/CW,innerHeight/CH),offL=(innerWidth-CW*css)/2,mL=Math.max(8,(coarse?182:10)-offL)/css,mR=Math.max(8,(coarse?188:10)-offL)/css,mT=48/css,mB=4/css,aw=CW-mL-mR,ah=CH-mT-mB;VS=Math.min(aw/H,ah/W);VX=mL+(aw-H*VS)/2;VY=mT+(ah-W*VS)/2}
+const CAM={on:false,mL:0,mR:0,mT:0,mB:0,aw:0,ah:0};
+if(ROT){const css=Math.min(innerWidth/CW,innerHeight/CH),offL=(innerWidth-CW*css)/2,mL=Math.max(8,(coarse?182:10)-offL)/css,mR=Math.max(8,(coarse?188:10)-offL)/css,mT=48/css,mB=4/css,aw=CW-mL-mR,ah=CH-mT-mB;
+ // zoomed in about 1.4x past "whole rink fits", with a camera that follows the puck (see camera() below)
+ VS=Math.max(Math.min(aw/H,ah/W)*1.4,ah/W*1.3);Object.assign(CAM,{on:true,mL,mR,mT,mB,aw,ah});camera(0,true)}
+// keeps the puck near the middle of the free space between the controls, without showing past the rink's ends
+function camera(dt,snap,focus){if(!CAM.on)return;const f=focus||{x:200,y:300};
+ const fx=CAM.mL+CAM.aw/2,fy=CAM.mT+CAM.ah/2,len=H*VS,wid=W*VS;
+ let tx=fx-(H-f.y)*VS,ty=fy-f.x*VS;
+ if(len<=CAM.aw)tx=CAM.mL+(CAM.aw-len)/2;else tx=clamp(tx,CW-CAM.mR-len,CAM.mL);
+ if(wid<=CAM.ah)ty=CAM.mT+(CAM.ah-wid)/2;else ty=clamp(ty,CH-CAM.mB-wid,CAM.mT);
+ if(snap){VX=tx;VY=ty;return}const k=1-Math.exp(-dt*5);VX+=(tx-VX)*k;VY+=(ty-VY)*k}
 function viewT(){if(ROT)ctx.transform(0,VS,-VS,0,VX+H*VS,VY)}
 function toScreen(x,y){return ROT?{x:VX+(H-y)*VS,y:VY+x*VS}:{x,y}}
 // the crowd fills the rest of the screen around the rink
@@ -94,6 +105,7 @@ $('pz').onclick=togglePause;
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause()});
 let last=performance.now(),T=0;
 function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(state==='play'){T+=dt;update(dt);updFx(dt)}else if(state==='over'||state==='menu')updFx(dt);
+ camera(dt,state!=='play',puck);
  if(ROT)ctx.drawImage(standsArt(),0,0,CW,CH);
  ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));viewT();draw(state==='play'?dt:0);drawFx();ctx.restore();drawTop();if(typeof drawOver==='function')drawOver();drawBanner(state==='play'?dt:0);drawJoy();
  if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,CW,CH);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',CW/2,CH/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',CW/2,CH/2+28)}
