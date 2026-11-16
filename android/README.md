@@ -6,7 +6,7 @@ It replaced the PWABuilder (Trusted Web Activity) build in Nov 2026 because Test
 
 ## Build
 - Needs JDK 17+ and the Android SDK (platform 36, build-tools 36.0.0). Put `sdk.dir=/path/to/android-sdk` in `local.properties`.
-- Raise `versionCode` in `app/build.gradle` for every upload (10 = version 1.1.0, the first WebView build).
+- Raise `versionCode` in `app/build.gradle` for every upload (10 = version 1.1.0, the first WebView build; 11 = 1.1.1, the new icon lettering).
 - `./gradlew bundleRelease` makes the unsigned bundle at `app/build/outputs/bundle/release/app-release.aab`.
 - `./gradlew assembleDebug` makes a test copy (`io.github.imissyoujobe.pocketarcade.preview`, "Joystik test") that installs next to the Play version.
 
@@ -19,4 +19,4 @@ It replaced the PWABuilder (Trusted Web Activity) build in Nov 2026 because Test
 - Full screen (bars hidden, swipe to show), follows the phone's rotation, keeps games out from under the camera cutout.
 - Back button closes a game or My Scores first, then leaves the app.
 - Links outside /pocket-arcade/ open in the browser. If the first launch has no internet, it shows a "No connection / Try again" screen; after that the site's service worker keeps the games working offline.
-- Icon: James's cockpit artwork (adaptive icon: the picture at 66dp with its edges stretched and blurred behind it).
+- Icon: James's cockpit artwork, new chunky green JOYSTIK lettering since 1.1.1 (Nov 16 2026). Adaptive icon: the picture at 64dp, nudged about 1dp left and down so the whole word sits inside the 66dp safe circle on every launcher shape. Behind it is a copy with the letters painted out, mirrored to the edges and blurred.
