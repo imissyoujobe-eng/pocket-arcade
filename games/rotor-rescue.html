@@ -490,6 +490,15 @@ css.textContent =
   '#ko .rr-opt{all:unset;box-sizing:border-box;width:154px;padding:8px 8px 7px;border-radius:14px;border:3px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:#fff;font:12px/1.3 Rubik,system-ui,sans-serif;text-align:center}' +
   '#ko .rr-opt[aria-pressed="true"]{border-color:var(--accent);background:rgba(140,255,106,.16)}#ko .rr-opt:focus-visible{outline:3px solid #fff;outline-offset:2px}' +
   '.rr-opt canvas{width:126px;height:58px}.rr-opt b{font:15px Bungee,Impact,sans-serif;font-weight:400;letter-spacing:.02em}' +
+  // the start card shows James's ROTOR RESCUE cover art in place of the title text
+  '#ko h1.rr-art{width:min(276px,76vw);aspect-ratio:3/2;border-radius:16px;overflow:hidden;font-size:0;box-shadow:0 0 0 3px rgba(255,255,255,.2),0 10px 28px rgba(0,0,0,.55)}' +
+  '#ko h1.rr-art img{display:block;width:100%;height:100%;object-fit:cover;object-position:50% 8%}#ko.rr-title{gap:10px}' +
+  // phone on its side: the whole cover stands on the left like a poster and the card sits beside it
+  'body.land #ko.rr-title{padding-left:calc(84vh * .7732 + 36px);padding-left:calc(84dvh * .7732 + 36px)}' +
+  'body.land #ko h1.rr-art{position:absolute;left:16px;top:8vh;top:8dvh;height:84vh;height:84dvh;width:calc(84vh * .7732);width:calc(84dvh * .7732);aspect-ratio:auto}' +
+  'body.land #ko h1.rr-art img{object-position:50% 50%}' +
+  // (the stick and buttons do nothing on the start card, and sideways they'd show through it)
+  'body.land.rr-cover #kp{visibility:hidden}' +
   '@media (max-height:560px){#ko{gap:8px;padding-block:10px}#ko h1{font-size:clamp(26px,9vh,44px)}#ko p{font-size:13.5px;line-height:1.35;max-width:60ch}#ko .rr-opt{width:140px;padding:4px 6px}.rr-opt canvas{width:96px;height:44px}.rr-opt span{font-size:11px}}';
 document.head.appendChild(css);
 function drawHeliIcon(g, id) {
@@ -527,10 +536,18 @@ function addPicker() {
   }
   ov.insertBefore(row, btn);
 }
+// James's cover art (art/rotor-rescue.jpg, also the game's tile on the menu) stands in for the title text
+function addCover() {
+  const ov = document.getElementById('ko'), h = ov && ov.querySelector(':scope > h1'); if (!h) return;
+  const im = new Image(); im.alt = 'Rotor Rescue'; im.width = 600; im.height = 776;
+  im.onerror = () => { h.className = ''; h.textContent = 'ROTOR RESCUE'; ov.classList.remove('rr-title'); document.body.classList.remove('rr-cover'); };
+  im.src = '../art/rotor-rescue.jpg';
+  h.textContent = ''; h.className = 'rr-art'; h.appendChild(im); ov.classList.add('rr-title'); document.body.classList.add('rr-cover');
+}
 function title() {
   state = 'title'; dropMissionObjs(); setSky(false); setAttractHeli(); smokeSite = null;
-  K.card({ title: 'ROTOR RESCUE', text: 'Jungle rescue missions from the cockpit. Pick your chopper, lift off from the firebase, fly to the smoke, land, load the people and bring them home. Drag the screen to look around: look at an enemy and your sight locks on to it.', best: best ? 'BEST ' + best.toLocaleString() : '', button: 'Fly', onStart: () => { mi = 0; score = 0; brief(); } });
-  addPicker();
+  K.card({ title: 'ROTOR RESCUE', text: 'Jungle rescue missions from the cockpit. Pick your chopper, lift off from the firebase, fly to the smoke, land, load the people and bring them home. Drag the screen to look around: look at an enemy and your sight locks on to it.', best: best ? 'BEST ' + best.toLocaleString() : '', button: 'Fly', onStart: () => { document.getElementById('ko').classList.remove('rr-title'); document.body.classList.remove('rr-cover'); mi = 0; score = 0; brief(); } });
+  addPicker(); addCover();
 }
 function brief() {
   state = 'brief'; M = MISSIONS[mi]; dropMissionObjs(); setSky(!!M.dusk); setAttractHeli(); smokeSite = SITES[M.lz];

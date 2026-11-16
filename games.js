@@ -3,9 +3,10 @@
 // To add a game: put its file in games/ (games/<id>.html), add one line below and raise ARCADE_TOTAL to match.
 // My Scores: key = the name a kit game saves its best under (pa-<key>); store = where an older game saves its own best;
 // kind = how that score reads (time, cs, ms, secs, mins, par, wins, fights, cup, cash, rally, streak, level; blank = points).
+// art = optional cover picture (in art/, 600x776 portrait, also listed in sw.js) shown as the game's whole tile on the menu; its lettering is the title.
 window.ARCADE_TOTAL = 87;
 window.ARCADE_GAMES = [
-  { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue' },
+  { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue', art: 'art/rotor-rescue.jpg' },
   { id: 'river-rats', name: 'River Rats', genre: 'Shooter', tag: 'Jet boat, minigun and rockets up a jungle river', key: 'riverrats' },
   { id: 'word-clash', name: 'Word Clash', genre: 'Word', tag: 'Crossword tile duel vs the computer or friends', key: 'wordclash' },
   { id: 'word-wheel', name: 'Word Wheel', genre: 'Word', tag: 'Swipe the letters to fill the crossword', key: 'wordwheel', kind: 'level' },

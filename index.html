@@ -41,6 +41,13 @@ main{max-width:1100px;margin:0 auto;padding:0 16px 40px;display:grid;grid-templa
 .tile.soon::before{display:none}
 .tile.soon .num{color:var(--muted)}
 .tile.soon .name{color:var(--muted);font-size:15px}
+/* a game with cover art (art: in games.js) shows the picture as its whole tile; the art's own lettering is the title */
+.tile.art{aspect-ratio:600/776;padding:12px;background:#0b0818}
+.tile.art::before{height:34px;clip-path:none;opacity:1}
+.tile.art img{position:absolute;top:34px;left:0;width:100%;height:calc(100% - 34px);object-fit:cover;object-position:50% 0;display:block}
+.tile.art::after{content:"";position:absolute;inset:auto 0 0 0;height:34%;background:linear-gradient(to top,rgba(10,7,22,.94) 35%,rgba(10,7,22,0));pointer-events:none}
+.tile.art .name{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.tile.art .tag{z-index:1;color:#f1edff;text-shadow:0 1px 3px #000}
 .count{max-width:1100px;margin:0 auto;padding:0 16px 10px;color:var(--muted);font-size:13px}
 #player{position:fixed;inset:0;background:#000;z-index:10;display:none}
 #player.on{display:block}
@@ -127,6 +134,7 @@ footer a{color:var(--muted)}
         el.innerHTML='<span class="g"></span><span class="num"></span><span class="name"></span><span class="tag"></span>';
         el.querySelector('.g').textContent=g.genre;el.querySelector('.num').textContent=pad(i+1);
         el.querySelector('.name').textContent=g.name;el.querySelector('.tag').textContent=g.tag;
+        if(g.art){var im=new Image();im.src=g.art;im.alt='';im.width=600;im.height=776;im.decoding='async';if(i>7)im.loading='lazy';el.classList.add('art');el.insertBefore(im,el.firstChild)}
         el.onclick=(function(id,name){return function(){open(id,name)}})(g.id,g.name);
       }else{
         if(filter!=='All'&&filter!=='Coming soon')continue;
