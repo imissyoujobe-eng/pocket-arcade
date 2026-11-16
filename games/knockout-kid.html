@@ -14,8 +14,9 @@
 // guard and they counter, land a combo and they chain punches of their own. A knockout drops them face-first at your feet.
 K.theme({ bg: '#120a14', ink: '#fff4f0', accent: '#ff3b5c', accentInk: '#fff' });
 // tall portrait view: the 256-wide ring scene is drawn 1.12x bigger, centred, with extra crowd above it and HUD on top
-const W = 240, H = 330, SW = 256, SC = 1.12, OY = 56;
+let W = 240; const H = 330, SW = 256, SC = 1.12, OY = 56;
 K.screen(W, H);
+K.flex(240, H, w => { W = w; }, { maxW: 760 }); // phone on its side: the whole arena around the ring
 K.hud(['me', 'round', 'foe']);
 K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'LEFT' }, { id: 'a', label: 'RIGHT' }] });
 

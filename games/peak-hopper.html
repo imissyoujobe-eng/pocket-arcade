@@ -13,12 +13,13 @@
 // Dodge bouncing balls and Hiss the snake, catch the green ball to freeze everyone, catch Smudge before he undoes your work,
 // and ride a spinning disc back to the top to trick Hiss into jumping off.
 K.theme({ bg: '#140c2a', ink: '#f6f0ff', accent: '#ffb02e', accentInk: '#2a1600' });
-const W = 240, H = 300;
+let W = 240; const H = 300;
 K.screen(W, H);
+K.flex(240, H, w => { W = w; CX = W / 2; }, { maxW: 760 }); // phone on its side: the pyramid in the middle of a wide night sky
 K.hud(['score', 'level', 'lives']);
 K.pad({ dpad: '4', buttons: [] });
 
-const ROWS = 7, CW = 28, RH = 21, TOPY = 62, CX = W / 2;
+const ROWS = 7, CW = 28, RH = 21, TOPY = 62; var CX = W / 2;
 const DIRS = { ul: [-1, -1], ur: [-1, 0], dl: [1, 0], dr: [1, 1] };
 // colors for each round: start / middle / target tops, plus the two side faces
 const ROUND_COL = [
@@ -29,7 +30,7 @@ const ROUND_COL = [
 ];
 
 let state = 'title', score, lives, level, round, cubes, P, mobs, discs, spawnT, freezeT, msg, msgT, deadT, clearT, best = K.best('peakhopper'), hissLure = null, stars = [];
-for (let i = 0; i < 50; i++) stars.push({ x: Math.random() * W, y: Math.random() * H * 0.6, s: Math.random() * 1.2 + 0.3, p: Math.random() * 6 });
+for (let i = 0; i < 140; i++) stars.push({ x: Math.random() * 1100, y: Math.random() * H * 0.6, s: Math.random() * 1.2 + 0.3, p: Math.random() * 6 });
 
 function title() { K.card({ title: 'PEAK HOPPER', text: 'Push the joystick (or tap) toward a corner to hop that way. Land on every cube to change its top to the target color shown up top. Dodge red balls and Hiss the snake. Green ball freezes everyone. Catch Smudge before he un-flips your cubes. Jump onto a spinning disc to fly back to the top. Hiss will follow you off the edge!', best: best ? 'BEST ' + best : '', button: 'Hop!', onStart: start }); }
 function start() { score = 0; lives = 3; level = 1; round = 1; newRound(); state = 'play'; hud(); }

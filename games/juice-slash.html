@@ -10,8 +10,9 @@
 <script>
 // Juice Slash: fruit flies up, you swipe to slice it. Hit several in one swipe for a combo. Never slice a bomb, and don't let fruit fall past you.
 K.theme({ bg: '#1a0e08', ink: '#fff', accent: '#ff8a2a', accentInk: '#fff' });
-const W = 320, H = 480;
+let W = 320; const H = 480;
 K.screen(W, H, { smooth: true });
+K.flex(320, H, w => { W = w; }, { smooth: true, maxW: 1100 }); // phone on its side: the whole wide cutting board
 K.hud(['score', 'combo', 'lives']);
 const FRUITS = [
   { n: 'apple', r: 20, skin: '#e8343a', flesh: '#fff3d0', juice: '#ff6a6a' },

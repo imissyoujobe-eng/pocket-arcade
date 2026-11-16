@@ -10,8 +10,9 @@
 <script>
 // Apex Grand Prix: Formula racing from behind the wheel. Run a qualifying lap to earn your grid spot, then race three laps against the field.
 K.theme({ bg: '#101826', ink: '#f4f6ff', accent: '#ff3b3b', accentInk: '#fff' });
-const W = 320, H = 240, SEG = 100, RW = 1000, CAMH = 900, DEPTH = 0.84, DRAW = 110, MAXV = SEG * 62;
+let W = 320; const H = 240, SEG = 100, RW = 1000, CAMH = 900, DEPTH = 0.84, DRAW = 110, MAXV = SEG * 62;
 K.screen(W, H, { smooth: true });
+K.flex(320, H, w => { W = w; }, { smooth: true, maxW: 560 }); // phone on its side: a wider view of the track
 K.hud(['mode', 'pos', 'time']);
 K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'BRAKE' }, { id: 'a', label: 'GAS' }] });
 
@@ -87,7 +88,7 @@ function endRace() {
   K.card({ title: p === 1 ? 'YOU WIN!' : 'FINISHED P' + p, text: '3 laps in ' + raceT.toFixed(2) + ' seconds.' + (p === 1 ? ' Champagne time!' : ' Qualify faster to start further up.'), best: 'BEST LAP ' + (best / 100).toFixed(2) + 's', button: 'Qualify again', onStart: startQual });
 }
 
-function project(z, x, camX, camZ) { const cz = z - camZ; const s = DEPTH / Math.max(1, cz); return { x: W / 2 + s * (x - camX) * W / 2, y: H / 2 + s * CAMH * H / 2, w: s * RW * W / 2, s }; }
+function project(z, x, camX, camZ) { const cz = z - camZ; const s = DEPTH / Math.max(1, cz); const k = H * 2 / 3; return { x: W / 2 + s * (x - camX) * k, y: H / 2 + s * CAMH * H / 2, w: s * RW * k, s }; }
 function quad(c, x1, y1, w1, x2, y2, w2, col) { c.fillStyle = col; c.beginPath(); c.moveTo(x1 - w1, y1); c.lineTo(x2 - w2, y2); c.lineTo(x2 + w2, y2); c.lineTo(x1 + w1, y1); c.fill(); }
 function hsh(i, k) { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); }
 function shade(hex, k) { const n = parseInt(hex.slice(1), 16); let r = n >> 16, g = (n >> 8) & 255, b = n & 255; if (k < 0) { r *= 1 + k; g *= 1 + k; b *= 1 + k; } else { r += (255 - r) * k; g += (255 - g) * k; b += (255 - b) * k; } return 'rgb(' + (r | 0) + ',' + (g | 0) + ',' + (b | 0) + ')'; }

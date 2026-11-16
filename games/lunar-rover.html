@@ -12,13 +12,14 @@
 // Lunar Rover: drive a six-wheel moon buggy over rolling, bumpy ground, hop craters and boulders,
 // lob cannon shells ahead and blast saucers overhead.
 K.theme({ bg: '#0b0a1e', ink: '#eef0ff', accent: '#b98bff', accentInk: '#14062a' });
-const W = 240, H = 380, GB = 300, RS = 1.6; // GB = average ground height, RS = rover size
+let W = 240; const H = 380, GB = 300, RS = 1.6; // GB = average ground height, RS = rover size
 K.screen(W, H);
+K.flex(240, H, w => { W = w; }, { maxW: 840 }); // phone on its side: see much further down the moon road
 K.hud(['score', 'post', 'lives']);
 K.pad({ dpad: 'lr', buttons: [{ id: 'b', label: 'FIRE' }, { id: 'a', label: 'JUMP' }] });
 
 let state = 'title', score, lives, dist, speed, car, shots, foes, bombs, obs, parts, post, nextSpawn, nextFoe, best = K.best('lunarrover'), invul;
-const stars = Array.from({ length: 90 }, () => ({ x: K.rnd(0, W), y: K.rnd(0, 220), b: K.rnd(0.3, 1) }));
+const stars = Array.from({ length: 200 }, () => ({ x: K.rnd(0, 1), y: K.rnd(0, 220), b: K.rnd(0.3, 1) }));
 const POSTLEN = 1400;
 // the ground: rolling hills with small bumps on top (wx = world x)
 function gy(wx) { return GB + 16 * Math.sin(wx / 95) + 7 * Math.sin(wx / 41 + 1.3) + 2.5 * Math.sin(wx / 13 + 0.4); }
@@ -103,7 +104,7 @@ function drawRover(c, t) {
 }
 function draw(c, t) {
   const sk = c.createLinearGradient(0, 0, 0, GB); sk.addColorStop(0, '#05030f'); sk.addColorStop(1, '#1a1440'); c.fillStyle = sk; c.fillRect(0, 0, W, H);
-  stars.forEach(s2 => { c.fillStyle = 'rgba(255,255,255,' + s2.b * (0.7 + 0.3 * Math.sin(t / 400 + s2.x)) + ')'; c.fillRect((s2.x - dist * 0.02 % W + W) % W, s2.y, 1, 1); });
+  stars.forEach(s2 => { c.fillStyle = 'rgba(255,255,255,' + s2.b * (0.7 + 0.3 * Math.sin(t / 400 + s2.x * 60)) + ')'; c.fillRect(((s2.x * W - dist * 0.02) % W + W) % W, s2.y, 1, 1); });
   A.glow(c, 180, 70, 50, '90,160,255', 0.35); A.ball(c, 180, 70, 22, '#3a7ad8'); c.fillStyle = '#5ab04a'; c.beginPath(); c.ellipse(172, 65, 8, 5, 0.4, 0, 7); c.ellipse(188, 78, 6, 4, -0.3, 0, 7); c.fill(); c.fillStyle = 'rgba(255,255,255,.5)'; c.beginPath(); c.ellipse(180, 59, 12, 2.5, 0, 0, 7); c.fill();
   A.ridge(c, dist, { factor: 0.12, base: 255, amp: 75, col: '#2e2858', edge: 'rgba(160,140,255,.35)', seed: 3, fog: 'rgba(120,100,200,.15)' });
   A.ridge(c, dist, { factor: 0.35, base: 285, amp: 40, col: '#443a7a', bands: ['rgba(255,255,255,.06)'], edge: 'rgba(0,0,0,.4)', seed: 8 });

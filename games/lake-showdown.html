@@ -11,8 +11,9 @@
 <script>
 // Lake Showdown: fishing race against the computer. Deeper fish weigh more. Reel fast, but the shark wants your catch. First to 99 lbs wins.
 K.theme({ bg: '#0b2236', ink: '#effaff', accent: '#ffd23f', accentInk: '#2a1d00' });
-const W = 240, H = 340, SURF = 104, GOAL = 99;
+let W = 240; const H = 340, SURF = 104, GOAL = 99;
 K.screen(W, H);
+K.flex(240, H, w => { W = w; }, { maxW: 780 }); // phone on its side: a wide lake, piers at both ends
 K.hud(['you', 'cpu']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'REEL' }] });
 const ROWS = [150, 172, 194, 216, 244, 272, 300], WT = [2, 2, 3, 4, 5, 6, 8];
@@ -55,7 +56,7 @@ function control(p, dt) {
     mx = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0); my = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
     if (K.ptr.down && K.ptr.y > SURF) { mx = K.clamp((K.ptr.x - p.x) / 12, -1, 1); my = K.clamp((K.ptr.y - p.y) / 12, -1, 1); }
   }
-  const sp = p.cpu ? 52 : 66;
+  const sp = (p.cpu ? 52 : 66) * Math.pow(Math.max(1, W / 240), 0.5);
   p.x = K.clamp(p.x + mx * sp * dt, 12, W - 12); p.y = K.clamp(p.y + my * sp * dt, SURF + 14, H - 24);
   for (const f of fish) if (!f.by && Math.abs(f.x - p.x) < 8 && Math.abs(f.y - p.y) < 7) { f.by = p; p.f = f; if (!p.cpu) K.beep(880, 0.08, { vol: 0.06 }); break; }
 }

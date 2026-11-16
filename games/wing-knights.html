@@ -12,17 +12,22 @@
 <script>
 // Wing Knights: flap your flying mount over a lava pit and knock enemy riders out of the sky. The higher lance wins. Grab their eggs before they hatch.
 K.theme({ bg: '#0c0a14', ink: '#fff4e0', accent: '#ffcc33', accentInk: '#2a1a00' });
-const W = 200, H = 330, LAVA = 308, S = 1.55; // tall arena, S = how big the riders are drawn
+let W = 200; const H = 330, LAVA = 308, S = 1.55; // tall arena, S = how big the riders are drawn
 K.screen(W, H);
+K.flex(200, H, w => { W = w; }, { maxW: 720 }); // phone on its side: a wide arena (ledges spread out at the start of each wave)
 K.hud(['score', 'wave', 'lives']);
 K.pad({ dpad: 'lr', buttons: [{ id: 'a', label: 'FLAP' }] });
 
-const PLATS = [
+const PLATS0 = [
   { x: -20, y: 92, w: 62 }, { x: 158, y: 92, w: 62 }, { x: 68, y: 64, w: 64 },
   { x: 58, y: 150, w: 56 }, { x: 148, y: 170, w: 72 }, { x: -20, y: 214, w: 58 }, { x: 96, y: 234, w: 56 },
   { x: 30, y: 284, w: 140 },
 ];
-const SPAWNS = [{ x: 10, y: 92 }, { x: 190, y: 92 }, { x: 100, y: 64 }, { x: 100, y: 284 }];
+const SPAWNS0 = [{ x: 10, y: 92 }, { x: 190, y: 92 }, { x: 100, y: 64 }, { x: 100, y: 284 }];
+// the arena is laid out for 200 wide; on a wider screen the ledges and spawn points spread out to match, and riders
+// fly a little faster across it (HK)
+const PLATS = PLATS0.map(p => Object.assign({}, p)), SPAWNS = SPAWNS0.map(p => Object.assign({}, p)); let HK = 1;
+function layout() { const k = W / 200; PLATS.forEach((p, i) => { p.x = PLATS0[i].x * k; p.w = PLATS0[i].w * k; }); SPAWNS.forEach((p, i) => { p.x = SPAWNS0[i].x * k; }); HK = Math.sqrt(k); }
 const TIERS = [
   { name: 'RAIDER', col: '#e04040', pts: 500, spd: 60, flap: 0.55, aim: 10 },
   { name: 'HUNTER', col: '#b0b0c0', pts: 750, spd: 80, flap: 0.42, aim: -6 },
@@ -30,9 +35,10 @@ const TIERS = [
 ];
 let state = 'title', score, lives, wave, me, foes, eggs, parts, pops, ptero, waveT, eggChain, nextLife, msg, msgT, best = K.best('wingknights'), flapAnim;
 function title() { K.card({ title: 'WING KNIGHTS', text: 'Tap FLAP to fly (tap faster to climb), ◀ ▶ to steer. The screen wraps around the sides. Crash into enemy riders: whoever is HIGHER wins. Beaten riders drop eggs, so grab them before they hatch into new riders. Stay out of the lava! If a wave drags on, a flying beast comes hunting.', best: best ? 'BEST ' + best : '', button: 'Take Flight', onStart: start }); }
-function start() { score = 0; lives = 4; wave = 0; nextLife = 20000; parts = []; pops = []; me = rider(100, 284, null); me.inv = 2; nextWave(); state = 'play'; }
+function start() { layout(); score = 0; lives = 4; wave = 0; nextLife = 20000; parts = []; pops = []; me = rider(SPAWNS[3].x, 284, null); me.inv = 2; nextWave(); state = 'play'; }
 function rider(x, y, tier) { return { x, y, vx: 0, vy: 0, face: 1, ground: null, tier, flapT: 0, think: K.rnd(0, 1), inv: 0, wing: 0, tx: x }; }
 function nextWave() {
+  layout();
   wave++; foes = []; eggs = []; ptero = null; waveT = 0; eggChain = 0;
   const n = Math.min(8, 2 + wave);
   for (let i = 0; i < n; i++) { const s = SPAWNS[i % SPAWNS.length], t = Math.min(2, Math.floor((wave - 1 + i * 0.6) / 3)); const f = rider(s.x + K.rnd(-6, 6), s.y - 12, t); f.inv = 1 + i * 0.4; f.spawn = 1 + i * 0.4; foes.push(f); }
@@ -46,9 +52,9 @@ function addScore(n) { score += n; if (score >= nextLife) { lives++; nextLife +=
 function fly(r, dt, flap, dir, maxV) {
   if (flap) { r.vy = Math.max(-150, r.vy - 115); r.ground = null; r.wing = 0.15; }
   if (r.wing > 0) r.wing -= dt;
-  const acc = r.ground ? 260 : 170;
+  const acc = (r.ground ? 260 : 170) * HK;
   if (dir) { r.vx += dir * acc * dt; r.face = dir; } else if (r.ground) r.vx *= Math.pow(0.04, dt);
-  r.vx = K.clamp(r.vx, -maxV, maxV);
+  r.vx = K.clamp(r.vx, -maxV * HK, maxV * HK);
   if (!r.ground) r.vy = Math.min(170, r.vy + 230 * dt);
   const oy = r.y; r.x += r.vx * dt; r.y += r.vy * dt;
   if (r.x < -8) r.x += W + 16; if (r.x > W + 8) r.x -= W + 16;

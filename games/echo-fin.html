@@ -11,8 +11,9 @@
 <script>
 // Echo Fin: swim through walls of seahorses in murky water. Ping your sonar to find the gaps. The squid is right behind you.
 K.theme({ bg: '#041a2a', ink: '#e8fbff', accent: '#3ef0c9', accentInk: '#002a22' });
-const W = 320, H = 240, DX = 110, TOP = 26, BOT = 222;
+let W = 320; const H = 240, DX = 110, TOP = 26, BOT = 222;
 K.screen(W, H);
+K.flex(320, H, w => { W = w; }, { maxW: 560 }); // phone on its side: see further ahead in the reef
 K.hud(['score', 'lives']);
 K.pad({ dpad: 'ud', buttons: [{ id: 'a', label: 'PING' }] });
 

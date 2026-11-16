@@ -11,8 +11,9 @@
 <script>
 // Aero Assault: a vertical scrolling shooter. Guns for the air, bombs for the ground targets under your crosshair.
 K.theme({ bg: '#0c1a12', ink: '#eafff0', accent: '#5dffa0', accentInk: '#002410' });
-const W = 240, H = 320;
+let W = 240; const H = 320;
 K.screen(W, H);
+K.flex(240, H, w => { W = w; }, { maxW: 720 }); // phone on its side: a wide sweep of country, edge to edge
 K.hud(['score', 'zone', 'lives']);
 K.pad({ dpad: '4', buttons: [{ id: 'flip', label: 'FLIP', top: true }, { id: 'roll', label: 'ROLL', top: true }, { id: 'b', label: 'BOMB' }, { id: 'a', label: 'GUN' }] });
 // FLIP (a loop) and ROLL (a barrel roll) make the jet untouchable while it's mid-move. Keys: Q flip, E roll.
@@ -30,7 +31,7 @@ function hurt() { if (invul > 0 || man) return; boom(me.x, me.y, '#ffd04a', 24);
 function aim(x, y, sp) { const a = Math.atan2(me.y - y, me.x - x); ebul.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp }); }
 function update(dt) {
   if (state !== 'play') return;
-  const sp = 110; let dx = 0, dy = 0;
+  const sp = 110 * Math.pow(Math.max(1, W / 240), 0.5); let dx = 0, dy = 0;
   if (K.down('left')) dx--; if (K.down('right')) dx++; if (K.down('up')) dy--; if (K.down('down')) dy++;
   me.x += dx * sp * dt; me.y += dy * sp * dt;
   if (K.ptr.down) { me.x += (K.ptr.x - me.x) * Math.min(1, dt * 8); me.y += (K.ptr.y - 30 - me.y) * Math.min(1, dt * 8); }

@@ -11,8 +11,9 @@
 <script>
 // Powder Peak: a guy on a wooden sled bombs down three mountain runs, launches off kickers, spins the sled and pulls side grabs and supermans, and slides the rails. Beat the clock.
 K.theme({ bg: '#0b1d33', ink: '#f2f8ff', accent: '#5fd6ff', accentInk: '#00202e' });
-const W = 240, H = 340, RY = 124;
+let W = 240; const H = 340, RY = 124, RW = 240; // RW: the width of the run itself
 K.screen(W, H, { smooth: true });
+K.flex(240, H, w => { W = w; }, { smooth: true, maxW: 760 }); // phone on its side: the run down the middle, deep pine forest on both sides
 K.hud(['run', 'score', 'time']);
 K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'GRAB' }, { id: 'a', label: 'SPIN' }] });
 const RUNS = [{ n: 'Bunny Ridge', len: 3000, time: 50 }, { n: 'Pine Chute', len: 3600, time: 55 }, { n: 'Summit Drop', len: 4200, time: 60 }];
@@ -72,7 +73,7 @@ function update(dt) {
     if (me.z <= 0) land();
   }
   me.x += Math.sin(me.a) * me.v * dt; me.y += Math.cos(me.a) * me.v * dt;
-  if (me.x < 12 || me.x > W - 12) { me.x = K.clamp(me.x, 12, W - 12); if (!me.air && me.crash <= 0 && me.v > 120) wipe('FENCE!'); else me.a *= -0.5; }
+  if (me.x < 12 || me.x > RW - 12) { me.x = K.clamp(me.x, 12, RW - 12); if (!me.air && me.crash <= 0 && me.v > 120) wipe('FENCE!'); else me.a *= -0.5; }
   if (!me.air && me.crash <= 0) { trail.push({ x: me.x, y: me.y, a: me.a }); if (trail.length > 70) trail.shift(); if ((K.down('up') || Math.abs(steer) && me.v > 120) && Math.random() < 0.7) { const sd = K.down('up') ? (Math.random() < 0.5 ? -1 : 1) : -steer; parts.push({ x: me.x + sd * 12, y: RY + 14, vx: sd * K.rnd(20, 60), vy: K.rnd(-50, -10), l: 0.35 }); } } else if (me.air) trail.push({ gap: true });
   // grinding
   if (me.grind) {
@@ -124,7 +125,22 @@ function endRun(finished) {
   }, 900);
 }
 
+// a wide screen: snow and a thick pine forest either side, the run in the middle, then the falling snow over it all
 function draw(c, t) {
+  const ox = (W - RW) / 2, cy = me ? me.y - RY : 0;
+  c.fillStyle = '#eef5fd'; c.fillRect(0, 0, W, H);
+  if (ox > 2) for (const [x0, x1] of [[0, ox], [ox + RW, W]]) for (let row = -2; row < H / 20 + 2; row++) {
+    const id = Math.floor(cy / 20) + row, y = id * 20 - cy;
+    for (let x = x0 + (A.hash(id, 3) * 18); x < x1 + 10; x += 16 + A.hash(id, Math.floor(x)) * 10) {
+      const s2 = 0.75 + A.hash(id, Math.floor(x) + 7) * 0.6; c.fillStyle = 'rgba(80,110,160,.2)'; c.beginPath(); c.ellipse(x + 4, y + 2, 9 * s2, 3, 0, 0, 7); c.fill();
+      c.fillStyle = A.INK; c.beginPath(); c.moveTo(x, y - 22 * s2); c.lineTo(x - 9 * s2, y); c.lineTo(x + 9 * s2, y); c.fill(); c.fillStyle = A.hash(id, Math.floor(x) + 2) < 0.5 ? '#2a5a4a' : '#24503f'; c.beginPath(); c.moveTo(x, y - 21 * s2); c.lineTo(x - 8 * s2, y - 1); c.lineTo(x + 8 * s2, y - 1); c.fill();
+      c.fillStyle = '#fff'; c.beginPath(); c.moveTo(x, y - 21 * s2); c.lineTo(x - 4 * s2, y - 13 * s2); c.lineTo(x + 3 * s2, y - 14 * s2); c.fill();
+    }
+  }
+  c.save(); c.translate(ox, 0); c.beginPath(); c.rect(0, -50, RW, H + 100); c.clip(); drawRun(c, t, RW); c.restore();
+  if (flakes) { c.fillStyle = 'rgba(255,255,255,.8)'; for (const f of flakes) c.fillRect(f.x, f.y, f.s * 1.5, f.s * 1.5); }
+}
+function drawRun(c, t, W) {
   c.fillStyle = '#f4f9ff'; c.fillRect(0, 0, W, H);
   if (!me) { c.fillStyle = '#dbe8f5'; for (let i = 0; i < 10; i++) c.fillRect(0, i * 36, W, 14); return; }
   const cy = me.y - RY;
@@ -151,7 +167,6 @@ function draw(c, t) {
   }
   drawRider(c, t);
   for (const p of parts) { c.fillStyle = p.spark ? '#ffd23f' : '#cfe3f7'; c.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); }
-  c.fillStyle = 'rgba(255,255,255,.8)'; for (const f of flakes) c.fillRect(f.x, f.y, f.s * 1.5, f.s * 1.5);
   // speed + progress
   c.fillStyle = 'rgba(11,29,51,.6)'; c.fillRect(W - 14, 20, 6, 300); c.fillStyle = '#5fd6ff'; c.fillRect(W - 14, 20, 6, 300 * Math.min(1, me.y / RUNS[run].len));
   K.text(c, Math.round(me.v * 0.2) + ' MPH', 34, 14, 9, '#0b1d33');
@@ -251,7 +266,7 @@ function drawRider(c, t) {
   // ground shadow
   c.fillStyle = 'rgba(0,30,60,' + (0.2 - Math.min(0.1, me.z / 400)) + ')'; c.beginPath(); c.ellipse(me.x + me.z * 0.3, RY + 6 + me.z * 0.2, 11 * SC * (1 - Math.min(0.3, me.z / 150)), 22 * SC * (1 - Math.min(0.3, me.z / 150)), -me.a, 0, 7); c.fill();
   if (me.crash > 0) {
-    const mx = K.clamp(me.x, 34, W - 36), me_ = { x: mx };
+    const mx = K.clamp(me.x, 34, RW - 36), me_ = { x: mx };
     // wiped out: sled flipped upside down, rider sprawled in the snow, hat knocked off
     c.save(); c.translate(me_.x + 14, RY - 2); c.scale(SC, SC); c.rotate(1.1); c.fillStyle = INK; c.fillRect(-8.4, -27.8, 16.8, 41.6); c.fillStyle = '#7a4a1e'; c.fillRect(-7.6, -27, 15.2, 40); c.fillStyle = '#5a3414'; c.fillRect(-7.6, -20, 15.2, 2); c.fillRect(-7.6, 2, 15.2, 2); sled(c, true); c.restore();
     c.save(); c.translate(me_.x - 8, RY + 6); c.scale(SC, SC); c.rotate(-0.4);
