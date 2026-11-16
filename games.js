@@ -28,7 +28,7 @@ window.ARCADE_GAMES = [
   { id: 'paddle-party', name: 'Paddle Party', genre: 'Sports', tag: 'Four paddle games in one' },
   { id: 'road-hopper', name: 'Road Hopper', genre: 'Arcade', tag: 'Get Pip the toad home', store: 'hop-best' },
   { id: 'volt-maze', name: 'Volt Maze', genre: 'Shooter', tag: 'Robots, electric walls, keep moving', store: 'best_volt-maze' },
-  { id: 'quarter-mile', name: 'Quarter Mile', genre: 'Racing', tag: 'Launch on green, shift on time', key: 'quartermile', kind: 'ms' },
+  { id: 'dirt-bowl', name: 'Dirt Bowl', genre: 'Racing', tag: 'Stadium trucks: jumps, mud and nitro', key: 'dirtbowl', kind: 'cash' },
   { id: 'ping', name: 'Ping', genre: 'Sports', tag: 'Table tennis, first to seven', store: 'ping-best-rally', kind: 'rally' },
   { id: 'kablam', name: 'Kablam', genre: 'Arcade', tag: 'Catch the raccoon’s bombs', store: 'kaboom-best' },
   { id: 'spore-patrol', name: 'Spore Patrol', genre: 'Shooter', tag: 'Blast the crawler in the mushrooms', store: 'best_spore-patrol' },
