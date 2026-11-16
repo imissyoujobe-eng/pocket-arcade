@@ -24,18 +24,21 @@ canvas{width:100%;height:100%;display:block;border-radius:6px}
     <div id="overlay"><h1>ROAD HOPPER</h1><p>Get Pip the toad across the highway and over the river logs to all five lily pads. Swipe, tap a side of the screen, or use the arrow keys.</p><div id="best"></div><button id="go">Play</button></div>
   </div>
 </div>
-<script src="../lib/fit.js" data-canvas="#c"></script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1"></script>
 <script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
-const C=13,R=17.5,T=32,ROWS=17;
+const T=32,R=17.5,ROWS=17;
+// phone on its side: the road and river run the whole width (C columns); the five homes and the start stay in the
+// middle 13 columns (OC = how far that middle is from the left edge)
+const C=Math.max(13,Math.floor(cv.width/T)),OC=Math.floor((C-13)/2),HOMES=[1,4,6,8,11].map(c=>c+OC);
 // row layout from top (0) to bottom (16): 0 homes, 1-5 river, 6 median, 7-11 road, 12 start? -> use 13 rows+extra grass
 // rows: 0 homes,1-5 river,6 safe,7-11 road,12 start (we use 13 rows *32=416 + padding)
 let lanes,frog,homes,score,lives,level,state='menu',timeLeft,AC,best=0,maxRow,deathT=0;
 try{best=+localStorage.getItem('hop-best')||0}catch(e){}$('best').textContent=best?'BEST '+best:'';
 const RH=560/14; // 14 rows tall incl. top bar
 function beep(f,d,v=.06,type='square'){if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}
-const W=416;
+const W=cv.width;
 function build(){
   const s=1+(level-1)*.18;
   const cfg=[ // row, type, speed, length, gap, color
@@ -45,14 +48,14 @@ function build(){
   lanes=cfg.map(([row,type,speed,len,gap],i)=>{const items=[];const step=(len+gap)*T;for(let x=Math.random()*step;x<W+step;x+=step)items.push({x,w:len*T});
     return{row,type,speed,items,step,col:carCols[i%5]}});
 }
-function reset(){frog={x:6,y:12,px:6*T,anim:0};maxRow=12;timeLeft=30}
+function reset(){frog={x:6+OC,y:12,px:(6+OC)*T,anim:0};maxRow=12;timeLeft=30}
 function start(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}score=0;lives=3;level=1;homes=[0,0,0,0,0];build();reset();state='play';hud();$('overlay').hidden=true}
 $('go').onclick=start;
 function hud(){$('sc').textContent=score;$('lv').textContent='🐸'.repeat(lives)}
 function hop(dx,dy){if(state!=='play'||deathT>0)return;const nx=Math.round(frog.px/T)+dx,ny=frog.y+dy;if(nx<0||nx>=C||ny<0||ny>12)return;
   frog.px=nx*T;frog.y=ny;frog.anim=1;frog.dir=[dx,dy];beep(dy<0?520:440,.05);
   if(ny<maxRow){maxRow=ny;score+=10;hud()}
-  if(ny===0){const slot=[1,4,6,8,11].map(c=>c*T);const i=slot.findIndex(sx=>Math.abs(frog.px-sx)<T*.8);
+  if(ny===0){const slot=HOMES.map(c=>c*T);const i=slot.findIndex(sx=>Math.abs(frog.px-sx)<T*.8);
     if(i>=0&&!homes[i]){homes[i]=1;score+=50+Math.floor(timeLeft)*5;hud();beep(784,.12);setTimeout(()=>beep(1046,.18),120);
       if(homes.every(h=>h)){level++;score+=1000;homes=[0,0,0,0,0];build()}reset()}else die()}}
 addEventListener('keydown',e=>{const m={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]}[e.key];
@@ -110,7 +113,7 @@ function draw(t){
   for(let r=1;r<6;r++){ctx.strokeStyle='rgba(255,255,255,.16)';ctx.lineWidth=1.5;ctx.beginPath();for(let x=0;x<=W;x+=12)ctx.lineTo(x,Y(r)+RH/2+Math.sin(x/20+t/400+r)*3);ctx.stroke();
     ctx.fillStyle='rgba(255,255,255,.35)';for(let i=0;i<4;i++){const x=((A.hash(r,i)*W+t/30*(r%2?1:-1))%W+W)%W;ctx.fillRect(x,Y(r)+8+i*6,8,1)}}
   // homes: lily pads in reed coves
-  [1,4,6,8,11].forEach((c,i)=>{const hx=c*T+T/2,hy=Y(0)+RH/2+2;ctx.fillStyle='#1a5aa0';ctx.beginPath();ctx.roundRect(c*T-6,Y(0)+4,T+12,RH-2,8);ctx.fill();ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(c*T-2,Y(0)+10,T+4,1);
+  HOMES.forEach((c,i)=>{const hx=c*T+T/2,hy=Y(0)+RH/2+2;ctx.fillStyle='#1a5aa0';ctx.beginPath();ctx.roundRect(c*T-6,Y(0)+4,T+12,RH-2,8);ctx.fill();ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(c*T-2,Y(0)+10,T+4,1);
     ctx.fillStyle='#14361a';ctx.beginPath();ctx.arc(hx,hy,14,.4,Math.PI*2-.4);ctx.lineTo(hx,hy);ctx.fill();const lg=ctx.createRadialGradient(hx-4,hy-4,2,hx,hy,13);lg.addColorStop(0,'#8ae05a');lg.addColorStop(1,'#2f8a2a');ctx.fillStyle=lg;ctx.beginPath();ctx.arc(hx,hy,13,.4,Math.PI*2-.4);ctx.lineTo(hx,hy);ctx.fill();
     ctx.strokeStyle='rgba(0,60,0,.4)';ctx.lineWidth=.8;for(let k=0;k<5;k++){const a=.8+k*1.1;ctx.beginPath();ctx.moveTo(hx,hy);ctx.lineTo(hx+Math.cos(a)*11,hy+Math.sin(a)*11);ctx.stroke()}
     if(homes&&homes[i])drawFrog(hx,hy,0,[0,-1]);else{ctx.fillStyle='#ff9ac8';for(let k=0;k<5;k++){ctx.beginPath();ctx.ellipse(hx+5+Math.cos(k*1.26)*2.4,hy+3+Math.sin(k*1.26)*2.4,2,1.2,k*1.26,0,7);ctx.fill()}ctx.fillStyle='#ffd23f';ctx.beginPath();ctx.arc(hx+5,hy+3,1.2,0,7);ctx.fill()}

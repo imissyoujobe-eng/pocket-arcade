@@ -25,11 +25,16 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <span class="lbl">Players</span><div class="row" id="players"><button class="chip" aria-pressed="true" data-p="1">1P vs CPU</button><button class="chip" aria-pressed="false" data-p="2">2 Players</button></div>
     <button id="go">Play</button></div>
 </div></div>
-<script src="../lib/fit.js" data-canvas="#c"></script>
+<script>/* phone on its side: the table turns sideways (you on the left, the other player on the right) and fills the
+   wide screen. The game still plays on an upright table; only the picture and the touches are turned. */
+if(innerWidth>innerHeight*1.15){const c=document.getElementById('c');c.width=640;c.height=400}</script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1"></script>
 <script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
-const W=400,H=640,PW=70,PH=12,BR=8,WIN=7;
+// ROT: the table is shown sideways. W is the table's width and H its length (a bit longer sideways, so the ball
+// moves a bit faster to match: SPK)
+const ROT=cv.width>cv.height,W=ROT?cv.height:400,H=ROT?cv.width:640,SPK=H/640,PW=70,PH=12,BR=8,WIN=7;
 let mode='classic',players=1,state='menu',p1,p2,ball,s1,s2,serveT,AC,flash=0,trail=[];
 function pick(groupId,attr,cb){$(groupId).querySelectorAll('.chip').forEach(b=>b.onclick=()=>{$(groupId).querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));cb(b.dataset[attr])})}
 pick('modes','m',v=>mode=v);pick('players','p',v=>players=+v);
@@ -41,23 +46,24 @@ function serve(dir){ball={x:W/2,y:H/2,vx:(Math.random()-.5)*160,vy:0,dir};serveT
 $('go').onclick=start;
 // input: bottom half moves p1; top half moves p2 in 2P
 const ptrs={};
-function toCanvas(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
+function toCanvas(e){const r=cv.getBoundingClientRect();if(ROT){const u=(e.clientX-r.left)/r.width*H,v=(e.clientY-r.top)/r.height*W;return{x:v,y:H-u}}return{x:(e.clientX-r.left)/r.width*W,y:(e.clientY-r.top)/r.height*H}}
 function handle(e){if(state!=='play')return;const c=toCanvas(e);const who=players===2&&c.y<H/2?p2:p1;who.tx=c.x;if(mode==='hockey'){who.ty=who===p1?Math.max(H/2+30,Math.min(H-30,c.y)):Math.max(30,Math.min(H/2-30,c.y))}}
 cv.addEventListener('pointerdown',e=>{ptrs[e.pointerId]=1;handle(e)});cv.addEventListener('pointermove',e=>{if(ptrs[e.pointerId]||e.pointerType==='mouse')handle(e)});
 ['pointerup','pointercancel'].forEach(ev=>cv.addEventListener(ev,e=>delete ptrs[e.pointerId]));
 const keys={};addEventListener('keydown',e=>{keys[e.key]=1;if(e.key==='Enter'&&state!=='play')start()});addEventListener('keyup',e=>keys[e.key]=0);
 function paddleHit(p,top){const half=PW/2;
   if(Math.abs(ball.x-p.x)<half+BR&&Math.abs(ball.y-p.y)<PH/2+BR&&(top?ball.vy<0:ball.vy>0)){
-    const off=(ball.x-p.x)/half;const sp=Math.min(720,Math.hypot(ball.vx,ball.vy)*1.06+10);const ang=off*1.05;
+    const off=(ball.x-p.x)/half;const sp=Math.min(720*SPK,Math.hypot(ball.vx,ball.vy)*1.06+10);const ang=off*1.05;
     ball.vx=Math.sin(ang)*sp;ball.vy=(top?1:-1)*Math.cos(ang)*sp;
     if(mode==='hockey')ball.vy+=(top?1:-1)*Math.abs(p.vy||0)*.4;
     ball.y=p.y+(top?1:-1)*(PH/2+BR);flash=.08;beep(top?520:660,.05)}}
 function update(dt){
   if(keys.ArrowLeft)p1.tx-=420*dt;if(keys.ArrowRight)p1.tx+=420*dt;if(keys.a)p2.tx-=420*dt;if(keys.d)p2.tx+=420*dt;
+  if(ROT){if(keys.ArrowUp)p1.tx-=420*dt;if(keys.ArrowDown)p1.tx+=420*dt;if(keys.w)p2.tx-=420*dt;if(keys.s)p2.tx+=420*dt}
   if(players===1){const lead=mode==='hoops'?ball.x:ball.x+ball.vx*.15;const react=mode==='classic'?.85:.75;p2.tx+=(lead-p2.tx)*Math.min(1,dt*6*react);
     if(mode==='hockey')p2.ty=ball.y<H/2?Math.max(30,Math.min(H/2-30,ball.y-30)):60}
   for(const p of [p1,p2]){p.tx=Math.max(PW/2,Math.min(W-PW/2,p.tx));const oy=p.y;p.x+=(p.tx-p.x)*Math.min(1,dt*20);p.y+=(p.ty-p.y)*Math.min(1,dt*20);p.vy=(p.y-oy)/dt}
-  if(serveT>0){serveT-=dt;if(serveT<=0){ball.vy=ball.dir*260}return}
+  if(serveT>0){serveT-=dt;if(serveT<=0){ball.vy=ball.dir*260*SPK}return}
   if(mode==='hoops')ball.vx*=1;
   ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;trail.push({x:ball.x,y:ball.y});if(trail.length>10)trail.shift();
   if(ball.x<BR){ball.x=BR;ball.vx=Math.abs(ball.vx);beep(300,.03)}if(ball.x>W-BR){ball.x=W-BR;ball.vx=-Math.abs(ball.vx);beep(300,.03)}
@@ -74,7 +80,7 @@ function update(dt){
 }
 const pegs=[{x:W/2,y:H/2,r:16},{x:W*.25,y:H*.38,r:10},{x:W*.75,y:H*.38,r:10},{x:W*.25,y:H*.62,r:10},{x:W*.75,y:H*.62,r:10}];
 function point(who){if(who===1)s1++;else s2++;beep(who===1?880:200,.25,.08,who===1?'square':'sawtooth');
-  if(s1>=WIN||s2>=WIN){state='over';const youWin=s1>s2;$('msg').textContent=players===2?`${youWin?'Bottom':'Top'} player wins ${Math.max(s1,s2)}–${Math.min(s1,s2)}!`:youWin?`You win ${s1}–${s2}!`:`CPU wins ${s2}–${s1}. Rematch?`;$('go').textContent='Play again';setTimeout(()=>$('overlay').hidden=false,500);return}
+  if(s1>=WIN||s2>=WIN){state='over';const youWin=s1>s2;$('msg').textContent=players===2?`${youWin?(ROT?'Left':'Bottom'):(ROT?'Right':'Top')} player wins ${Math.max(s1,s2)}–${Math.min(s1,s2)}!`:youWin?`You win ${s1}–${s2}!`:`CPU wins ${s2}–${s1}. Rematch?`;$('go').textContent='Play again';setTimeout(()=>$('overlay').hidden=false,500);return}
   serve(who===1?-1:1)}
 // ---- detail art: a cached, textured field for each mode ----
 const fieldCache={};
@@ -115,14 +121,17 @@ function drawPaddle(p,c,top){const x=p.x-PW/2,y=p.y-PH/2;A.shadow(ctx,p.x,p.y+PH
   ctx.fillStyle='rgba(255,255,255,.55)';ctx.fillRect(x+8,y+2,PW-16,2);ctx.fillStyle='rgba(0,0,0,.25)';for(let k=-2;k<=2;k++)ctx.fillRect(p.x+k*6-1,y+4,2,PH-6);
   ctx.fillStyle='#05060e';ctx.fillRect(x+3,y+2,4,PH-4);ctx.fillRect(x+PW-7,y+2,4,PH-4);ctx.fillStyle='#fff';ctx.fillRect(x+4,y+3,2,PH-6);ctx.fillRect(x+PW-6,y+3,2,PH-6)}
 function draw(t){
+  ctx.save();if(ROT)ctx.transform(0,1,-1,0,H,0); // sideways: table (x, y) shows at screen (H - y, x)
   ctx.drawImage(fieldCache[mode]||buildField(mode),0,0);
   if(mode==='hoops'){for(const pg of pegs){A.shadow(ctx,pg.x+2,pg.y+pg.r,pg.r);A.glow(ctx,pg.x,pg.y,pg.r*2.4,'255,159,28',.3);A.ball(ctx,pg.x,pg.y,pg.r,'#ff9f1c');ctx.fillStyle='#fff';ctx.font='bold '+Math.round(pg.r)+'px sans-serif';ctx.textAlign='center';ctx.fillText('★',pg.x,pg.y+pg.r*.35)}
     for(const hy of [18,H-18]){const top=hy<H/2;ctx.fillStyle='#05060e';ctx.fillRect(W/2-47,top?0:H-7,94,7);ctx.fillStyle='#fff';ctx.fillRect(W/2-46,top?0:H-6,92,6);ctx.strokeStyle='#d32f3a';ctx.lineWidth=1.5;ctx.strokeRect(W/2-16,top?0:H-6,32,5);
       ctx.strokeStyle='rgba(255,255,255,.75)';ctx.lineWidth=1;for(let k=-3;k<=3;k++){ctx.beginPath();ctx.moveTo(W/2+k*10,hy);ctx.lineTo(W/2+k*7,hy+(top?16:-16));ctx.stroke()}ctx.beginPath();ctx.moveTo(W/2-30,hy+(top?8:-8));ctx.lineTo(W/2+30,hy+(top?8:-8));ctx.stroke();
       ctx.strokeStyle='#5a1a0a';ctx.lineWidth=6;ctx.beginPath();ctx.ellipse(W/2,hy,34,8,0,0,7);ctx.stroke();ctx.strokeStyle='#ff5a36';ctx.lineWidth=4;ctx.stroke()}}
   // score
-  ctx.font='64px Bungee, Impact, sans-serif';ctx.textAlign='right';ctx.globalAlpha=.22;ctx.fillStyle='#ff5fa2';ctx.fillText(s2??0,W-20,H/2-20);ctx.fillStyle=mode==='hockey'?'#1a8a6a':'#3ef0c9';ctx.fillText(s1??0,W-20,H/2+70);ctx.globalAlpha=1;
-  if(state==='menu')return;
+  ctx.font='64px Bungee, Impact, sans-serif';ctx.globalAlpha=.22;
+  if(ROT){ctx.save();ctx.setTransform(1,0,0,1,0,0);const k=cv.height/W;ctx.scale(k,k);ctx.textAlign='right';ctx.fillStyle=mode==='hockey'?'#1a8a6a':'#3ef0c9';ctx.fillText(s1??0,H/2-30,74);ctx.textAlign='left';ctx.fillStyle='#ff5fa2';ctx.fillText(s2??0,H/2+30,74);ctx.restore()}
+  else{ctx.textAlign='right';ctx.fillStyle='#ff5fa2';ctx.fillText(s2??0,W-20,H/2-20);ctx.fillStyle=mode==='hockey'?'#1a8a6a':'#3ef0c9';ctx.fillText(s1??0,W-20,H/2+70)}ctx.globalAlpha=1;
+  if(state==='menu'){ctx.restore();return}
   // trail & ball
   const tc=mode==='hockey'?'rgba(20,30,50,':mode==='soccer'?'rgba(255,255,255,':mode==='hoops'?'rgba(255,138,42,':'rgba(255,243,107,';
   trail.forEach((p,i)=>{ctx.fillStyle=tc+(i/trail.length*.35)+')';ctx.beginPath();ctx.arc(p.x,p.y,BR*i/trail.length,0,7);ctx.fill()});
@@ -132,12 +141,13 @@ function draw(t){
   else if(mode==='hoops'){A.ball(ctx,ball.x,ball.y,BR+1,'#ff8a2a');ctx.strokeStyle='#4a1a04';ctx.lineWidth=1.1;ctx.save();ctx.translate(ball.x,ball.y);ctx.rotate(t/180);ctx.beginPath();ctx.moveTo(-BR,0);ctx.lineTo(BR,0);ctx.moveTo(0,-BR);ctx.lineTo(0,BR);ctx.stroke();ctx.beginPath();ctx.arc(-BR*1.3,0,BR*.9,-.8,.8);ctx.stroke();ctx.beginPath();ctx.arc(BR*1.3,0,BR*.9,Math.PI-.8,Math.PI+.8);ctx.stroke();ctx.restore()}
   else{A.glow(ctx,ball.x,ball.y,BR*3.5,'255,243,107',.6);ctx.fillStyle='#fff36b';ctx.fillRect(ball.x-BR,ball.y-BR,BR*2,BR*2);ctx.fillStyle='#fff';ctx.fillRect(ball.x-BR+2,ball.y-BR+2,BR,3)}
   drawPaddle(p1,'#3ef0c9',false);drawPaddle(p2,'#ff5fa2',true);
-  if(serveT>0){ctx.font='22px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillText('READY',W/2+2,H/2-58);ctx.fillStyle='#eef0ff';ctx.fillText('READY',W/2,H/2-60)}
-  A.vignette(ctx,W,H,.3);
+  A.vignette(ctx,W,H,.3);ctx.restore();
+  if(serveT>0){ctx.save();if(ROT){ctx.setTransform(1,0,0,1,0,0);const k=cv.height/W;ctx.scale(k,k)}const rx=ROT?H/2:W/2,ry=ROT?W/2-40:H/2-60;ctx.font='22px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillText('READY',rx+2,ry+2);ctx.fillStyle='#eef0ff';ctx.fillText('READY',rx,ry);ctx.restore()}
   flash=Math.max(0,flash-.016);
 }
 let last=performance.now();function loop(t){const dt=Math.min(.033,(t-last)/1000);last=t;if(state==='play')update(dt);draw(t);requestAnimationFrame(loop)}requestAnimationFrame(loop);
 </script>
 
-<script src="../lib/joy.js" data-axes="lr"></script>
+<script>(function(){var s=document.createElement('script');s.src='../lib/joy.js';if(ROT)return; // sideways you just drag your half of the table
+ s.setAttribute('data-axes','lr');document.body.appendChild(s)})()</script>
 </body></html>

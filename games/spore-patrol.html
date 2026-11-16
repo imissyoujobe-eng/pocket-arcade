@@ -29,7 +29,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <div id="overlay"><h1>Spore Patrol</h1><p id="msg">A giant crawler is winding down through the mushroom patch. Blast every segment before it reaches you.</p><p class="how">Left side: drag to move. Right side: hold to fire. Hit segments turn into mushrooms. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
-<script src="../lib/fit.js" data-canvas="#c" data-wide="1" data-max="1.8"></script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1" data-max="2.4"></script>
 <script src="../lib/art.js"></script>
 <script>
 const GAME_ID='spore-patrol';
@@ -87,13 +87,16 @@ function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(st
 <script>
 // SPORE PATROL — blast the segmented crawler as it winds down through the mushroom patch. Watch for jumpers and divers.
 const C=16,COLS=Math.floor(W/16),ROWS=36,ZONE=30; // COLS grows when the field is widened sideways
+// on a wider field the crawler is longer and crosses it faster (WK), and you move a little faster, so a row takes
+// about as long as it does upright
+const WK=Math.max(1,COLS/25),SPK=Math.pow(WK,.7);
 let mush,segs,pl,shot,spider,flea,lives,level,deadT,palette,spiderT,fleaT,shotCD,nextLife;
 ACTION_LABEL='FIRE';
 const PALS=[['#ff4fa3','#7cff6b','#ffd23f'],['#38f2ff','#ff9a3d','#fff36b'],['#c08bff','#5affc8','#ff6b6b'],['#ffd23f','#4f8bff','#ff4fa3'],['#7cff6b','#ff4fa3','#38f2ff']];
 function reset(){score=0;lives=3;level=1;nextLife=12000;mush=Array.from({length:ROWS},()=>new Array(COLS).fill(0));
  for(let i=0;i<Math.round(46*COLS/25);i++){const r=1+Math.floor(Math.random()*(ROWS-3)),c=Math.floor(Math.random()*COLS);mush[r][c]=4}
  pl={x:W/2,y:(ROWS-2)*C};newWave();hud()}
-function newWave(){palette=PALS[(level-1)%PALS.length];segs=[];const n=Math.min(16,10+level),sp=Math.min(10,5+level*.6);
+function newWave(){palette=PALS[(level-1)%PALS.length];segs=[];const n=Math.min(28,Math.round(Math.min(16,10+level)*Math.sqrt(WK))),sp=Math.min(10,5+level*.6)*SPK;
  for(let i=0;i<n;i++)segs.push({c:-i,pc:-i-1,r:0,pr:0,t:0,dir:1,vd:1,head:i===0,sp});
  spider=null;flea=null;spiderT=rnd(3,6);fleaT=rnd(6,10);shot=null;deadT=0;showBanner('WAVE '+level,'',1)}
 function hud(){$('h1').textContent=score;$('h2').textContent=level;$('h3').textContent='◆'.repeat(Math.max(0,lives))||'–'}
@@ -109,9 +112,9 @@ function segXY(s){const k=s.t;return{x:((s.pc+(s.c-s.pc)*k)+.5)*C,y:((s.pr+(s.r-
 function killPlayer(){if(deadT>0)return;deadT=2.2;lives--;const x=pl.x,y=pl.y;burst(x,y,[palette[0],palette[1],'#fff'],44,240,1.2,4);kick(12);noise(.7,.15,900);beep(400,.8,.07,'sawtooth',40);hud();
  setTimeout(()=>{let fixed=0;for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(mush[r][c]>0&&mush[r][c]<4){mush[r][c]=4;fixed++;}if(fixed)addScore(fixed*5,W/2,H/2,true)},900)}
 function update(dt){
- if(deadT>0){deadT-=dt;if(deadT<=0){if(lives<=0){gameOver('The patch is overrun. Score '+score+'.');return}pl={x:W/2,y:(ROWS-2)*C};const n=segs.length||12;segs=[];const sp=Math.min(9,5+level*.6);for(let i=0;i<n;i++)segs.push({c:-i,pc:-i-1,r:0,pr:0,t:0,dir:1,vd:1,head:i===0,sp});spider=null;flea=null;showBanner('READY','',.8)}return}
+ if(deadT>0){deadT-=dt;if(deadT<=0){if(lives<=0){gameOver('The patch is overrun. Score '+score+'.');return}pl={x:W/2,y:(ROWS-2)*C};const n=segs.length||12;segs=[];const sp=Math.min(9,5+level*.6)*SPK;for(let i=0;i<n;i++)segs.push({c:-i,pc:-i-1,r:0,pr:0,t:0,dir:1,vd:1,head:i===0,sp});spider=null;flea=null;showBanner('READY','',.8)}return}
  // player: free movement inside the bottom zone, can't pass through mushrooms
- const nx=clamp(pl.x+inp.x*230*dt,C*.5,W-C*.5),ny=clamp(pl.y+inp.y*230*dt,ZONE*C,(ROWS-.5)*C);
+ const nx=clamp(pl.x+inp.x*230*Math.pow(WK,.3)*dt,C*.5,W-C*.5),ny=clamp(pl.y+inp.y*230*dt,ZONE*C,(ROWS-.5)*C);
  const okAt=(x,y)=>{const c=Math.floor(x/C),r=Math.floor(y/C);return!(r>=0&&r<ROWS&&c>=0&&c<COLS&&mush[r][c]>0)};
  if(okAt(nx,pl.y))pl.x=nx;if(okAt(pl.x,ny))pl.y=ny;
  if(inp.fire&&!shot){shot={x:pl.x,y:pl.y-10};beep(1600,.04,.025,'square',1200)}

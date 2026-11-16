@@ -28,17 +28,19 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
       <button id="go">Play</button></div>
   </div>
 </div>
-<script src="../lib/fit.js" data-canvas="#c"></script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1"></script>
 <script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
 const N=40,T=560/N,WIN=5,DIRS=[[0,-1],[1,0],[0,1],[-1,0]];
+// phone on its side: a wider arena (more columns), so the light walls run edge to edge
+const W=cv.width,NX=Math.max(N,Math.floor(W/T)),AW=NX*T,OX=Math.round((W-AW)/2);
 let opp='cpu',speed=13,grid,P,state='menu',acc=0,score=[0,0],roundEnd=0,AC,boom=[];
 function pick(g,a,cb){$(g).querySelectorAll('.chip').forEach(b=>b.onclick=()=>{$(g).querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===b));cb(b.dataset[a])})}
 pick('opp','o',v=>opp=v);pick('spd','s',v=>speed=+v);
 function beep(f,d,v=.06,type='square'){if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}
-function newRound(){grid=Array.from({length:N},()=>new Array(N).fill(0));
-  P=[{x:8,y:N-8,d:0,q:[],c:'#38f2ff',id:1,alive:true},{x:N-9,y:7,d:2,q:[],c:'#ff8a1f',id:2,alive:true}];
+function newRound(){grid=Array.from({length:N},()=>new Array(NX).fill(0));
+  P=[{x:8,y:N-8,d:0,q:[],c:'#38f2ff',id:1,alive:true},{x:NX-9,y:7,d:2,q:[],c:'#ff8a1f',id:2,alive:true}];
   for(const p of P)grid[p.y][p.x]=p.id;boom=[];roundEnd=0;acc=-0.8}
 function start(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}score=[0,0];hud();newRound();state='play';$('overlay').hidden=true}
 $('go').onclick=start;
@@ -54,8 +56,8 @@ cv.addEventListener('pointermove',e=>{const s=sw[e.pointerId];if(!s||state!=='pl
   const d=Math.abs(dx)>Math.abs(dy)?(dx>0?1:3):(dy>0?2:0);const r=cv.getBoundingClientRect();const top=s.y-r.top<r.height/2;
   turn(opp==='2p'&&top?P[1]:P[0],d);sw[e.pointerId]={x:e.clientX,y:e.clientY}});
 ['pointerup','pointercancel'].forEach(ev=>cv.addEventListener(ev,e=>delete sw[e.pointerId]));
-const free=(x,y)=>x>=0&&y>=0&&x<N&&y<N&&!grid[y][x];
-function floodCount(x,y,lim=300){if(!free(x,y))return 0;const seen=new Set([y*N+x]),st=[[x,y]];let c=0;while(st.length&&c<lim){const [a,b]=st.pop();c++;for(const[dx,dy]of DIRS){const nx=a+dx,ny=b+dy,k=ny*N+nx;if(free(nx,ny)&&!seen.has(k)){seen.add(k);st.push([nx,ny])}}}return c}
+const free=(x,y)=>x>=0&&y>=0&&x<NX&&y<N&&!grid[y][x];
+function floodCount(x,y,lim=300){if(!free(x,y))return 0;const seen=new Set([y*NX+x]),st=[[x,y]];let c=0;while(st.length&&c<lim){const [a,b]=st.pop();c++;for(const[dx,dy]of DIRS){const nx=a+dx,ny=b+dy,k=ny*NX+nx;if(free(nx,ny)&&!seen.has(k)){seen.add(k);st.push([nx,ny])}}}return c}
 function cpu(p){const o=P[0];let best=p.d,bs=-1e9;
   for(let d=0;d<4;d++){if((d+2)%4===p.d)continue;const nx=p.x+DIRS[d][0],ny=p.y+DIRS[d][1];if(!free(nx,ny))continue;
     let s=floodCount(nx,ny)*3;s-=Math.hypot(nx-o.x,ny-o.y)*.6;if(d===p.d)s+=4;s+=Math.random()*3;if(s>bs){bs=s;best=d}}
@@ -75,17 +77,18 @@ function step(){
   }else beep(180+((P[0].x+P[0].y)%6)*20,.02,.015)}
 // ---- detail art: neon arena floor, light-wall trails, glowing light-cycles ----
 let floorCv=null;
-function buildFloor(){const c2=document.createElement('canvas');c2.width=c2.height=560;const c=c2.getContext('2d');
-  const g=c.createRadialGradient(280,280,40,280,280,420);g.addColorStop(0,'#141a38');g.addColorStop(1,'#05060e');c.fillStyle=g;c.fillRect(0,0,560,560);
+function buildFloor(){const c2=document.createElement('canvas');c2.width=W;c2.height=560;const c=c2.getContext('2d');
+  const g=c.createRadialGradient(W/2,280,40,W/2,280,Math.max(420,W*.6));g.addColorStop(0,'#141a38');g.addColorStop(1,'#05060e');c.fillStyle=g;c.fillRect(0,0,W,560);c.translate(OX,0);
   // floor panels with bevels
-  for(let y=0;y<N;y+=4)for(let x=0;x<N;x+=4){const h=A.hash(x,y);c.fillStyle=h<.2?'rgba(60,80,160,.10)':'rgba(30,40,90,.06)';c.fillRect(x*T+1,y*T+1,4*T-2,4*T-2);c.fillStyle='rgba(120,160,255,.08)';c.fillRect(x*T+1,y*T+1,4*T-2,1);c.fillStyle='rgba(0,0,0,.35)';c.fillRect(x*T+1,y*T+4*T-2,4*T-2,1)}
-  c.strokeStyle='rgba(56,120,255,.10)';c.lineWidth=1;c.beginPath();for(let i=0;i<=N;i++){c.moveTo(i*T,0);c.lineTo(i*T,560);c.moveTo(0,i*T);c.lineTo(560,i*T)}c.stroke();
-  c.strokeStyle='rgba(56,180,255,.22)';c.beginPath();for(let i=0;i<=N;i+=4){c.moveTo(i*T,0);c.lineTo(i*T,560);c.moveTo(0,i*T);c.lineTo(560,i*T)}c.stroke();
+  for(let y=0;y<N;y+=4)for(let x=0;x<NX;x+=4){const h=A.hash(x,y);c.fillStyle=h<.2?'rgba(60,80,160,.10)':'rgba(30,40,90,.06)';c.fillRect(x*T+1,y*T+1,4*T-2,4*T-2);c.fillStyle='rgba(120,160,255,.08)';c.fillRect(x*T+1,y*T+1,4*T-2,1);c.fillStyle='rgba(0,0,0,.35)';c.fillRect(x*T+1,y*T+4*T-2,4*T-2,1)}
+  c.strokeStyle='rgba(56,120,255,.10)';c.lineWidth=1;c.beginPath();for(let i=0;i<=NX;i++){c.moveTo(i*T,0);c.lineTo(i*T,560)}for(let i=0;i<=N;i++){c.moveTo(0,i*T);c.lineTo(AW,i*T)}c.stroke();
+  c.strokeStyle='rgba(56,180,255,.22)';c.beginPath();for(let i=0;i<=NX;i+=4){c.moveTo(i*T,0);c.lineTo(i*T,560)}for(let i=0;i<=N;i+=4){c.moveTo(0,i*T);c.lineTo(AW,i*T)}c.stroke();
   // center emblem
-  c.strokeStyle='rgba(56,242,255,.18)';c.lineWidth=2;c.beginPath();c.arc(280,280,60,0,7);c.stroke();c.beginPath();c.arc(280,280,40,0,7);c.stroke();c.font='bold 18px Bungee, Impact, sans-serif';c.textAlign='center';c.fillStyle='rgba(56,242,255,.14)';c.fillText('BOX OUT',280,286);
+  c.strokeStyle='rgba(56,242,255,.18)';c.lineWidth=2;c.beginPath();c.arc(AW/2,280,60,0,7);c.stroke();c.beginPath();c.arc(AW/2,280,40,0,7);c.stroke();c.font='bold 18px Bungee, Impact, sans-serif';c.textAlign='center';c.fillStyle='rgba(56,242,255,.14)';c.fillText('BOX OUT',AW/2,286);
   // arena wall with pylons
-  c.fillStyle='#0a0e22';c.fillRect(0,0,560,6);c.fillRect(0,554,560,6);c.fillRect(0,0,6,560);c.fillRect(554,0,6,560);
-  for(let i=0;i<=8;i++){for(const [px,py] of[[i*70,0],[i*70,560],[0,i*70],[560,i*70]]){A.glow(c,px,py,22,'56,242,255',.35);c.fillStyle='#1a2a5a';c.fillRect(px-4,py-4,8,8);c.fillStyle='#38f2ff';c.fillRect(px-2,py-2,4,4)}}
+  c.fillStyle='#0a0e22';c.fillRect(0,0,AW,6);c.fillRect(0,554,AW,6);c.fillRect(0,0,6,560);c.fillRect(AW-6,0,6,560);
+  const py8=[];for(let i=0;i<=8;i++)py8.push([0,i*70],[AW,i*70]);for(let i=0;i<=Math.round(AW/70);i++)py8.push([i*AW/Math.round(AW/70),0],[i*AW/Math.round(AW/70),560]);
+  {for(const [px,py] of py8){A.glow(c,px,py,22,'56,242,255',.35);c.fillStyle='#1a2a5a';c.fillRect(px-4,py-4,8,8);c.fillStyle='#38f2ff';c.fillRect(px-2,py-2,4,4)}}
   floorCv=c2}
 const RGB={1:'56,242,255',2:'255,138,31'};
 function drawCycle(p,t){const cx=(p.x+.5)*T,cy=(p.y+.5)*T,ang=[-Math.PI/2,0,Math.PI/2,Math.PI][p.d];
@@ -100,18 +103,18 @@ function drawCycle(p,t){const cx=(p.x+.5)*T,cy=(p.y+.5)*T,ang=[-Math.PI/2,0,Math
   ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(1,0,5,2.6,0,0,7);ctx.fill();ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillRect(1,-1.6,3,.8);
   ctx.restore()}
 function draw(dt){if(!floorCv)buildFloor();ctx.drawImage(floorCv,0,0);
-  const t=performance.now();
+  const t=performance.now();ctx.save();ctx.translate(OX,0);
   if(grid){// light walls: soft glow, solid wall, bright core
     for(const v of[1,2]){const c=v===1?'#38f2ff':'#ff8a1f';
-      ctx.fillStyle=v===1?'rgba(56,242,255,.13)':'rgba(255,138,31,.13)';for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(grid[y][x]===v)ctx.fillRect(x*T-3,y*T-3,T+6,T+6);
-      ctx.fillStyle=v===1?'#1a6a8a':'#8a4410';for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(grid[y][x]===v)ctx.fillRect(x*T+1.5,y*T+1.5,T-3,T-3);
-      ctx.fillStyle=c;for(let y=0;y<N;y++)for(let x=0;x<N;x++){if(grid[y][x]!==v)continue;const L=x>0&&grid[y][x-1]===v,R=x<N-1&&grid[y][x+1]===v,U=y>0&&grid[y-1][x]===v,D=y<N-1&&grid[y+1][x]===v;
+      ctx.fillStyle=v===1?'rgba(56,242,255,.13)':'rgba(255,138,31,.13)';for(let y=0;y<N;y++)for(let x=0;x<NX;x++)if(grid[y][x]===v)ctx.fillRect(x*T-3,y*T-3,T+6,T+6);
+      ctx.fillStyle=v===1?'#1a6a8a':'#8a4410';for(let y=0;y<N;y++)for(let x=0;x<NX;x++)if(grid[y][x]===v)ctx.fillRect(x*T+1.5,y*T+1.5,T-3,T-3);
+      ctx.fillStyle=c;for(let y=0;y<N;y++)for(let x=0;x<NX;x++){if(grid[y][x]!==v)continue;const L=x>0&&grid[y][x-1]===v,R=x<NX-1&&grid[y][x+1]===v,U=y>0&&grid[y-1][x]===v,D=y<N-1&&grid[y+1][x]===v;
         ctx.fillRect(x*T+T*.3,y*T+T*.3,T*.4,T*.4);if(L)ctx.fillRect(x*T,y*T+T*.3,T*.5,T*.4);if(R)ctx.fillRect(x*T+T*.5,y*T+T*.3,T*.5,T*.4);if(U)ctx.fillRect(x*T+T*.3,y*T,T*.4,T*.5);if(D)ctx.fillRect(x*T+T*.3,y*T+T*.5,T*.4,T*.5)}
-      ctx.fillStyle='rgba(255,255,255,.7)';for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(grid[y][x]===v)ctx.fillRect(x*T+T*.45,y*T+T*.45,T*.1,T*.1)}
+      ctx.fillStyle='rgba(255,255,255,.7)';for(let y=0;y<N;y++)for(let x=0;x<NX;x++)if(grid[y][x]===v)ctx.fillRect(x*T+T*.45,y*T+T*.45,T*.1,T*.1)}
     for(const p of P)if(p.alive||roundEnd>1.2)drawCycle(p,t)}
-  ctx.globalCompositeOperation='lighter';for(const b of boom){b.x+=b.vx*dt;b.y+=b.vy*dt;b.l-=dt;ctx.globalAlpha=Math.max(0,b.l);A.glow(ctx,b.x,b.y,8,b.c==='#38f2ff'?'56,242,255':'255,138,31',.6);ctx.fillStyle='#fff';ctx.fillRect(b.x-1.5,b.y-1.5,3,3)}ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';boom=boom.filter(b=>b.l>0);
-  A.vignette(ctx,560,560,.35);
-  if(state==='play'&&acc<0&&!roundEnd){ctx.font='36px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillStyle='#000';ctx.fillText('READY',282,292);ctx.fillStyle='#e9ecff';ctx.fillText('READY',280,290)}}
+  ctx.globalCompositeOperation='lighter';for(const b of boom){b.x+=b.vx*dt;b.y+=b.vy*dt;b.l-=dt;ctx.globalAlpha=Math.max(0,b.l);A.glow(ctx,b.x,b.y,8,b.c==='#38f2ff'?'56,242,255':'255,138,31',.6);ctx.fillStyle='#fff';ctx.fillRect(b.x-1.5,b.y-1.5,3,3)}ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';boom=boom.filter(b=>b.l>0);ctx.restore();
+  A.vignette(ctx,W,560,.35);
+  if(state==='play'&&acc<0&&!roundEnd){ctx.font='36px Bungee, Impact, sans-serif';ctx.textAlign='center';ctx.fillStyle='#000';ctx.fillText('READY',W/2+2,292);ctx.fillStyle='#e9ecff';ctx.fillText('READY',W/2,290)}}
 let last=performance.now();
 function loop(t){const dt=Math.min(.05,(t-last)/1000);last=t;
   if(state==='play'){if(roundEnd){roundEnd-=dt;if(roundEnd<=0)newRound()}else{acc+=dt;const st=1/speed;while(acc>=st&&!roundEnd){acc-=st;step()}}}

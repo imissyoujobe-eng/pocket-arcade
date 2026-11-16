@@ -29,12 +29,14 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <div id="overlay"><h1>Volt Maze</h1><p id="msg">Blast the robots and escape room after room. The walls are electrified, and the Seeker comes for anyone who lingers.</p><p class="how">Left side: drag to walk. Right side: tap to fire, or hold to stand still and aim with the stick. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
-<script src="../lib/fit.js" data-canvas="#c"></script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1"></script>
 <script src="../lib/art.js"></script>
 <script>
 const GAME_ID='volt-maze';
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
-const W=cv.width,H=cv.height,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
+// phone on its side (LAND): the canvas is wide and everything is drawn KS times bigger, so the robots and walls are
+// easy to see; W and H are the play area in those bigger units
+const LAND=cv.width>cv.height,KS=LAND?1.4:1,W=cv.width/KS,H=cv.height/KS,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
 let AC,muted=false;
 try{muted=localStorage.getItem('arcade_muted')==='1'}catch(e){}
 function setMuteLabel(){$('mu').textContent=muted?'MUTE':'SND'}setMuteLabel();
@@ -80,13 +82,15 @@ $('pz').onclick=togglePause;
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause()});
 let last=performance.now(),T=0;
 function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(state==='play'){T+=dt;update(dt);updFx(dt)}else if(state==='over'||state==='menu')updFx(dt);
- ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
+ ctx.save();ctx.scale(KS,KS);ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
  if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',W/2,H/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',W/2,H/2+28)}
- requestAnimationFrame(frame)}
+ ctx.restore();requestAnimationFrame(frame)}
 </script>
 <script>
 // VOLT MAZE — escape room after room of electrified maze. Blast the robots, never touch the walls, leave before the Seeker arrives.
-const X0=14,Y0=14,X1=386,Y1=556,TH=6,DOOR=64,COLS=3,ROWS=4,CW=(X1-X0)/COLS,CH=(Y1-Y0)/ROWS;
+// phone on its side: the rooms run the whole width (more maze columns); you move a bit faster across them, there
+// are more robots, and the Seeker gives you more time (BIG = how many times wider than the upright room)
+const X0=14,Y0=14,X1=W-14,Y1=H-44,TH=6,DOOR=64,COLS=Math.max(3,Math.round((X1-X0)/124)),ROWS=LAND?3:4,CW=(X1-X0)/COLS,CH=(Y1-Y0)/ROWS,BIG=COLS*ROWS/12,NL=Math.max(1,Math.round(COLS/3)); // NL: hanging lamps, one per upright room width
 let walls,pl,bul,robots,rbul,seeker,seekT,lives,level,entry,deadT,roomBots,rooms,exitT,robotCol;
 ACTION_LABEL='FIRE';
 const DOORS={L:{x:X0,y:(Y0+Y1)/2},R:{x:X1,y:(Y0+Y1)/2},T:{x:(X0+X1)/2,y:Y0},B:{x:(X0+X1)/2,y:Y1}};
@@ -107,8 +111,8 @@ function newRoom(){walls=[];const hx=(X0+X1)/2,hy=(Y0+Y1)/2,d=DOOR/2;
  for(let i=1;i<COLS;i++)for(let j=1;j<ROWS;j++){const nx=X0+i*CW,ny=Y0+j*CH;let w,tries=0;
   do{const dir=Math.floor(Math.random()*4);w=dir===0?{x:nx-TH/2,y:ny-CH,w:TH,h:CH+TH/2}:dir===1?{x:nx-TH/2,y:ny-TH/2,w:TH,h:CH}:dir===2?{x:nx-CW,y:ny-TH/2,w:CW+TH/2,h:TH}:{x:nx-TH/2,y:ny-TH/2,w:CW,h:TH};tries++}while(zones.some(z=>hit(z,w))&&tries<20);walls.push(w)}
  const e=DOORS[entry];pl={x:e.x+(entry==='L'?22:entry==='R'?-22:0),y:e.y+(entry==='T'?24:entry==='B'?-24:0),fx:entry==='R'?-1:1,fy:0,walk:0,inv:1.2};
- bul=[];rbul=[];deadT=0;exitT=0;seeker=null;seekT=Math.max(7,16-level*.8);robotCol=['#ffd23f','#ff7a1f','#ff3d8b','#38f2ff','#9dff5a','#c08bff','#ffffff'][(level-1)%7];
- robots=[];const n=Math.min(11,4+level);let tries=0;
+ bul=[];rbul=[];deadT=0;exitT=0;seeker=null;seekT=Math.max(7,16-level*.8)*Math.sqrt(BIG);robotCol=['#ffd23f','#ff7a1f','#ff3d8b','#38f2ff','#9dff5a','#c08bff','#ffffff'][(level-1)%7];
+ robots=[];const n=Math.round(Math.min(11,4+level)*Math.pow(BIG,.75));let tries=0;
  while(robots.length<n&&tries<500){tries++;const r={x:rnd(X0+20,X1-20),y:rnd(Y0+20,Y1-20),moveT:rnd(0,2),fireT:rnd(1.5,3.5),t:Math.random()*9};
   if(dist(r.x,r.y,pl.x,pl.y)<150)continue;if(walls.some(w=>hit(box(r,22,26),w)))continue;if(robots.some(o=>dist(o.x,o.y,r.x,r.y)<34))continue;robots.push(r)}
  roomBots=robots.length;showBanner('ROOM '+(rooms+1),roomBots+' robots',1.1)}
@@ -121,7 +125,7 @@ function update(dt){
  // move (you stand still to shoot while fire is held, like the classic)
  const firing=inp.fire;const mv=Math.hypot(inp.x,inp.y)>.25;
  if(mv){const a=Math.atan2(inp.y,inp.x),s=Math.round(a/(Math.PI/4))*(Math.PI/4);pl.fx=Math.round(Math.cos(s));pl.fy=Math.round(Math.sin(s))}
- if(!firing&&mv){pl.x+=inp.x*92*dt;pl.y+=inp.y*92*dt;pl.walk+=dt*10}
+ if(!firing&&mv){const sp=92*Math.pow(BIG,.3);pl.x+=inp.x*sp*dt;pl.y+=inp.y*sp*dt;pl.walk+=dt*10}
  if(inp.fireTap||(firing&&mv&&bul.length===0)){if(bul.length<2){const n=Math.hypot(pl.fx,pl.fy)||1;bul.push({x:pl.x+pl.fx*10,y:pl.y-3+pl.fy*10,vx:pl.fx/n*340,vy:pl.fy/n*340});beep(1400,.07,.04,'square',500)}}
  const pb=box(pl,10,20);
  if(pl.inv<=0&&walls.some(w=>hit(pb,w))){killPlayer('ZAPPED!');return}
@@ -161,7 +165,7 @@ function drawRobot(r){const bob=Math.sin(r.t*6)*1.2;ctx.fillStyle='rgba(0,0,0,.4
  ctx.fillStyle='rgba(255,255,255,.3)';ctx.fillRect(-7,-10.4,14,1);ctx.fillStyle='#333';ctx.fillRect(-.8,-15,1.6,4);A.ball(ctx,0,-15.5,1.5,(Math.floor(r.t*4)%2)?'#ff3d52':'#ffd23f');
  for(const bx of[-7,6]){ctx.fillStyle='#05070e';ctx.beginPath();ctx.arc(bx+.5,-2,.8,0,TAU);ctx.fill()}ctx.restore()}
 let _vfloor=null;
-function vfloor(){if(_vfloor)return _vfloor;const cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');c.fillStyle='#070a14';c.fillRect(0,0,W,H);
+function vfloor(){if(_vfloor)return _vfloor;const GS=LAND?2:1,cv=document.createElement('canvas');cv.width=Math.ceil(W*GS);cv.height=Math.ceil(H*GS);const c=cv.getContext('2d');c.scale(GS,GS);c.fillStyle='#070a14';c.fillRect(0,0,W,H);
  for(let y=Y0;y<Y1;y+=20)for(let x=X0;x<X1;x+=20){const h=A.hash(x,y);const g=c.createLinearGradient(x,y,x+20,y+20);g.addColorStop(0,h<.3?'#1a2034':'#141a2c');g.addColorStop(1,'#0c1020');c.fillStyle=g;c.fillRect(x+.5,y+.5,19,19);c.fillStyle='rgba(120,150,220,.12)';c.fillRect(x+.5,y+.5,19,.8);c.fillStyle='rgba(0,0,0,.4)';c.fillRect(x+.5,y+19,19,.8);
   c.fillStyle='rgba(140,160,200,.25)';for(const [dx,dy] of[[2.5,2.5],[17.5,2.5],[2.5,17.5],[17.5,17.5]]){c.beginPath();c.arc(x+dx,y+dy,.8,0,7);c.fill()}
   if(h>.85){c.strokeStyle='rgba(0,0,0,.4)';c.lineWidth=.6;for(let k=0;k<4;k++){c.beginPath();c.moveTo(x+4,y+5+k*3);c.lineTo(x+16,y+5+k*3);c.stroke()}}
@@ -178,7 +182,7 @@ function drawPlayer(){if(deadT>0)return;if(pl.inv>0&&Math.floor(T*12)%2)return;c
  ctx.fillStyle='#02060a';rr(-3.6,-6,7.2,11,2);ctx.fill();{const g=ctx.createLinearGradient(-3,0,3,0);g.addColorStop(0,'#a8ffd8');g.addColorStop(1,'#2a9a6a');ctx.fillStyle=g;}rr(-2.8,-5.2,5.6,9.6,1.6);ctx.fill();ctx.fillStyle='#ffd23f';ctx.fillRect(-2.8,1.6,5.6,1.2);
  lm(0,-3,pl.fx*7,-3+pl.fy*7,2.2,'#7cffb2');ctx.fillStyle='#ccd';ctx.beginPath();ctx.arc(pl.fx*8,-3+pl.fy*8,1.6,0,TAU);ctx.fill();
  A.ball(ctx,0,-9,3.8,'#7cffb2');ctx.fillStyle='#0a1a2a';ctx.fillRect(-2.6+pl.fx*1.2,-10.4,5.2,2.2);ctx.fillStyle='#9fe8ff';ctx.fillRect(-2+pl.fx*1.2,-10,2,1);ctx.restore()}
-function draw(){ctx.drawImage(vfloor(),0,0);
+function draw(){const vf=vfloor();ctx.drawImage(vf,0,0,vf.width/(LAND?2:1),vf.height/(LAND?2:1));
  const pulse=.6+Math.sin(T*6)*.2;ctx.shadowColor='#3a7bff';ctx.shadowBlur=14*pulse;ctx.fillStyle='#3a7bff';for(const w of walls)ctx.fillRect(w.x,w.y,w.w,w.h);ctx.shadowBlur=0;for(const w of walls)drawWall(w,pulse);
  ctx.fillStyle='#bcd3ff';for(const w of walls){if(Math.random()<.04){const sx=w.x+Math.random()*w.w,sy=w.y+Math.random()*w.h;ctx.fillRect(sx-1,sy-1,3,3)}}
  for(const r of robots)if(!r.dead)drawRobot(r);
@@ -199,7 +203,7 @@ function noirLight(){
  d.globalCompositeOperation='destination-out';
  const hole=(x,y,r,a)=>{const g=d.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(0,0,0,'+a+')');g.addColorStop(1,'rgba(0,0,0,0)');d.fillStyle=g;d.fillRect(x-r,y-r,r*2,r*2)};
  if(deadT<=0){hole(pl.x,pl.y,46,.95);const ang=Math.atan2(pl.fy||0,pl.fx||1),len=170;d.save();d.translate(pl.x,pl.y);d.rotate(ang);const g=d.createLinearGradient(0,0,len,0);g.addColorStop(0,'rgba(0,0,0,.95)');g.addColorStop(1,'rgba(0,0,0,0)');d.fillStyle=g;d.beginPath();d.moveTo(4,-5);d.lineTo(len,-len*.42);d.lineTo(len,len*.42);d.lineTo(4,5);d.closePath();d.fill();d.restore()}
- const lx=(X0+X1)/2+Math.sin(T*.9)*40,ly=(Y0+Y1)*.45;hole(lx,ly,95,.55);
+ const lamps=[];for(let i=0;i<NL;i++)lamps.push([X0+(i+.5)*(X1-X0)/NL+Math.sin(T*.9+i*1.7)*40,(Y0+Y1)*.45]);for(const [lx,ly] of lamps)hole(lx,ly,95,.55);
  for(const w of walls){const cx=w.x+w.w/2,cy=w.y+w.h/2;hole(cx,cy,Math.max(w.w,w.h)*.6+10,.25)}
  for(const b of bul)hole(b.x,b.y,18,.6);for(const b of rbul)hole(b.x,b.y,16,.5);
  if(seeker)hole(seeker.x,seeker.y,40,.6);
@@ -210,10 +214,10 @@ function noirLight(){
  // the flashlight beam itself, a pale cone through the haze
  if(deadT<=0){const ang=Math.atan2(pl.fy||0,pl.fx||1);ctx.save();ctx.translate(pl.x,pl.y);ctx.rotate(ang);const bg=ctx.createLinearGradient(0,0,170,0);bg.addColorStop(0,'rgba(220,235,255,.22)');bg.addColorStop(1,'rgba(220,235,255,0)');ctx.fillStyle=bg;ctx.beginPath();ctx.moveTo(4,-4);ctx.lineTo(170,-60);ctx.lineTo(170,60);ctx.lineTo(4,4);ctx.closePath();ctx.fill();ctx.restore()}
  // warm lamp tint and drifting cigarette smoke
- const lg=ctx.createRadialGradient(lx,ly,0,lx,ly,95);lg.addColorStop(0,'rgba(255,200,120,.12)');lg.addColorStop(1,'rgba(255,200,120,0)');ctx.fillStyle=lg;ctx.fillRect(lx-95,ly-95,190,190);ctx.globalCompositeOperation='source-over';
+ for(const [lx,ly] of lamps){const lg=ctx.createRadialGradient(lx,ly,0,lx,ly,95);lg.addColorStop(0,'rgba(255,200,120,.12)');lg.addColorStop(1,'rgba(255,200,120,0)');ctx.fillStyle=lg;ctx.fillRect(lx-95,ly-95,190,190);}ctx.globalCompositeOperation='source-over';
  for(let i=0;i<6;i++){const x=X0+((A.hash(i,1)*(X1-X0)+T*8*(1+i*.2))%(X1-X0)),y=Y0+A.hash(i,2)*(Y1-Y0)+Math.sin(T*.5+i)*10,r=30+A.hash(i,3)*30,g=ctx.createRadialGradient(x,y,0,x,y,r);g.addColorStop(0,'rgba(160,170,190,.07)');g.addColorStop(1,'rgba(160,170,190,0)');ctx.fillStyle=g;ctx.fillRect(x-r,y-r,r*2,r*2)}
  // the lamp itself and its cord
- ctx.strokeStyle='rgba(40,40,50,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo((X0+X1)/2,Y0);ctx.lineTo(lx,ly-6);ctx.stroke();ctx.fillStyle='#2a2a32';ctx.beginPath();ctx.moveTo(lx-6,ly-2);ctx.lineTo(lx+6,ly-2);ctx.lineTo(lx+3,ly-7);ctx.lineTo(lx-3,ly-7);ctx.fill();A.glow(ctx,lx,ly,14,'255,210,140',.7);
+ lamps.forEach(([lx,ly],i)=>{ctx.strokeStyle='rgba(40,40,50,.8)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(X0+(i+.5)*(X1-X0)/NL,Y0);ctx.lineTo(lx,ly-6);ctx.stroke();ctx.fillStyle='#2a2a32';ctx.beginPath();ctx.moveTo(lx-6,ly-2);ctx.lineTo(lx+6,ly-2);ctx.lineTo(lx+3,ly-7);ctx.lineTo(lx-3,ly-7);ctx.fill();A.glow(ctx,lx,ly,14,'255,210,140',.7)});
  // robot eyes glow through the dark
  for(const r of robots)if(!r.dead){A.glow(ctx,r.x-3,r.y-4,6,'255,60,60',.55);A.glow(ctx,r.x+3,r.y-4,6,'255,60,60',.55)}
  ctx.restore();

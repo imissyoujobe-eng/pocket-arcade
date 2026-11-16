@@ -29,12 +29,14 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
     <div id="overlay"><h1>Bug Bloom</h1><p id="msg">Munch every seed in the garden maze. Spin the green gates to block the beetles and spell BLOOM with the petal letters.</p><p class="how">Drag anywhere to walk. Walk into a gate to spin it. Avoid the red thorns, and lure beetles into them. Keys: arrows.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
-<script src="../lib/fit.js" data-canvas="#c"></script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1"></script>
 <script src="../lib/art.js"></script>
 <script>
 const GAME_ID='bug-bloom';
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
-const W=cv.width,H=cv.height,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
+// phone on its side (LAND): the canvas is wide and everything is drawn KS times bigger, so the garden fills the
+// screen with big, easy cells; W and H are the play area in those bigger units
+const LAND=cv.width>cv.height,KS=LAND?600/(9*34+44):1,W=cv.width/KS,H=cv.height/KS,TAU=Math.PI*2,rnd=(a,b)=>a+Math.random()*(b-a),clamp=(v,a,b)=>v<a?a:v>b?b:v,dist=(a,b,c,d)=>Math.hypot(c-a,d-b);
 let AC,muted=false;
 try{muted=localStorage.getItem('arcade_muted')==='1'}catch(e){}
 function setMuteLabel(){$('mu').textContent=muted?'MUTE':'SND'}setMuteLabel();
@@ -80,13 +82,16 @@ $('pz').onclick=togglePause;
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')togglePause()});
 let last=performance.now(),T=0;
 function frame(t){const dt=Math.min(.033,(t-last)/1000);last=t;readInput();if(state==='play'){T+=dt;update(dt);updFx(dt)}else if(state==='over'||state==='menu')updFx(dt);
- ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
+ ctx.save();ctx.scale(KS,KS);ctx.save();if(shake>0)ctx.translate(rnd(-shake,shake),rnd(-shake,shake));draw(state==='play'?dt:0);drawFx();ctx.restore();drawBanner(state==='play'?dt:0);drawJoy();
  if(state==='paused'){ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,0,W,H);ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='32px Bungee, Impact, sans-serif';ctx.fillText('PAUSED',W/2,H/2);ctx.font='13px Rubik, sans-serif';ctx.fillText('Tap ▶ to keep playing',W/2,H/2+28)}
- requestAnimationFrame(frame)}
+ ctx.restore();requestAnimationFrame(frame)}
 </script>
 <script>
 // BUG BLOOM — maze chase. Munch every seed, spin the green gates to wall off the beetles, and spell BLOOM with the petal letters.
-const CS=34,GC=11,GR=13,X0=13,Y0=14,DIRS=[[0,-1],[1,0],[0,1],[-1,0]],BIT=[1,2,4,8],CC=5,CR=6,WORD='BLOOM';
+// upright: an 11 x 13 maze. Sideways: a wide maze 9 rows tall that fills the screen (about the same number of seeds
+// as upright); BIG is how much bigger it is, for a few more gates, thorns and beetles
+const CS=34,GCW=Math.floor((W-26)/CS),GC=LAND?Math.max(11,GCW%2?GCW:GCW-1):11,GR=LAND?9:13,X0=LAND?Math.round((W-GC*CS)/2):13,Y0=LAND?30:14,
+ DIRS=[[0,-1],[1,0],[0,1],[-1,0]],BIT=[1,2,4,8],CC=(GC-1)/2,CR=(GR-1)/2,WORD='BLOOM',BIG=GC*GR/143,maxEns=()=>Math.round(Math.min(4,2+Math.floor(level/2)+1)*Math.sqrt(BIG));
 let open,gates,dots,dotsLeft,pl,ens,lives,level,deadT,releaseT,releaseEvery,letters,word,thorns,veg,freezeT,combo;
 ACTION_LABEL='';
 function reset(){score=0;lives=3;level=1;word=0;newLevel();hud()}
@@ -105,14 +110,14 @@ function gateBlocking(c,r,d){const L=d===1?[[c+1,r],[c+1,r+1]]:d===3?[[c,r],[c,r
   if(vert&&g.v)return g;if(!vert&&!g.v)return g}return null}
 function can(c,r,d,isPlayer){if(!wallOpen(c,r,d))return false;return!gateBlocking(c,r,d)}
 let lvlDone=false;
-function newLevel(){lvlDone=false;genMaze();gates=[];const tries=200;for(let i=0;i<tries&&gates.length<10+Math.min(4,level);i++){const gx=1+Math.floor(Math.random()*(GC-1)),gy=1+Math.floor(Math.random()*(GR-1));
+function newLevel(){lvlDone=false;genMaze();gates=[];const tries=300;for(let i=0;i<tries&&gates.length<Math.round((10+Math.min(4,level))*BIG);i++){const gx=1+Math.floor(Math.random()*(GC-1)),gy=1+Math.floor(Math.random()*(GR-1));
   if(gates.some(g=>Math.abs(g.x-gx)+Math.abs(g.y-gy)<3))continue;if(Math.abs(gx-CC-.5)<2&&Math.abs(gy-CR-.5)<2)continue;
   // all four arms must sit on open passages
   const ok=wallOpen(gx-1,gy-1,1)&&wallOpen(gx-1,gy,1)&&wallOpen(gx-1,gy-1,2)&&wallOpen(gx,gy-1,2);if(!ok)continue;gates.push({x:gx,y:gy,v:Math.random()<.5,rot:0})}
  dots=Array.from({length:GR},()=>new Array(GC).fill(1));dots[CR][CC]=0;dots[GR-1][CC]=0;dotsLeft=GC*GR-2;
  letters=[];thorns=[];const free=()=>{let c,r;do{c=Math.floor(Math.random()*GC);r=Math.floor(Math.random()*GR)}while((c===CC&&(r===CR||r===GR-1))||letters.some(l=>l.c===c&&l.r===r)||thorns.some(l=>l.c===c&&l.r===r));return[c,r]};
  for(let i=0;i<3;i++){const [c,r]=free();letters.push({c,r,t:Math.random()*3});dots[r][c]=0;dotsLeft--}
- for(let i=0;i<Math.min(4,1+Math.floor(level/2));i++){const [c,r]=free();if(Math.abs(c-CC)+Math.abs(r-(GR-1))<3){i--;continue}thorns.push({c,r});if(dots[r][c]){dots[r][c]=0;dotsLeft--}}
+ for(let i=0;i<Math.round(Math.min(4,1+Math.floor(level/2))*Math.sqrt(BIG));i++){const [c,r]=free();if(Math.abs(c-CC)+Math.abs(r-(GR-1))<3){i--;continue}thorns.push({c,r});if(dots[r][c]){dots[r][c]=0;dotsLeft--}}
  ens=[];releaseEvery=Math.max(4,9-level*.6);releaseT=releaseEvery*.5;veg=null;freezeT=0;combo=0;resetPos();showBanner('GARDEN '+level,'Eat every seed',1.3)}
 function resetPos(){pl={c:CC,r:GR-1,d:1,p:0,moving:false,face:1,inv:1.5};for(const e of ens){e.c=CC;e.r=CR;e.p=0;e.d=0;e.out=false;e.wait=rnd(.5,2)}deadT=0}
 function step(c,r,d){return[c+DIRS[d][0],r+DIRS[d][1]]}
@@ -136,8 +141,8 @@ function update(dt){for(const l of letters)l.t+=dt/1.2;for(const g of gates)g.ro
  else if(want===(pl.d+2)%4){[pl.c,pl.r]=step(pl.c,pl.r,pl.d);pl.p=1-pl.p;pl.d=want}
  if(pl.moving){pl.p+=3.6*dt;if(pl.p>=1){pl.p=0;[pl.c,pl.r]=step(pl.c,pl.r,pl.d);eat(pl.c,pl.r);if(state!=='play'||deadT>0)return;if(want<0)pl.moving=false}}
  // release beetles from the nest on a timer
- releaseT-=dt;if(releaseT<=0&&ens.length<Math.min(4,2+Math.floor(level/2)+1)){releaseT=releaseEvery;ens.push({c:CC,r:CR,d:0,p:0,out:false,wait:0,t:Math.random()*9,col:['#ff7a1f','#c08bff','#4fa3ff','#ff4fa3'][ens.length%4]});beep(150,.3,.05,'sawtooth',300)}
- if(ens.length&&ens.length>=Math.min(4,2+Math.floor(level/2)+1)&&!veg&&!ens.vegShown){ens.vegShown=true;veg={c:CC,r:CR-1};}
+ releaseT-=dt;if(releaseT<=0&&ens.length<maxEns()){releaseT=releaseEvery;ens.push({c:CC,r:CR,d:0,p:0,out:false,wait:0,t:Math.random()*9,col:['#ff7a1f','#c08bff','#4fa3ff','#ff4fa3'][ens.length%4]});beep(150,.3,.05,'sawtooth',300)}
+ if(ens.length&&ens.length>=maxEns()&&!veg&&!ens.vegShown){ens.vegShown=true;veg={c:CC,r:CR-1};}
  const pp=pos(pl);
  for(const e of ens){e.t+=dt;if(e.wait>0){e.wait-=dt;continue}if(freezeT>0)continue;const sp=2.1+level*.18;
   e.p+=sp*dt;while(e.p>=1){e.p-=1;[e.c,e.r]=step(e.c,e.r,e.d);const opts=[0,1,2,3].filter(d=>can(e.c,e.r,d));let nd=-1;if(Math.random()<.7)nd=bfsDir(e,pl.c,pl.r);if(nd<0||!can(e.c,e.r,nd)){const fw=opts.filter(d=>d!==(e.d+2)%4);const pick=fw.length?fw:opts;nd=pick.length?pick[Math.floor(Math.random()*pick.length)]:-1}if(nd<0){e.p=0;break}e.d=nd}
@@ -153,7 +158,7 @@ function drawBug(x,y,d,body,spots,t,isPlayer){ctx.save();ctx.translate(x,y);ctx.
  ctx.fillStyle='#111';ctx.beginPath();ctx.arc(0,-10,5.4,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-2.2,-11.2,1.6,0,TAU);ctx.arc(2.2,-11.2,1.6,0,TAU);ctx.fill();ctx.fillStyle='#111';ctx.fillRect(-2,-11.6,1,1);ctx.fillRect(2.4,-11.6,1,1);ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(-3.6,-8,.9,0,TAU);ctx.arc(3.6,-8,.9,0,TAU);ctx.fill();
  ctx.strokeStyle='#111';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(-2,-14);ctx.quadraticCurveTo(-4,-18,-6,-19);ctx.moveTo(2,-14);ctx.quadraticCurveTo(4,-18,6,-19);ctx.stroke();ctx.fillStyle='#111';ctx.beginPath();ctx.arc(-6,-19,1.4,0,TAU);ctx.arc(6,-19,1.4,0,TAU);ctx.fill();ctx.restore()}
 let _gard=null;
-function gardenArt(){if(_gard)return _gard;const cv=document.createElement('canvas');cv.width=W;cv.height=H;const c=cv.getContext('2d');
+function gardenArt(){if(_gard)return _gard;const GS=LAND?2:1,cv=document.createElement('canvas');cv.width=Math.ceil(W*GS);cv.height=Math.ceil(H*GS);const c=cv.getContext('2d');c.scale(GS,GS);
  c.fillStyle='#1a2a14';c.fillRect(0,0,W,H);for(let y=0;y<H;y+=16)for(let x=0;x<W;x+=16)A.grassTD(c,x,y,x/16,y/16,{base:'#3a7a2a',hi:'#5a9a3a',lo:'#2a5a1e'});
  c.fillStyle='rgba(0,0,0,.35)';c.fillRect(0,0,W,H);
  for(let y=Y0;y<Y0+GR*CS;y+=16)for(let x=X0;x<X0+GC*CS;x+=16)A.grassTD(c,x,y,x/16+50,y/16,{base:'#6cbc4a',hi:'#8ad864',lo:'#4a9a34'});
@@ -161,7 +166,7 @@ function gardenArt(){if(_gard)return _gard;const cv=document.createElement('canv
  return(_gard=cv)}
 function hedge(path){ctx.lineCap='round';ctx.lineJoin='round';for(const [lw,col] of[[11,'#0e2a10'],[9,'#2a6a2a'],[6,'#3f8f3a'],[2.5,'#6abf55']]){ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.stroke(path)}
  }
-function draw(){ctx.drawImage(gardenArt(),0,0);
+function draw(){const ga=gardenArt();ctx.drawImage(ga,0,0,ga.width/(LAND?2:1),ga.height/(LAND?2:1));
  // release timer runs around the border like a garden fuse
  const k=1-releaseT/releaseEvery,per=2*(GC+GR)*CS;ctx.strokeStyle='#ffd23f';ctx.lineWidth=3;ctx.setLineDash([per*k,per]);rr(X0-6,Y0-6,GC*CS+12,GR*CS+12,6);ctx.stroke();ctx.setLineDash([]);
  for(let r=0;r<GR;r++)for(let c=0;c<GC;c++)if(dots[r][c]){const x=X0+(c+.5)*CS,y=Y0+(r+.5)*CS;ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(x+1,y+2,3,2,0,0,TAU);ctx.fill();ctx.fillStyle='#5a3a10';ctx.beginPath();ctx.ellipse(x,y,3.3,4.3,.6,0,TAU);ctx.fill();ctx.fillStyle='#f4e3b5';ctx.beginPath();ctx.ellipse(x,y,2.6,3.6,.6,0,TAU);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(x-1.2,y-2,1,1.4)}
@@ -176,6 +181,7 @@ function draw(){ctx.drawImage(gardenArt(),0,0);
  if(veg){const x=X0+(veg.c+.5)*CS,y=Y0+(veg.r+.5)*CS;A.glow(ctx,x,y,20,'255,180,60',.35);ctx.fillStyle='#2a6a1a';for(const [dx,h] of[[-4,10],[0,13],[4,10]]){ctx.beginPath();ctx.ellipse(x+dx,y-4-h/2,2,h/2,dx*.06,0,TAU);ctx.fill()}ctx.fillStyle='#3a1a00';ctx.beginPath();ctx.moveTo(x,y+13);ctx.lineTo(x-7,y-4.5);ctx.lineTo(x+7,y-4.5);ctx.fill();{const g=ctx.createLinearGradient(x-6,0,x+6,0);g.addColorStop(0,'#ffa040');g.addColorStop(1,'#d05a10');ctx.fillStyle=g;}ctx.beginPath();ctx.moveTo(x,y+12);ctx.lineTo(x-6,y-4);ctx.lineTo(x+6,y-4);ctx.fill();ctx.strokeStyle='rgba(120,40,0,.6)';ctx.lineWidth=.8;for(let k=0;k<3;k++){ctx.beginPath();ctx.moveTo(x-4+k,y-1+k*4);ctx.lineTo(x-1+k,y+k*4);ctx.stroke()}}
  for(const e of ens){const q=pos(e);ctx.globalAlpha=freezeT>0&&Math.floor(T*8)%2?.5:1;drawBug(q.x,q.y,e.d,e.col,'#111',e.t,false);ctx.globalAlpha=1}
  if(deadT<=0&&!(pl.inv>0&&Math.floor(T*10)%2)){const q=pos(pl);drawBug(q.x,q.y,pl.face,'#ff3d52','#111',pl.moving?T:0,true)}
+ if(LAND)return; // sideways the maze fills the screen; the word and score are in the bar on top
  ctx.fillStyle='#a7c9a0';ctx.font='11px Rubik, sans-serif';ctx.textAlign='left';ctx.fillText('SEEDS '+dotsLeft,X0,H-22);ctx.textAlign='right';ctx.fillText('Walk into a green gate to spin it',X0+GC*CS,H-22);
  ctx.textAlign='center';ctx.font='18px Bungee, Impact, sans-serif';for(let i=0;i<5;i++){ctx.fillStyle=i<word?'#ffd23f':'#2c4a2f';ctx.fillText(WORD[i],W/2-48+i*24,H-44)}}
 

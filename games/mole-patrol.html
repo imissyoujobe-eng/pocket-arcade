@@ -35,22 +35,25 @@ button:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
     <button id="pumpBtn">PUMP</button>
   </div>
 </div>
-<script src="../lib/fit.js" data-canvas="#c"></script>
+<script src="../lib/fit.js" data-canvas="#c" data-wide="1"></script>
 <script src="../lib/art.js"></script>
 <script>
 const cv=document.getElementById('c'),ctx=cv.getContext('2d'),$=id=>document.getElementById(id);
-const N=13,T=32,SKY=2; // grid 13x13, rows 0-1 sky
+const N=13,T=32,SKY=2; // grid 13 rows tall, rows 0-1 sky
+// phone on its side: a wider field (NX columns, centred with OX); you start in the middle column MC, and a
+// wider field has a few more critters
+const W=cv.width,NX=Math.max(N,Math.floor(W/T)),OX=Math.round((W-NX*T)/2),MC=Math.floor(NX/2);
 let dirt,player,enemies,hose,round,score,lives,state='menu',dir=[0,0],pumping=false,AC,best=0;
 try{best=+localStorage.getItem('mole-best')||0}catch(e){}
 $('best').textContent=best?'BEST '+best:'';
 function beep(f,d,v=.06,type='square'){if(!AC)return;const o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}
 function newRound(){
-  dirt=[];for(let y=0;y<N;y++){dirt[y]=[];for(let x=0;x<N;x++)dirt[y][x]=y>=SKY}
-  for(let y=0;y<=6;y++)dirt[y][6]=false; // starting shaft
-  player={x:6,y:6,px:6,py:6,fx:1,fy:0,t:0};
-  enemies=[];const n=Math.min(3+round,8);
-  for(let i=0;i<n;i++){let ex,ey;do{ex=1+Math.floor(Math.random()*(N-2));ey=4+Math.floor(Math.random()*(N-5))}while(Math.abs(ex-6)+Math.abs(ey-6)<5);
-    const horiz=Math.random()<.5;for(let k=-1;k<=1;k++){const tx=horiz?ex+k:ex,ty=horiz?ey:ey+k;if(tx>=0&&tx<N&&ty>=SKY&&ty<N)dirt[ty][tx]=false}
+  dirt=[];for(let y=0;y<N;y++){dirt[y]=[];for(let x=0;x<NX;x++)dirt[y][x]=y>=SKY}
+  for(let y=0;y<=6;y++)dirt[y][MC]=false; // starting shaft
+  player={x:MC,y:6,px:MC,py:6,fx:1,fy:0,t:0};
+  enemies=[];const n=Math.round(Math.min(3+round,8)*Math.max(1,Math.pow(NX/N,.6)));
+  for(let i=0;i<n;i++){let ex,ey,tries=0;do{ex=1+Math.floor(Math.random()*(NX-2));ey=4+Math.floor(Math.random()*(N-5))}while((Math.abs(ex-MC)+Math.abs(ey-6)<5||enemies.some(o=>Math.abs(o.x-ex)+Math.abs(o.y-ey)<3))&&++tries<60);
+    const horiz=Math.random()<.5;for(let k=-1;k<=1;k++){const tx=horiz?ex+k:ex,ty=horiz?ey:ey+k;if(tx>=0&&tx<NX&&ty>=SKY&&ty<N)dirt[ty][tx]=false}
     enemies.push({x:ex,y:ey,px:ex,py:ey,dx:horiz?1:0,dy:horiz?0:1,inflate:0,ghost:0,ghostT:4+Math.random()*6,t:0,pop:0})}
   hose=null;
 }
@@ -71,7 +74,7 @@ function update(dt){
   const p=player;
   if(p.t<=0&&!hose){
     if(dir[0]||dir[1]){p.fx=dir[0];p.fy=dir[1];const nx=p.x+dir[0],ny=p.y+dir[1];
-      if(nx>=0&&nx<N&&ny>=1&&ny<N){p.px=p.x;p.py=p.y;p.x=nx;p.y=ny;p.t=1;if(dirt[ny][nx]){dirt[ny][nx]=false;score+=1;hud()}}}
+      if(nx>=0&&nx<NX&&ny>=1&&ny<N){p.px=p.x;p.py=p.y;p.x=nx;p.y=ny;p.t=1;if(dirt[ny][nx]){dirt[ny][nx]=false;score+=1;hud()}}}
   }
   if(p.t>0)p.t=Math.max(0,p.t-dt*SPD);
   // hose
@@ -79,7 +82,7 @@ function update(dt){
   if(hose){
     if(!hose.target){hose.len+=dt*14;
       const cells=Math.floor(hose.len);let hit=null,blocked=false;
-      for(let i=1;i<=cells;i++){const cx=p.x+p.fx*i,cy=p.y+p.fy*i;if(cx<0||cx>=N||cy<0||cy>=N||dirt[cy][cx]){blocked=true;hose.len=i-.5;break}
+      for(let i=1;i<=cells;i++){const cx=p.x+p.fx*i,cy=p.y+p.fy*i;if(cx<0||cx>=NX||cy<0||cy>=N||dirt[cy][cx]){blocked=true;hose.len=i-.5;break}
         hit=enemies.find(e=>!e.pop&&Math.round(e.x)==cx&&Math.round(e.y)==cy);if(hit){hose.len=i;break}}
       if(hit){hose.target=hit;hit.inflate=Math.max(hit.inflate,.01)}
       else if(blocked||hose.len>4){hose=null}
@@ -99,7 +102,7 @@ function update(dt){
         const gx=Math.sign(p.x-e.x),gy=Math.sign(p.y-e.y);if(Math.abs(p.x-e.x)>Math.abs(p.y-e.y))e.x+=gx;else e.y+=gy;
         if(!dirt[e.y]?.[e.x]&&e.y>=SKY){e.ghost=0;e.ghostT=5+Math.random()*6}
       }else{
-        const opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>{const nx=e.x+dx,ny=e.y+dy;return nx>=0&&nx<N&&ny>=SKY&&ny<N&&!dirt[ny][nx]});
+        const opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(([dx,dy])=>{const nx=e.x+dx,ny=e.y+dy;return nx>=0&&nx<NX&&ny>=SKY&&ny<N&&!dirt[ny][nx]});
         let pick=opts.find(o=>o[0]==e.dx&&o[1]==e.dy);
         const chase=opts.filter(o=>Math.sign(p.x-e.x)==o[0]&&o[0]||Math.sign(p.y-e.y)==o[1]&&o[1]);
         if(chase.length&&Math.random()<.5)pick=chase[0];
@@ -118,7 +121,7 @@ function update(dt){
 function die(){lives--;hud();beep(200,.5,.1,'sawtooth');hose=null;
   if(lives<=0){state='over';if(score>best){best=score;try{localStorage.setItem('mole-best',best)}catch(e){}}
     $('overlay').querySelector('p').textContent=`Game over on round ${round} with ${score} points.`;$('best').textContent='BEST '+best;$('go').textContent='Play again';$('overlay').hidden=false;return}
-  player={x:6,y:1,px:6,py:1,fx:1,fy:0,t:0};for(const e of enemies){e.ghost=0;e.inflate=0}
+  player={x:MC,y:1,px:MC,py:1,fx:1,fy:0,t:0};for(const e of enemies){e.ghost=0;e.inflate=0}
 }
 // ---- detail art: cached dirt tiles per soil band, carved tunnels, critters, the mole ----
 const BANDS=[{b:'#c98b4a',h:'#e0a868',l:'#9a6430'},{b:'#a8642e',h:'#c07a42',l:'#7a4520'},{b:'#7d4520',h:'#985a30',l:'#552a12'},{b:'#57301a',h:'#6e4028',l:'#38190a'}];
@@ -134,28 +137,29 @@ function dirtTile(band,v){const k=band+'_'+v;if(tileCache[k])return tileCache[k]
   return tileCache[k]=c2}
 function draw(t){
   // sky + surface scenery
-  const sg=ctx.createLinearGradient(0,0,0,SKY*T);sg.addColorStop(0,'#3a9ae8');sg.addColorStop(1,'#bfe8ff');ctx.fillStyle=sg;ctx.fillRect(0,0,416,SKY*T);
-  A.glow(ctx,370,24,40,'255,240,160',.5);ctx.fillStyle='#ffe066';ctx.beginPath();ctx.arc(370,24,13,0,7);ctx.fill();
-  for(let i=0;i<3;i++){const cx=((i*150+t/80)%560)-70,cy=12+i*7;ctx.fillStyle='rgba(255,255,255,.9)';ctx.beginPath();ctx.ellipse(cx,cy,22,6,0,0,7);ctx.ellipse(cx-8,cy-4,10,6,0,0,7);ctx.ellipse(cx+9,cy-5,12,7,0,0,7);ctx.fill()}
+  const sg=ctx.createLinearGradient(0,0,0,SKY*T);sg.addColorStop(0,'#3a9ae8');sg.addColorStop(1,'#bfe8ff');ctx.fillStyle=sg;ctx.fillRect(0,0,W,SKY*T);
+  A.glow(ctx,W-46,24,40,'255,240,160',.5);ctx.fillStyle='#ffe066';ctx.beginPath();ctx.arc(W-46,24,13,0,7);ctx.fill();
+  for(let i=0;i<3;i++){const cx=((i*150*W/416+t/80)%(W+144))-70,cy=12+i*7;ctx.fillStyle='rgba(255,255,255,.9)';ctx.beginPath();ctx.ellipse(cx,cy,22,6,0,0,7);ctx.ellipse(cx-8,cy-4,10,6,0,0,7);ctx.ellipse(cx+9,cy-5,12,7,0,0,7);ctx.fill()}
   // distant farm: barn, windmill, fence
-  ctx.fillStyle='#7ab860';ctx.beginPath();ctx.moveTo(0,SKY*T-6);ctx.quadraticCurveTo(100,SKY*T-26,200,SKY*T-8);ctx.quadraticCurveTo(300,SKY*T-22,416,SKY*T-6);ctx.lineTo(416,SKY*T);ctx.lineTo(0,SKY*T);ctx.fill();
-  ctx.fillStyle='#0a0604';ctx.fillRect(39,SKY*T-29,30,23);ctx.fillStyle='#c0392b';ctx.fillRect(40,SKY*T-28,28,22);ctx.fillStyle='#0a0604';ctx.beginPath();ctx.moveTo(37,SKY*T-27);ctx.lineTo(54,SKY*T-41);ctx.lineTo(71,SKY*T-27);ctx.fill();ctx.fillStyle='#8a2a1f';ctx.beginPath();ctx.moveTo(39,SKY*T-28);ctx.lineTo(54,SKY*T-40);ctx.lineTo(69,SKY*T-28);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(49,SKY*T-18,10,12);ctx.strokeStyle='#c0392b';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(49,SKY*T-18);ctx.lineTo(59,SKY*T-6);ctx.moveTo(59,SKY*T-18);ctx.lineTo(49,SKY*T-6);ctx.stroke();
-  ctx.fillStyle='#d8d0c0';ctx.fillRect(300,SKY*T-38,4,32);ctx.save();ctx.translate(302,SKY*T-38);ctx.rotate(t/600);ctx.fillStyle='#f4f0e8';for(let k=0;k<4;k++){ctx.rotate(Math.PI/2);ctx.fillRect(-1.5,0,3,14)}ctx.restore();
-  ctx.strokeStyle='#8a6a40';ctx.lineWidth=1.5;for(let x=90;x<280;x+=14){ctx.beginPath();ctx.moveTo(x,SKY*T-6);ctx.lineTo(x,SKY*T-15);ctx.stroke()}ctx.beginPath();ctx.moveTo(90,SKY*T-12);ctx.lineTo(280,SKY*T-12);ctx.stroke();
+  ctx.fillStyle='#7ab860';ctx.beginPath();ctx.moveTo(0,SKY*T-6);ctx.quadraticCurveTo(W*.24,SKY*T-26,W*.48,SKY*T-8);ctx.quadraticCurveTo(W*.72,SKY*T-22,W,SKY*T-6);ctx.lineTo(W,SKY*T);ctx.lineTo(0,SKY*T);ctx.fill();
+  ctx.save();ctx.translate(Math.round(W*.094)-39,0);ctx.fillStyle='#0a0604';ctx.fillRect(39,SKY*T-29,30,23);ctx.fillStyle='#c0392b';ctx.fillRect(40,SKY*T-28,28,22);ctx.fillStyle='#0a0604';ctx.beginPath();ctx.moveTo(37,SKY*T-27);ctx.lineTo(54,SKY*T-41);ctx.lineTo(71,SKY*T-27);ctx.fill();ctx.fillStyle='#8a2a1f';ctx.beginPath();ctx.moveTo(39,SKY*T-28);ctx.lineTo(54,SKY*T-40);ctx.lineTo(69,SKY*T-28);ctx.fill();ctx.fillStyle='#fff';ctx.fillRect(49,SKY*T-18,10,12);ctx.strokeStyle='#c0392b';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(49,SKY*T-18);ctx.lineTo(59,SKY*T-6);ctx.moveTo(59,SKY*T-18);ctx.lineTo(49,SKY*T-6);ctx.stroke();ctx.restore();
+  ctx.fillStyle='#d8d0c0';ctx.fillRect(Math.round(W*.72),SKY*T-38,4,32);ctx.save();ctx.translate(Math.round(W*.72)+2,SKY*T-38);ctx.rotate(t/600);ctx.fillStyle='#f4f0e8';for(let k=0;k<4;k++){ctx.rotate(Math.PI/2);ctx.fillRect(-1.5,0,3,14)}ctx.restore();
+  ctx.strokeStyle='#8a6a40';ctx.lineWidth=1.5;const f0=Math.round(W*.216),f1=Math.round(W*.673);for(let x=f0;x<f1;x+=14){ctx.beginPath();ctx.moveTo(x,SKY*T-6);ctx.lineTo(x,SKY*T-15);ctx.stroke()}ctx.beginPath();ctx.moveTo(f0,SKY*T-12);ctx.lineTo(f1,SKY*T-12);ctx.stroke();
   // grass lip with blades and flowers
-  ctx.fillStyle='#3a8a2a';ctx.fillRect(0,SKY*T-6,416,7);ctx.fillStyle='#6ac04a';ctx.fillRect(0,SKY*T-6,416,2);
-  ctx.strokeStyle='#4caa3a';ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<416;x+=3){ctx.moveTo(x,SKY*T-5);ctx.lineTo(x+(A.hash(x,1)-.5)*3,SKY*T-9-A.hash(x,2)*3)}ctx.stroke();
-  for(let i=0;i<10;i++){const x=A.hash(i,9)*416;ctx.fillStyle=['#ffd23f','#ff7aa8','#fff'][i%3];ctx.beginPath();ctx.arc(x,SKY*T-9,1.8,0,7);ctx.fill()}
+  ctx.fillStyle='#3a8a2a';ctx.fillRect(0,SKY*T-6,W,7);ctx.fillStyle='#6ac04a';ctx.fillRect(0,SKY*T-6,W,2);
+  ctx.strokeStyle='#4caa3a';ctx.lineWidth=1;ctx.beginPath();for(let x=0;x<W;x+=3){ctx.moveTo(x,SKY*T-5);ctx.lineTo(x+(A.hash(x,1)-.5)*3,SKY*T-9-A.hash(x,2)*3)}ctx.stroke();
+  for(let i=0;i<Math.round(10*W/416);i++){const x=A.hash(i,9)*W;ctx.fillStyle=['#ffd23f','#ff7aa8','#fff'][i%3];ctx.beginPath();ctx.arc(x,SKY*T-9,1.8,0,7);ctx.fill()}
   // underground: tunnels first (deep shadow), then dirt tiles with lit edges
-  for(let y=SKY;y<N;y++)for(let x=0;x<N;x++){const band=Math.min(3,Math.floor((y-SKY)/3));
+  ctx.fillStyle='#3a2414';ctx.fillRect(0,SKY*T,W,N*T-SKY*T);ctx.save();ctx.translate(OX,0);
+  for(let y=SKY;y<N;y++)for(let x=0;x<NX;x++){const band=Math.min(3,Math.floor((y-SKY)/3));
     if(dirt[y][x])ctx.drawImage(dirtTile(band,Math.floor(A.hash(x,y,5)*14)),x*T,y*T,T,T);
     else{const g=ctx.createRadialGradient(x*T+T/2,y*T+T/2,2,x*T+T/2,y*T+T/2,T*.75);g.addColorStop(0,'#2a1a10');g.addColorStop(1,'#0e0805');ctx.fillStyle=g;ctx.fillRect(x*T,y*T,T,T)}}
-  for(let y=SKY;y<N;y++)for(let x=0;x<N;x++){if(dirt[y][x])continue;const X=x*T,Y=y*T;
+  for(let y=SKY;y<N;y++)for(let x=0;x<NX;x++){if(dirt[y][x])continue;const X=x*T,Y=y*T;
     // soft dirt overhang: dark rim where tunnel meets soil, light lip on top edges
     if(y>SKY&&dirt[y-1][x]){ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(X,Y,T,4);ctx.fillStyle='rgba(255,220,170,.25)';ctx.fillRect(X,Y-1,T,1)}
     if(y<N-1&&dirt[y+1][x]){ctx.fillStyle='rgba(255,210,150,.18)';ctx.fillRect(X,Y+T-2,T,2)}
     if(x>0&&dirt[y][x-1]){ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(X,Y,3,T)}
-    if(x<N-1&&dirt[y][x+1]){ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(X+T-3,Y,3,T)}}
+    if(x<NX-1&&dirt[y][x+1]){ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(X+T-3,Y,3,T)}}
   // depth markers on the left edge
   ctx.font='8px Rubik, sans-serif';ctx.fillStyle='rgba(255,255,255,.25)';ctx.textAlign='left';for(let b=0;b<4;b++)ctx.fillText((b+1)*10+'m',2,(SKY+b*3)*T+10);
   // hose
@@ -204,7 +208,7 @@ function draw(t){
   ctx.fillStyle='#ccc';ctx.fillRect(-2,-14,5,4);ctx.fillStyle='#fffde0';ctx.beginPath();ctx.arc(2,-12,2,0,7);ctx.fill();ctx.restore();
   // headlamp beam lighting the tunnel ahead
   if(state==='play'){ctx.save();ctx.globalCompositeOperation='lighter';const bx=ppx+p.fx*10,by=ppy-12+p.fy*10,ang=Math.atan2(p.fy,p.fx||(p.fy?0:1));const lg=ctx.createRadialGradient(bx,by,2,bx,by,70);lg.addColorStop(0,'rgba(255,250,200,.35)');lg.addColorStop(1,'rgba(255,250,200,0)');ctx.fillStyle=lg;ctx.beginPath();ctx.moveTo(bx,by);ctx.arc(bx,by,70,ang-.45,ang+.45);ctx.closePath();ctx.fill();ctx.restore()}
-  A.vignette(ctx,416,416,.35);
+  ctx.restore();A.vignette(ctx,W,416,.35);
 }
 let last=performance.now();
 function loop(t){const dt=Math.min(.05,(t-last)/1000);last=t;if(state==='play')update(dt);if(dirt)draw(t);requestAnimationFrame(loop)}
