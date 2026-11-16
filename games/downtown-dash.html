@@ -74,6 +74,12 @@ body { margin: 0; background: var(--ink); color: var(--fg); font-family: var(--b
 .play { font-family: var(--display); font-size: 2rem; line-height: 1; letter-spacing: .04em; color: #3a2600; background: linear-gradient(180deg, #ffe27a, var(--gold)); border: 0; border-radius: 14px; padding: 12px 36px 8px; cursor: pointer; box-shadow: 0 6px 0 #8a6400, 0 0 26px rgba(255,204,51,.5); }
 .play:active { transform: translateY(4px); box-shadow: 0 2px 0 #8a6400; }
 .err { position: absolute; left: 12px; right: 12px; bottom: 50%; padding: 12px; border-radius: 10px; background: #5a1020; color: #fff; font-size: 14px; }
+/* phone on its side: the title and the start button on the left, the how-to list on the right, so it all fits */
+@media (orientation: landscape) and (max-height: 600px) {
+  #start .card { display: grid; grid-template-columns: auto minmax(0, 360px); grid-template-areas: "tag ul" "h1 ul" "play ul" "best ul"; max-width: 94vw; column-gap: 26px; row-gap: 8px; align-items: center; justify-items: center; }
+  #start .card .tag { grid-area: tag; } #start .card h1 { grid-area: h1; font-size: clamp(2.4rem, 15vh, 3.8rem); }
+  #start .card ul { grid-area: ul; font-size: .82rem; gap: 4px; padding: 10px 12px; } #start .card #play { grid-area: play; } #start .card #best { grid-area: best; }
+}
 @media (prefers-reduced-motion: reduce) { .toast, .money.bump { animation: none; } }
 </style>
 

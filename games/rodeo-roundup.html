@@ -12,8 +12,9 @@
 <script>
 // Rodeo Roundup: the herd is stampeding. Ride between the lanes and lasso every steer before it gets past you.
 K.theme({ bg: '#2a1a0e', ink: '#fff4e0', accent: '#ffb02e', accentInk: '#2a1600' });
-const W = 220, H = 360, HZ = 104, LANES = [146, 202, 258, 314], MAXSTRAY = 5, CS = 1.7; // tall screen; CS = how big the horse and cattle are drawn
+let W = 220; const H = 360, HZ = 104, LANES = [146, 202, 258, 314], MAXSTRAY = 5, CS = 1.7; // tall screen; CS = how big the horse and cattle are drawn
 K.screen(W, H);
+K.flex(220, H, w => { W = w; }, { maxW: 820 }); // phone on its side: the whole wide desert, edge to edge
 K.hud(['score', 'strays']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'ROPE' }] });
 const BREEDS = [{ n: 'brown', c: '#8a5a32', v: 1, pts: 10 }, { n: 'black', c: '#2a2420', v: 1.35, pts: 25 }, { n: 'spotted', c: '#f0e8dc', v: 1.15, pts: 50, weave: 1 }];
@@ -31,7 +32,7 @@ function update(dt) {
   if (K.ptr.tapped) { if (K.ptr.x > W * 0.7 && !rope) throwRope(); else { let best = 0; LANES.forEach((ly, i) => { if (Math.abs(ly - K.ptr.y) < Math.abs(LANES[best] - K.ptr.y)) best = i; }); rider.lane = best; } }
   rider.y += (LANES[rider.lane] - rider.y) * Math.min(1, dt * 12);
   const ax = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0);
-  rider.x = K.clamp(rider.x + ax * 80 * dt, 24, 110);
+  rider.x = K.clamp(rider.x + ax * 80 * dt * Math.max(1, W / 300), 24, Math.max(110, W * 0.42));
   if (rider.jump > 0) rider.jump -= dt;
   if (K.hit('a') && !rope) throwRope();
   // spawn steers and skulls
@@ -42,7 +43,7 @@ function update(dt) {
     if (Math.random() < 0.25) skulls.push({ lane: K.ri(0, 3), x: W + 60 });
     spawnT = K.rnd(0.7, 1.5) / pace();
   }
-  const spd = 52 * pace();
+  const spd = 52 * pace() * Math.pow(W / 220, 0.6);
   for (const s of herd) {
     s.x -= spd * s.br.v * dt;
     if (s.br.weave) { s.wt -= dt; if (s.wt <= 0) { s.wt = K.rnd(1, 2); s.lane = K.clamp(s.lane + (Math.random() < .5 ? -1 : 1), 0, 3); } }
@@ -112,11 +113,11 @@ function draw(c, t) {
   A.ridge(c, cm, { factor: 0.5, base: HZ + 1, amp: 18, col: '#9a4a32', edge: 'rgba(0,0,0,.35)', seed: 7 });
   c.restore();
   c.fillStyle = '#d9a35b'; c.fillRect(0, HZ, W, H - HZ);
-  for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#cf9a52' : '#d9a35b'; c.fillRect(0, LANES[i] - 28, W, 56); for (let k = 0; k < 40; k++) { const x = ((A.hash(k, i) * 500 - cm * 2.6) % 500 + 500) % 500 - 30; c.fillStyle = k % 3 ? 'rgba(140,90,40,.35)' : 'rgba(255,230,180,.35)'; c.fillRect(x, LANES[i] - 26 + A.hash(k, i + 5) * 52, 2 + (k % 3), 1.5); } c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(0, LANES[i] + 16, W, 2); }
+  for (let i = 0; i < 4; i++) { c.fillStyle = i % 2 ? '#cf9a52' : '#d9a35b'; c.fillRect(0, LANES[i] - 28, W, 56); for (let k = 0, P = Math.max(500, W + 60); k < 40 * P / 500; k++) { const x = ((A.hash(k, i) * P - cm * 2.6) % P + P) % P - 30; c.fillStyle = k % 3 ? 'rgba(140,90,40,.35)' : 'rgba(255,230,180,.35)'; c.fillRect(x, LANES[i] - 26 + A.hash(k, i + 5) * 52, 2 + (k % 3), 1.5); } c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(0, LANES[i] + 16, W, 2); }
   c.fillStyle = A.INK; c.fillRect(0, HZ, W, 1.5);
   c.fillStyle = '#b8823e'; for (let x = -(((time || 0) * 80) % 40); x < W; x += 40) for (const ly of LANES) c.fillRect(x, ly + 22, 8, 2);
   // cactus
-  c.fillStyle = '#3f8530'; for (let k = 0; k < 3; k++) { const x = ((k * 140 - (time || 0) * 30) % 420 + 420) % 420 - 40; c.fillRect(x, HZ - 14, 7, 20); c.fillRect(x - 7, HZ - 9, 7, 3); c.fillRect(x - 7, HZ - 17, 3, 10); c.fillRect(x + 7, HZ - 11, 7, 3); c.fillRect(x + 11, HZ - 19, 3, 10); }
+  c.fillStyle = '#3f8530'; for (let k = 0, P = Math.max(420, Math.ceil((W + 80) / 140) * 140); k < P / 140; k++) { const x = ((k * 140 - (time || 0) * 30) % P + P) % P - 40; c.fillRect(x, HZ - 14, 7, 20); c.fillRect(x - 7, HZ - 9, 7, 3); c.fillRect(x - 7, HZ - 17, 3, 10); c.fillRect(x + 7, HZ - 11, 7, 3); c.fillRect(x + 11, HZ - 19, 3, 10); }
   if (!herd) return;
   for (const k of skulls) { const x = Math.round(k.x), y = LANES[k.lane]; c.save(); c.translate(x, y); c.scale(1.5, 1.5); c.translate(-x, -y); c.fillStyle = '#f2ede2'; c.fillRect(x - 5, y - 2, 10, 7); c.fillRect(x - 9, y - 4, 4, 2); c.fillRect(x + 5, y - 4, 4, 2); c.fillStyle = '#333'; c.fillRect(x - 3, y, 2, 2); c.fillRect(x + 1, y, 2, 2); c.restore(); }
   const items = herd.map(s => ({ y: s.y || LANES[s.lane], d: () => drawSteer(c, s, t) })).concat([{ y: rider.y, d: () => drawRider(c, t) }]).sort((a, b) => a.y - b.y);

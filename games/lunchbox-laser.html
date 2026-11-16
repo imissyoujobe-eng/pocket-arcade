@@ -11,8 +11,9 @@
 <script>
 // Lunchbox Laser: waves of runaway snacks, each wave flies its own pattern. Clear them before your energy runs out.
 K.theme({ bg: '#1a0f2e', ink: '#fff4f8', accent: '#ff5fa2', accentInk: '#2a0016' });
-const W = 240, H = 360, PY = 334;
+let W = 240; const H = 360, PY = 334;
 K.screen(W, H);
+K.flex(240, H, w => { W = w; }, { maxW: 800 }); // phone on its side: a wide sky full of snacks, edge to edge
 K.hud(['score', 'wave', 'lives']);
 K.pad({ dpad: 'lr', buttons: [{ id: 'a', label: 'FIRE' }] });
 
@@ -21,16 +22,18 @@ const SNACKS = [
   { n: 'Soda Cans', pat: 'drop' }, { n: 'Hot Dogs', pat: 'rows' }, { n: 'Pizza', pat: 'dive' }, { n: 'Cones', pat: 'wave' }
 ];
 let state = 'title', score, lives, wave, kind, enemies, shots, crumbs, parts, px, energy, t, dead, fireT, nextLife, banner, best = K.best('lunchbox');
-const stars = Array.from({ length: 50 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: Math.random() * 1.2 + 0.3 }));
+const stars = Array.from({ length: 110 }, () => ({ x: Math.random(), y: Math.random() * H, s: Math.random() * 1.2 + 0.3 }));
 
 function title() { K.card({ title: 'LUNCHBOX LASER', text: 'The snacks escaped! Each wave flies a new pattern. Blast them all before your energy bar runs out. Watch for falling crumbs.', best: best ? 'BEST ' + best : '', button: 'Play', onStart: start }); }
 function start() { score = 0; lives = 3; wave = 0; nextLife = 10000; px = W / 2; parts = []; newWave(); state = 'play'; hud(); }
 function hud() { K.set('score', score); K.set('wave', 'WAVE ' + (wave + 1)); K.set('lives', '▲'.repeat(Math.max(0, lives))); }
 function newWave() {
   kind = SNACKS[wave % 8]; enemies = []; shots = []; crumbs = []; t = 0; energy = 100; dead = 0; fireT = 0; banner = 2;
-  for (let r = 0; r < 3; r++) for (let i = 0; i < 6; i++) {
-    const idx = r * 6 + i;
-    enemies.push({ idx, r, bx: 20 + i * 38 + (r % 2) * 18, by: 40 + r * 34, x: 0, y: 0, vx: (Math.random() < .5 ? -1 : 1) * K.rnd(40, 70), vy: K.rnd(30, 55), dive: 0, alive: true });
+  // (a wider sky gets more columns of snacks at about the same spacing, centred; upright it's the classic 6 x 3)
+  const wide = W > 260, cols = wide ? K.clamp(Math.round(W / 46), 6, 12) : 6, gap = wide ? Math.min(52, (W - 60) / cols) : 38, left = wide ? (W - (cols - 1) * gap - gap * 0.47) / 2 : 20;
+  for (let r = 0; r < 3; r++) for (let i = 0; i < cols; i++) {
+    const idx = r * cols + i;
+    enemies.push({ idx, r, bx: left + i * gap + (r % 2) * gap * 0.47, by: 40 + r * 34, x: 0, y: 0, vx: (Math.random() < .5 ? -1 : 1) * K.rnd(40, 70), vy: K.rnd(30, 55), dive: 0, alive: true });
   }
   for (const e of enemies) { e.x = e.bx; e.y = e.by; }
   K.tune([392, 523, 659, 784], 0.09, { type: 'triangle' });
@@ -64,10 +67,11 @@ function update(dt) {
   if (dead > 0) { dead -= dt; if (dead <= 0) { if (lives <= 0) return over(); energy = 100; crumbs = []; for (const e of enemies) { e.dive = 0; if (e.y > 260) e.y = e.by; } } return; }
   if (banner > 0) banner -= dt;
   t += dt;
-  px += ((K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0)) * 120 * dt;
-  if (K.ptr.down && K.ptr.y > 200) px += K.clamp(K.ptr.x - px, -120 * dt, 120 * dt);
+  const pv = 120 * Math.pow(Math.max(1, W / 240), 0.7);
+  px += ((K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0)) * pv * dt;
+  if (K.ptr.down && K.ptr.y > 200) px += K.clamp(K.ptr.x - px, -pv * dt, pv * dt);
   px = K.clamp(px, 10, W - 10);
-  energy -= dt * (100 / (36 - Math.min(14, wave)));
+  energy -= dt * (100 / (36 - Math.min(14, wave))) * Math.min(1, 18 / enemies.length);
   if (energy <= 0) return die();
   fireT -= dt;
   if ((K.down('a') || (K.ptr.down && K.ptr.y > 200)) && fireT <= 0 && shots.length < 2) { shots.push({ x: px, y: PY - 10 }); fireT = 0.16; K.beep(1400, 0.07, { to: 500, vol: 0.035 }); }
@@ -114,7 +118,7 @@ function drawSnack(c, x, y, k, tt) {
 }
 function paintBackground(c) {
   const bgG = c.createLinearGradient(0, 0, 0, H); bgG.addColorStop(0, '#120a28'); bgG.addColorStop(0.55, '#2a1440'); bgG.addColorStop(1, '#3a1a3a'); c.fillStyle = bgG; c.fillRect(0, 0, W, H);
-  A.glow(c, 60, 80, 90, '255,90,170', 0.18); A.glow(c, 190, 150, 100, '90,140,255', 0.16);
+  A.glow(c, W * 0.25, 80, 90, '255,90,170', 0.18); A.glow(c, W * 0.79, 150, 100, '90,140,255', 0.16);
   const HZ = 250; c.save(); c.beginPath(); c.rect(0, HZ, W, H - HZ); c.clip();
   const fg = c.createLinearGradient(0, HZ, 0, H); fg.addColorStop(0, '#2a1a3a'); fg.addColorStop(1, '#4a2a4a'); c.fillStyle = fg; c.fillRect(0, HZ, W, H - HZ);
   for (let r = 0; r < 8; r++) { const y0 = HZ + Math.pow(r / 8, 1.8) * (H - HZ), y1 = HZ + Math.pow((r + 1) / 8, 1.8) * (H - HZ);
@@ -125,7 +129,7 @@ function paintBackground(c) {
 function draw(c, now) {
   // cafeteria at night: checkered floor in perspective, lit windows, nebula glow
   background(c);
-  for (const s of stars) { c.fillStyle = 'rgba(255,255,255,' + (0.3 + s.s * 0.4) * (0.7 + 0.3 * Math.sin(now / 400 + s.x)) + ')'; c.fillRect(s.x, s.y, s.s > 0.7 ? 1.5 : 1, s.s > 0.7 ? 1.5 : 1); }
+  for (const s of stars) { c.fillStyle = 'rgba(255,255,255,' + (0.3 + s.s * 0.4) * (0.7 + 0.3 * Math.sin(now / 400 + s.x * 50)) + ')'; c.fillRect(s.x * W, s.y, s.s > 0.7 ? 1.5 : 1, s.s > 0.7 ? 1.5 : 1); }
   if (state === 'title') { for (let k = 0; k < 8; k++) drawSnack(c, 30 + (k % 4) * 60, 110 + Math.floor(k / 4) * 50 + Math.sin(now / 400 + k) * 6, k); return; }
   for (const e of enemies) if (e.alive) drawSnack(c, e.x, e.y, wave % 8, now);
   for (const s of shots) { A.glow(c, s.x, s.y - 4, 9, '255,95,162', 0.5); c.fillStyle = '#ff5fa2'; c.fillRect(s.x - 1.5, s.y - 9, 3, 11); c.fillStyle = '#fff'; c.fillRect(s.x - 0.5, s.y - 8, 1, 9); }
@@ -154,7 +158,7 @@ drawSnack = A.ink(drawSnack);
 // the cafeteria background never changes, so draw it once too
 let bgPic = null;
 function background(c) {
-  if (!bgPic) { const R = 3; bgPic = document.createElement('canvas'); bgPic.width = W * R; bgPic.height = H * R; const g = bgPic.getContext('2d'); g.scale(R, R); paintBackground(g); }
+  if (!bgPic || bgPic.lw !== W) { const R = 3; bgPic = document.createElement('canvas'); bgPic.lw = W; bgPic.width = W * R; bgPic.height = H * R; const g = bgPic.getContext('2d'); g.scale(R, R); paintBackground(g); }
   c.drawImage(bgPic, 0, 0, W, H);
 }
 title();

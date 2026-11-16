@@ -31,8 +31,8 @@ const ROWS = [47, 37, 29, 22, 16.5, 12.5];        // lines of cover, far to near
 
 let state = 'title', score, hp, ammo, mags, rockets, grenades, stage, kills, need, cx, cy, foes, covers, bunkers, wrecks, shots, parts, smoke, flashes, spawnT, vehT, sideT, heliT, reload, shake, best = K.best('commandosights'), hurtFlash, msgs;
 K.flex(240, H, w => { W = w; layout(); }, { smooth: true }); // phone on its side: the battlefield widens to fill the screen
-function title() { K.card({ title: 'COMMANDO SIGHTS', text: 'Hold the hill! Aim with the joystick or drag on the screen. FIRE shoots. The enemy comes from far away, running from cover to cover: shoot them while they\'re in the open or when they pop up to fire (a red ! means they\'re aiming at you). GRENADE lobs onto the spot in your sights and gets them behind cover. ROCKET is for tanks and jeeps. Don\'t shoot the hostages in white. Shoot crates for ammo.', best: best ? 'BEST ' + best : '', button: 'Lock & Load', onStart: start }); }
-function start() { score = 0; hp = 10; stage = 1; ammo = 30; mags = 4; rockets = 3; grenades = 4; cx = W / 2; cy = HY + 60; hurtFlash = 0; startStage(); state = 'play'; }
+function title() { K.card({ title: 'COMMANDO SIGHTS', text: 'Hold the hill! Aim with the joystick or drag on the screen. FIRE shoots. The enemy comes from far away, running from cover to cover: shoot them while they\'re in the open or when they pop up to fire (a red ! means they\'re aiming at you). GRENADE lobs onto the spot in your sights and gets them behind cover. ROCKET is for tanks and jeeps. Don\'t shoot the hostages in white. Your rifle never runs out; shoot crates for more grenades and rockets.', best: best ? 'BEST ' + best : '', button: 'Lock & Load', onStart: start }); }
+function start() { score = 0; hp = 10; stage = 1; ammo = Infinity; mags = 0; rockets = 6; grenades = 10; cx = W / 2; cy = HY + 60; hurtFlash = 0; startStage(); state = 'play'; }
 function startStage() {
   kills = 0; need = 12 + stage * 4; foes = []; shots = []; parts = []; smoke = []; flashes = []; wrecks = []; msgs = [];
   spawnT = 1; vehT = stage >= 2 ? 9 : 14; sideT = 7; heliT = stage >= 3 ? 16 : 999; reload = 0; shake = 0;
@@ -98,7 +98,7 @@ function damage(f, n, how) {
   f.hp -= n; f.flash = 0.12;
   if (f.hp > 0) return;
   if (f.k === 'host') { f.st = 'dead'; f.dt = 0; score = Math.max(0, score - 500); hp--; say('HOSTAGE HIT!'); K.beep(150, 0.4, { to: 80 }); return; }
-  if (f.k === 'crate') { f.dead = true; if (f.give === 'mag') { mags++; say('+1 MAGAZINE'); } else if (f.give === 'gren') { grenades += 2; say('+2 GRENADES'); } else { rockets++; say('+1 ROCKET'); } K.tune([660, 880], 0.06); return; }
+  if (f.k === 'crate') { f.dead = true; if (f.give === 'gren' || f.give === 'mag') { grenades += 3; say('+3 GRENADES'); } else { rockets += 2; say('+2 ROCKETS'); } K.tune([660, 880], 0.06); return; }
   if (f.k === 'tank' || f.k === 'jeep') { f.dead = true; const x = sxw(f.wx, f.Z), y = gy(f.Z), p = ppm(f.Z); boom(x, y - p, '#ffb04a', 34, 120); for (let i = 0; i < 8; i++) puff(x + K.rnd(-1, 1) * p, y - p, 1.2 * p, 1.6, true); shake = 0.5; K.noise(0.9, 0.6); wrecks.push({ kind: 'wreck', tank: f.k === 'tank', wx: f.wx, Z: f.Z, w: f.k === 'tank' ? 3.4 : 2, h: f.k === 'tank' ? 1.4 : 1.2, seed: f.seed });
     score += f.k === 'tank' ? 1500 : 500; kills += f.k === 'tank' ? 5 : 3; say(f.k === 'tank' ? 'TANK DESTROYED!' : 'JEEP DOWN!'); return; }
   if (f.k === 'heli') { f.dead = true; boom(f.x, f.y, '#ffb04a', 34, 120); for (let i = 0; i < 6; i++) puff(f.x, f.y, 8, 1.4, true); score += 1000; kills += 4; K.noise(0.8, 0.5); say('CHOPPER DOWN!'); return; }
@@ -106,12 +106,11 @@ function damage(f, n, how) {
 }
 // ---- your weapons ----
 function fireRifle() {
-  ammo--; K.beep(180, 0.05, { type: 'sawtooth', vol: 0.04 }); const tx = cx + K.rnd(-2.5, 2.5), ty = cy + K.rnd(-2.5, 2.5);
+  K.beep(180, 0.05, { type: 'sawtooth', vol: 0.04 }); const tx = cx + K.rnd(-2.5, 2.5), ty = cy + K.rnd(-2.5, 2.5);
   flashes.push({ t: 0.05, x: tx, y: ty, shot: 1 });
   const h = hitAt(tx, ty);
   if (h) { if (h.cover) { boom(tx, ty, '#c8a878', 4, 30); } else if (h.o.k === 'tank') { boom(tx, ty, '#ffe08a', 4, 40); K.beep(1800, 0.03, { vol: 0.03 }); damage(h.o, 1); } else damage(h.o, h.o.k === 'jeep' ? 1 : 1); }
   else if (ty > HY) boom(tx, ty, '#a88a5a', 3, 25);
-  if (ammo === 0 && mags > 0) { mags--; reload = 1.1; }
 }
 function aimPoint() { const h = hitAt(cx, cy); const Z = h ? h.Z : zAtY(cy); return { Z, wx: (cx - W / 2) * Z / PK, sx: cx, sy: cy }; }
 function throwGrenade() { if (grenades <= 0) { say('NO GRENADES'); return; } grenades--; const a = aimPoint(); shots.push({ k: 'gren', t: 0, T: 0.55 + a.Z / 60, Z: a.Z, wx: a.wx, sx: W / 2 + 30, sy: H - 10 }); K.beep(400, 0.12, { to: 250, vol: 0.04 }); }
@@ -124,7 +123,9 @@ function hurt(n) { hp -= n || 1; hurtFlash = 0.25; shake = Math.max(shake, 0.2 *
 
 function update(dt) {
   if (state !== 'play') return;
-  const sp = 170; if (K.down('left')) cx -= sp * dt; if (K.down('right')) cx += sp * dt; if (K.down('up')) cy -= sp * dt; if (K.down('down')) cy += sp * dt;
+  // the sight follows the stick: a small push for fine aim, all the way for fast sweeps (about twice the old speed)
+  const sp = 360 + (W - 240) * 0.5, ax = K.stick.x || ((K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0)), ay = K.stick.y || ((K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0));
+  cx += ax * sp * dt; cy += ay * sp * 0.8 * dt;
   if (K.ptr.down) { cx += (K.ptr.x - cx) * Math.min(1, dt * 14); cy += (K.ptr.y - 34 - cy) * Math.min(1, dt * 14); }
   cx = K.clamp(cx, 0, W); cy = K.clamp(cy, 0, H);
   if (reload > 0) { reload -= dt; if (reload <= 0) { ammo = 30; K.beep(500, 0.05); } }
@@ -141,7 +142,7 @@ function update(dt) {
   sideT -= dt; if (sideT <= 0) { spawnSide(); sideT = K.rnd(7, 12); }
   vehT -= dt; if (vehT <= 0 && !foes.some(f => (f.k === 'tank' || f.k === 'jeep') && !f.dead)) { spawnVehicle(); vehT = K.rnd(16, 24) - stage; }
   heliT -= dt; if (heliT <= 0) { spawnHeli(); heliT = K.rnd(20, 30); }
-  if (Math.random() < dt * 0.06) { const Z = K.rnd(14, 30); foes.push({ k: 'crate', wx: K.rnd(-0.7, 0.7) * maxWx(Z), Z, hp: 1, life: 6, give: ['mag', 'mag', 'gren', 'rocket'][K.ri(0, 3)] }); }
+  if (Math.random() < dt * 0.06) { const Z = K.rnd(14, 30); foes.push({ k: 'crate', wx: K.rnd(-0.7, 0.7) * maxWx(Z), Z, hp: 1, life: 6, give: ['gren', 'gren', 'rocket', 'rocket'][K.ri(0, 3)] }); }
   if (ammo === 0 && mags === 0 && reload <= 0 && rockets === 0 && !foes.some(f => f.k === 'crate')) foes.push({ k: 'crate', wx: 0, Z: 18, hp: 1, life: 6, give: 'mag' });
   foes.forEach(f => {
     if (f.flash > 0) f.flash -= dt;
@@ -179,8 +180,8 @@ function update(dt) {
   parts.forEach(p => { p.t -= dt; p.vy += 200 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }); parts = parts.filter(p => p.t > 0);
   smoke.forEach(s => { s.l -= dt; s.x += s.vx * dt; s.y += s.vy * dt; s.r *= 1 + dt * 0.6; }); smoke = smoke.filter(s => s.l > 0);
   if (hurtFlash > 0) hurtFlash -= dt;
-  if (kills >= need) { score += 1000 + hp * 100; stage++; hp = Math.min(10, hp + 3); mags += 2; grenades += 2; rockets += 1; K.tune([523, 659, 784, 1046], 0.12); startStage(); say('STAGE CLEAR! STAGE ' + stage, 2.4); }
-  K.set('score', score); K.set('ammo', (reload > 0 ? 'RELOAD' : ammo + '') + ' ×' + mags + ' G' + grenades + ' R' + rockets); K.set('hp', 'HP ' + Math.max(0, hp));
+  if (kills >= need) { score += 1000 + hp * 100; stage++; hp = Math.min(10, hp + 3); grenades += 4; rockets += 3; K.tune([523, 659, 784, 1046], 0.12); startStage(); say('STAGE CLEAR! STAGE ' + stage, 2.4); }
+  K.set('score', score); K.set('ammo', '∞  G' + grenades + '  R' + rockets); K.set('hp', 'HP ' + Math.max(0, hp));
 }
 function enemyShot(f, chance) {
   const x = f.k === 'heli' ? f.x : sxw(f.wx, f.Z), y = f.k === 'heli' ? f.y + 6 : gy(f.Z) - (f.k === 'jeep' ? 1.6 : 1.35) * ppm(f.Z);

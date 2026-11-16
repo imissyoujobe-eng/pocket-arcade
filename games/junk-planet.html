@@ -58,6 +58,15 @@ body { margin: 0; background: var(--space); color: var(--fg); font-family: var(-
 .title span { display: block; color: var(--pink); text-shadow: 0 5px 0 #6a0f3d, 0 0 30px rgba(255,79,163,.5); transform: translateX(.4em); }
 .story { margin: 6px auto 0; max-width: 340px; font-size: .9rem; line-height: 1.4; opacity: .9; text-shadow: 0 2px 6px #000; }
 .picker { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; align-items: center; padding: 14px; border-radius: 22px; background: var(--glass); border: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+/* phone on its side: title and story on the left, the player picker and PLAY on the right, so PLAY is on screen */
+@media (orientation: landscape) and (max-height: 600px) {
+  #select { flex-direction: row; justify-content: center; align-items: center; gap: 28px; padding: 12px max(24px, env(safe-area-inset-right, 0px)) 12px max(24px, env(safe-area-inset-left, 0px)); }
+  #select > div:first-child { max-width: 42%; }
+  #select .title { font-size: clamp(2.2rem, 13vh, 3.6rem); }
+  #select .story { font-size: .82rem; }
+  #select .picker { max-width: 340px; padding: 10px; gap: 6px; }
+  #select .hint { display: none; }
+}
 .prow { display: flex; align-items: center; gap: 10px; width: 100%; }
 .arrow { flex: none; width: 48px; height: 48px; border-radius: 50%; border: 0; background: rgba(255,255,255,.14); color: #fff; font-size: 1.4rem; cursor: pointer; }
 .arrow:active { background: rgba(255,255,255,.3); }
