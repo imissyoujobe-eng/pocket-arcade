@@ -3,10 +3,11 @@
 // To add a game: put its file in games/ (games/<id>.html), add one line below and raise ARCADE_TOTAL to match.
 // My Scores: key = the name a kit game saves its best under (pa-<key>); store = where an older game saves its own best;
 // kind = how that score reads (time, cs, ms, secs, mins, par, wins, fights, cup, cash, rally, streak, level; blank = points).
-// art = optional cover picture (in art/, 600x776 portrait, also listed in sw.js) shown as the game's whole tile on the menu; its lettering is the title.
+// art = optional cover picture { src, w, h } (in art/, 600 px wide, also listed in sw.js): the game's whole tile on the menu, its lettering
+// is the title. Pass the same picture to the game's start card as K.card({ ..., art: { src: '../art/...', w, h } }).
 window.ARCADE_TOTAL = 87;
 window.ARCADE_GAMES = [
-  { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue', art: 'art/rotor-rescue.jpg' },
+  { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue', art: { src: 'art/rotor-rescue.jpg', w: 600, h: 776 } },
   { id: 'river-rats', name: 'River Rats', genre: 'Shooter', tag: 'Jet boat, minigun and rockets up a jungle river', key: 'riverrats' },
   { id: 'word-clash', name: 'Word Clash', genre: 'Word', tag: 'Crossword tile duel vs the computer or friends', key: 'wordclash' },
   { id: 'word-wheel', name: 'Word Wheel', genre: 'Word', tag: 'Swipe the letters to fill the crossword', key: 'wordwheel', kind: 'level' },
@@ -84,7 +85,7 @@ window.ARCADE_GAMES = [
   { id: 'shadow-strike', name: "Shadow Strike", genre: 'Action', tag: "Ninja stars and hostage rescues", key: 'shadowstrike' },
   { id: 'barbarian-blade', name: "Barbarian Blade", genre: 'Platform', tag: "Sword quest through lava realms", key: 'barbarianblade' },
   { id: 'knight-fright', name: "Knight Fright", genre: 'Platform', tag: "Lose the armor, keep fighting", key: 'knightfright' },
-  { id: 'commando-sights', name: "Commando Sights", genre: 'Action', tag: "Crosshair shooting gallery", key: 'commandosights' },
+  { id: 'commando-sights', name: "Commando Sights", genre: 'Action', tag: "Crosshair shooting gallery", key: 'commandosights', art: { src: 'art/commando-sights.jpg', w: 600, h: 678 } },
   { id: 'cube-pop', name: "Cube Pop", genre: 'Puzzle', tag: "Pop color groups, build rockets", key: 'cubepop' },
   { id: 'fling-frenzy', name: "Fling Frenzy", genre: 'Puzzle', tag: "Slingshot Puffs at wobbly forts", key: 'flingfrenzy' },
   { id: 'juice-slash', name: "Juice Slash", genre: 'Action', tag: "Swipe to slice, dodge the bombs", key: 'juiceslash' },
