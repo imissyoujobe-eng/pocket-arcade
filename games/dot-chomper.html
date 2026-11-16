@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body class="dc-cover">
 <title>Dot Chomper</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@700;900&display=swap">
@@ -39,6 +39,17 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .card h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
 .card p { margin: 0; line-height: 1.45; }
 .card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+    /* James's cover art in place of the title (art/dot-chomper.jpg, also the game's tile on the menu) */
+    .card h1.cover { width: min(260px, 72vw); aspect-ratio: 1; font-size: 0; text-shadow: none; }
+    .card h1.cover img { display: block; width: 100%; height: 100%; border-radius: 14px; box-shadow: 0 0 0 3px rgba(255,255,255,.2), 0 10px 28px rgba(0,0,0,.55); }
+    /* phone on its side: the cover on the left, how to play and the button beside it; the stick (which would
+       sit over the cover and does nothing here) is hidden until the game starts */
+    @media (orientation: landscape) and (max-height: 600px) {
+      #start .card { max-width: none; display: grid; grid-template-columns: auto minmax(0, 330px); column-gap: 26px; row-gap: 10px; align-items: center; justify-items: center; }
+      #start .card h1.cover { grid-column: 1; grid-row: 1 / span 3; width: min(300px, 80vh); }
+      #start .card > :not(h1) { grid-column: 2; }
+      body.dc-cover .controls, body.dc-cover .jy-wrap { visibility: hidden; }
+    }
 .btn { font-family: var(--display); font-size: 1.2rem; color: var(--panel); background: var(--gold); border: 0; border-radius: 12px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 #b8860b; }
 .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b8860b; }
 .banner { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font-family: var(--display); font-size: clamp(1.3rem, 7vw, 2rem); color: var(--gold); text-shadow: 0 3px 0 var(--grape-deep); pointer-events: none; }
@@ -55,7 +66,8 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     <div class="banner" id="banner" hidden></div>
     <div class="overlay" id="start">
       <div class="card">
-        <h1>Dot Chomper</h1>
+        <h1 class="cover"><img src="../art/dot-chomper.jpg" alt="Dot Chomper" width="600" height="600"
+          onerror="var h=this.parentNode;h.className='';h.textContent='Dot Chomper';document.body.classList.remove('dc-cover')"></h1>
         <ul>
           <li><b>Swipe</b> on the maze or use the arrows to steer</li>
           <li>Chomp every dot to clear the level</li>
@@ -237,7 +249,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   function begin(e) {
     if (e) e.preventDefault();
     if ($('start').hidden && $('over').hidden) return;
-    audio(); $('start').hidden = true; $('over').hidden = true; newGame();
+    audio(); $('start').hidden = true; $('over').hidden = true; document.body.classList.remove('dc-cover'); newGame();
   }
   $('play').addEventListener('click', begin); $('start').addEventListener('pointerup', begin); $('again').addEventListener('click', begin);
 
