@@ -11,13 +11,32 @@
 <script src="../lib/three.min.js"></script>
 <script>
 // Dirt Bowl: stadium off-road truck racing under the lights. Four trucks, four laps, jumps, whoops and mud pits.
-// Your truck drives itself: steer, tap NITRO for a boost, hold BRAKE to slow down or back up. Win prize money and
-// spend it in the pit shop on a bigger engine, grippier tires and softer shocks. Finish last and you lose a truck.
+// Hold GAS to drive, steer, tap NITRO for a boost, hold BRAKE to slow down or back up. VIEW cycles the chase camera,
+// the driver's seat (dash, gauges, wheel and hands) and the high camera. Win prize money and spend it in the pit
+// shop on a bigger engine, grippier tires and softer shocks. Finish last and you lose a truck.
 K.theme({ bg: '#140d08', ink: '#fff6e8', accent: '#ff7a1a', accentInk: '#1a0d00' });
 K.hud(['race', 'cash']);
-K.pad({ dpad: 'lr', buttons: [{ id: 'v', label: 'VIEW', top: true }, { id: 'b', label: 'BRAKE' }, { id: 'a', label: 'NITRO' }] });
-addEventListener('keydown', e => { if (e.key === 'v' || e.key === 'V') K.press('v'); });
-addEventListener('keyup', e => { if (e.key === 'v' || e.key === 'V') K.release('v'); });
+// GAS comes first so it sits at the bottom of the stack sideways (under your right thumb); upright the CSS below
+// lines them up BRAKE, NITRO, GAS from left to right, with GAS the widest
+K.pad({ dpad: 'lr', buttons: [{ id: 'v', label: 'VIEW', top: true }, { id: 'g', label: 'GAS' }, { id: 'a', label: 'NITRO' }, { id: 'b', label: 'BRAKE' }] });
+addEventListener('keydown', e => { if (e.key === 'v' || e.key === 'V') K.press('v'); if (e.key === 'g' || e.key === 'G') K.press('g'); });
+addEventListener('keyup', e => { if (e.key === 'v' || e.key === 'V') K.release('v'); if (e.key === 'g' || e.key === 'G') K.release('g'); });
+// in the Joystik app the phone's side buttons are pedals during a race: volume up = GAS, volume down = BRAKE
+K.sideKeys({ up: 'g', down: 'b' }, () => state === 'count' || state === 'race');
+{ const st = document.createElement('style'); st.textContent =
+  'body.touch:not(.land) #kp .kb:not(.top){grid-template-columns:1fr 1fr 1.3fr}' +
+  'body.touch:not(.land) #kp .kb button[aria-label=b]{order:1}body.touch:not(.land) #kp .kb button[aria-label=a]{order:2}body.touch:not(.land) #kp .kb button[aria-label=g]{order:3}' +
+  // sideways: GAS (biggest) in the bottom corner under your thumb, NITRO above it, BRAKE beside it; VIEW goes over
+  // the stick on the left, so the nitro gauge on the dash stays in sight
+  'body.touch.land #kp .kbw{display:grid;grid-template-columns:auto auto;gap:10px 12px;width:auto;align-items:center;justify-items:center}' +
+  'body.touch.land #kp .kbw>.kb{display:contents}' +
+  'body.touch.land #kp .kbw button[aria-label=v]{position:absolute;left:max(22px,calc(env(safe-area-inset-left,0px) + 12px));bottom:calc(max(14px,env(safe-area-inset-bottom,0px)) + 164px)}' +
+  'body.touch.land #kp .kbw button[aria-label=a]{grid-area:1/2;--bs:94px}' +
+  'body.touch.land #kp .kbw button[aria-label=b]{grid-area:2/1;--bs:94px}body.touch.land #kp .kbw button[aria-label=g]{grid-area:2/2;--bs:118px}' +
+  '#kp button[aria-label=g]{box-shadow:inset 0 -7px 0 #2fd35a,0 4px 0 rgba(0,0,0,.35)}' +
+  '#kp button[aria-label=a]{box-shadow:inset 0 -7px 0 #3ab4ff,0 4px 0 rgba(0,0,0,.35)}' +
+  '#kp button[aria-label=b]{box-shadow:inset 0 -7px 0 #ff4a3a,0 4px 0 rgba(0,0,0,.35)}';
+  document.head.appendChild(st); }
 
 const TAU = Math.PI * 2, G = 22, TW = 11, HW = TW / 2, LAPS = 4;
 const FX0 = -80, FZ0 = -52, FW = 160, FD = 104, SXN = 240, SZN = 156, CELL = FW / SXN, GXN = SXN + 1, GZN = SZN + 1;   // the stadium floor: 160 x 104 m on a 2/3 m grid
@@ -431,8 +450,14 @@ function drive(t, dt) {
   else {
     const sx = Math.abs(K.stick.x) > 0.08 ? K.stick.x : 0; steer = sx || ((K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0));
     brake = K.down('b') || K.down('down') ? 1 : 0;
+    // you drive it yourself: hold GAS (or the up arrow, or the phone's volume-up button in the app)
+    gas = K.down('g') || K.down('up') ? 1 : 0;
     if (K.hit('a') && state === 'race') useNitro(t);
+    // a nitro burn is full throttle, so you can let go of GAS to tap NITRO
+    if (t.nitroT > 0) gas = 1;
+    if (state === 'race' && raceT > 1.6 && raceT < 8 && !gas && !brake && Math.hypot(t.vx, t.vz) < 2) say('HOLD GAS!', 0.5);
   }
+  if (t === me) t.gasIn = state === 'count' || state === 'race' ? gas && !brake ? 1 : 0 : 0;   // for the engine note and the tach
   if (frozen) { gas = 0; brake = 0; steer = 0; }
   t.steerVis += (steer - t.steerVis) * Math.min(1, dt * 10);
   const S = t.st, onMud = p.mud && !t.air && Math.abs((t.x - p.x) * p.sx + (t.z - p.z) * p.sz) < HW + 0.4;
@@ -449,7 +474,7 @@ function drive(t, dt) {
     if (brake) { if (fwd > 0.6) fwd -= 26 * dt; else fwd = Math.max(-7, fwd - 9 * dt); }
     else if (fwd < vmax) fwd += acc * gas * (1 - Math.max(0, fwd) / vmax * 0.7) * dt;
     else fwd -= (fwd - vmax) * 2.2 * dt;
-    if (!gas && !brake) fwd *= Math.pow(0.6, dt);
+    if (!gas && !brake) fwd *= Math.pow(frozen ? 0.6 : 0.8, dt);   // off the gas you coast down
     fwd -= fwd * 0.04 * dt;
     lat *= Math.exp(-S.grip * (onMud ? 0.55 : 1) * dt);
   }
@@ -580,12 +605,320 @@ function audioOn() {
 }
 function engineSound() {
   if (!eG) return; const t = AC2.currentTime, on = (state === 'race' || state === 'count' || state === 'done') && !document.hidden && K.cardOpen && !K.cardOpen();
-  const v = Math.hypot(me.vx, me.vz), gw = 7.2, gear = Math.min(4, Math.floor(v / gw)), rpm = me.air ? 1 : state === 'count' ? 0.25 + 0.2 * Math.sin(performance.now() / 160) : clamp((v - gear * gw) / gw, 0, 1);
+  const v = Math.hypot(me.vx, me.vz), gw = 7.2, gear = Math.min(4, Math.floor(v / gw)), gas = me.gasIn || 0, now = performance.now();
+  // on the gas the engine pulls through each gear; off it, it drops back and burbles; waiting for the green you can rev it
+  const rpm = me.air ? (gas ? 1 : 0.5) : state === 'count' ? (gas ? 0.78 + 0.18 * Math.sin(now / 70) : 0.25 + 0.2 * Math.sin(now / 160)) : clamp((v - gear * gw) / gw, 0, 1) * (gas ? 1 : 0.55);
   const f = 36 + rpm * 44 + gear * 6 + (me.nitroT > 0 ? 16 : 0);
-  eO1.frequency.setTargetAtTime(f, t, 0.05); eO2.frequency.setTargetAtTime(f * 0.5, t, 0.05); eF.frequency.setTargetAtTime(280 + rpm * 520 + (me.nitroT > 0 ? 500 : 0), t, 0.06);
-  eG.gain.setTargetAtTime(on ? 0.055 : 0, t, 0.12);
+  eO1.frequency.setTargetAtTime(f, t, 0.05); eO2.frequency.setTargetAtTime(f * 0.5, t, 0.05); eF.frequency.setTargetAtTime((280 + rpm * 520) * (gas ? 1 : 0.7) + (me.nitroT > 0 ? 500 : 0), t, 0.06);
+  eG.gain.setTargetAtTime(on ? 0.04 + 0.018 * gas : 0, t, 0.12);
 }
 function sfxNitro() { K.beep(220, 0.5, { to: 900, type: 'sawtooth', vol: 0.05 }); K.noise(0.5, 0.2); }
+
+// ---------------------------------------------------------------- the driver's seat
+// VIEW cycles CHASE CAM → COCKPIT → HIGH CAM (remembered on this phone). In the driver's seat you look out of
+// your own truck: the dash with a tach, speedometer and nitro gauge (nine bottle lights under it), the steering
+// wheel in your gloved hands (it turns as you steer), the roll cage, a window net, a rear-view mirror that shows
+// the trucks behind you, and past the windshield the hood and the tops of the front tyres, which bounce on the
+// suspension and steer. The cockpit is a small scene of its own (CK.S), drawn over the stadium. Its root is your
+// truck's body, and its parts are built in "eye space" (CK.ce: x right, y up, -z ahead, metres from the driver's
+// eyes). The stadium camera is your truck's body times the same eye pose, so the hood lines up with the track.
+const EYE = new THREE.Vector3(0.40, 1.70, -0.20);   // the driver's eyes on the truck (the truck's +x is its left: you sit on the left)
+// where the head is (eye space): sideways right at the eyes; upright a little further back and higher, so the narrow
+// screen still shows the windshield posts and the whole wheel. pitch looks down a little; fov is the vertical angle.
+const HEAD = { land: { x: 0, y: 0, z: 0, pitch: 0.12, fov: 60 }, port: { x: 0.03, y: 0.02, z: 0.06, pitch: 0.16, fov: 74 } };
+const VIEWS = ['CHASE CAM', 'COCKPIT', 'HIGH CAM'];
+let CK = null, camSnap = true;
+try { view = clamp(+localStorage.getItem('pa-dirtbowl-view') || 0, 0, 2) | 0; } catch (e) {}
+const _kM = new THREE.Matrix4(), _kM2 = new THREE.Matrix4(), _kS = new THREE.Vector3(), _kQ = new THREE.Quaternion(), _kv = new THREE.Vector3();
+const _ka = new THREE.Vector3(), _kb = new THREE.Vector3(), _kc = new THREE.Vector3(), _kd = new THREE.Vector3(), _ke = new THREE.Vector3(), _kY = new THREE.Vector3(0, 1, 0);
+const SUN_D = new THREE.Vector3(30, 90, 45).normalize(), FILL_D = new THREE.Vector3(-40, 50, -60).normalize();
+function cockpitOn() { return view === 1 && !!me && !DB.cam && !DB.top && (state === 'count' || state === 'race' || (state === 'done' && doneT <= 1.2)); }
+const needleA = f => -(Math.PI * 1.25 + Math.PI * 1.5 * f);   // the needles sweep 270° clockwise from the lower left
+// a backlit gauge face: o = { max, minor, every (a number every so many ticks), label, sub, col, zones: [[from, to, colour]] }
+function dialTex(o) {
+  return canvasTex(256, 256, (c) => {
+    const X = 128, Y = 128, A = v => (135 + 270 * v / o.max) * Math.PI / 180;
+    const g = c.createRadialGradient(X, Y - 40, 6, X, Y, 128); g.addColorStop(0, '#2c2d34'); g.addColorStop(1, '#070709'); c.fillStyle = g; c.beginPath(); c.arc(X, Y, 128, 0, TAU); c.fill();
+    (o.zones || []).forEach(z => { c.strokeStyle = z[2]; c.lineWidth = 12; c.beginPath(); c.arc(X, Y, 104, A(z[0]), A(z[1])); c.stroke(); });
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    for (let i = 0; i <= Math.round(o.max / o.minor); i++) {
+      const a = A(i * o.minor), big = i % o.every === 0, r0 = big ? 90 : 100;
+      c.strokeStyle = '#f6f2e8'; c.lineWidth = big ? 5.5 : 2.6; c.beginPath(); c.moveTo(X + Math.cos(a) * r0, Y + Math.sin(a) * r0); c.lineTo(X + Math.cos(a) * 114, Y + Math.sin(a) * 114); c.stroke();
+      if (big) { c.fillStyle = '#f6f2e8'; c.font = 'bold ' + (o.fs || 32) + 'px Impact, sans-serif'; c.fillText(o.fmt ? o.fmt(i * o.minor) : String(i * o.minor), X + Math.cos(a) * 69, Y + Math.sin(a) * 69); }
+    }
+    c.fillStyle = o.col || '#ff9a3c'; c.font = 'bold 25px Impact, sans-serif'; c.fillText(o.label, X, Y + 40);
+    if (o.sub) { c.fillStyle = '#9a9aa6'; c.font = 'bold 16px Arial, sans-serif'; c.fillText(o.sub, X, Y + (o.subY || 64)); }
+  });
+}
+function drawGear(C, s) { const c = C.gearC.getContext('2d'); c.fillStyle = '#160b02'; c.fillRect(0, 0, 64, 48); c.fillStyle = s === 'R' ? '#ff4a3a' : '#ffae2e'; c.font = 'bold 42px Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, 32, 26); C.gearT.needsUpdate = true; }
+function buildCockpit() {
+  if (CK) return CK;
+  prims();
+  const S = new THREE.Scene(), ce = new THREE.Group(); ce.position.copy(EYE); ce.rotation.y = Math.PI; S.add(ce);
+  const cam = new THREE.PerspectiveCamera(60, 1, 0.02, 40); ce.add(cam);
+  const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x3a2818, 0.62), sun = new THREE.DirectionalLight(0xfff1dc, 0.72), fill = new THREE.DirectionalLight(0xc8d8ff, 0.3);
+  const glowL = new THREE.PointLight(0xffa860, 0.45, 1.4); glowL.position.set(0.1, -0.24, -0.44); ce.add(glowL);   // the gauges' warm glow on the wheel and gloves
+  S.add(hemi, sun, fill);
+  const mVC = new THREE.MeshLambertMaterial({ vertexColors: true }), mGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
+  const mShine = new THREE.MeshPhongMaterial({ vertexColors: true, specular: 0xf4f4f4, shininess: 90 }), mPaint = new THREE.MeshPhongMaterial({ vertexColors: true, specular: 0x8a8a8a, shininess: 50 });
+  const add = (list, mat, parent) => { const m = new THREE.Mesh(mergeGeo(list), mat || mVC); (parent || ce).add(m); return m; };
+  const bar = (col, a, b, r) => { const t = tube(col, a, b, r); t[0] = 'cyl'; return t; };
+  const RED = CREW[0].c, DASH = 0x232429, DASH2 = 0x2d2e34, TRIM = 0x111114, CHR = 0xd9dde4, PAD = 0x101013, GLOVE = 0x1b1b1f;
+
+  // out past the windshield: the hood with its stripes, scoop and pins, the fender flares, the tops of the front tyres
+  add([
+    ['box', RED, 0.43, -0.49, -1.64, 1.90, 0.14, 1.32, -0.035, 0, 0],
+    ['box', 0xf2f2f2, 0.02, -0.4195, -1.64, 0.10, 0.006, 1.32, -0.035, 0, 0], ['box', 0xf2f2f2, 0.84, -0.4195, -1.64, 0.10, 0.006, 1.32, -0.035, 0, 0],
+    // the blower poking up through the hood: a ribbed chrome case with a scoop on top, its mouth facing forward
+    ['box', CHR, 0.43, -0.355, -1.58, 0.30, 0.13, 0.50], ...[0, 1, 2, 3, 4].map(i => ['box', 0x8a8e96, 0.43, -0.355, -1.38 - i * 0.1, 0.306, 0.136, 0.014]),
+    ['box', RED, 0.43, -0.235, -1.60, 0.36, 0.11, 0.40], ['box', 0x08080a, 0.43, -0.238, -1.805, 0.30, 0.075, 0.02],
+    ['box', CHR, 0.43, -0.192, -1.806, 0.37, 0.014, 0.026], ['box', 0xf2f2f2, 0.43, -0.1785, -1.60, 0.07, 0.006, 0.40],
+    ['box', TRIM, 0.43, -0.56, -2.31, 1.88, 0.11, 0.05],
+    ['cyl', CHR, -0.36, -0.418, -2.16, 0.024, 0.016, 0.024], ['cyl', CHR, 1.22, -0.418, -2.16, 0.024, 0.016, 0.024],
+    ['box', TRIM, -0.58, -0.47, -1.80, 0.24, 0.07, 1.06], ['box', TRIM, 1.44, -0.47, -1.80, 0.24, 0.07, 1.06]
+  ], mPaint);
+  const mTire = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x161210 });
+  const tires = [[-0.74, -0.80, -1.86], [1.60, -0.80, -1.86]].map(p => { const piv = new THREE.Group(); piv.position.set(p[0], p[1], p[2]); const m = new THREE.Mesh(wheelGeo(), mTire); piv.add(m); ce.add(piv); return { piv, m, y0: p[1] }; });
+
+  // the cab: dash (with the instrument pod rising out of it in front of you), floor, doors, roof lining, windshield frame
+  add([
+    ['box', DASH2, 0.43, -0.305, -0.80, 2.02, 0.05, 0.46, -0.13, 0, 0],      // dash top, sloping down to the glass
+    ['box', DASH, 0.43, -0.60, -0.57, 2.02, 0.70, 0.05, -0.16, 0, 0],        // dash face, down to the floor
+    ['box', 0x141418, 0.43, -1.0, -0.30, 2.06, 0.04, 1.46],                  // floor
+    ['box', DASH2, 0, -0.235, -0.625, 0.38, 0.23, 0.10, -0.25, 0, 0],        // the gauge pod in front of you
+    ['box', DASH2, 0, -0.121, -0.586, 0.40, 0.024, 0.15, -0.10, 0, 0],       // its visor
+    ['box', DASH, -0.195, -0.235, -0.60, 0.022, 0.23, 0.10, -0.25, 0, 0], ['box', DASH, 0.195, -0.235, -0.60, 0.022, 0.23, 0.10, -0.25, 0, 0],
+    ['box', TRIM, -0.585, -0.56, -0.30, 0.05, 0.84, 1.46], ['box', DASH2, -0.545, -0.135, -0.30, 0.09, 0.035, 1.46],   // your door and its sill
+    ['box', DASH, 1.44, -0.56, -0.30, 0.05, 0.84, 1.46],
+    ['box', TRIM, 0.43, 0.272, -0.695, 2.02, 0.07, 0.06],                    // the frame over the windshield
+    tube(TRIM, [-0.535, -0.33, -1.02], [-0.505, 0.27, -0.71], 0.036), tube(TRIM, [1.395, -0.33, -1.02], [1.365, 0.27, -0.71], 0.036),
+    ['box', DASH2, 0.43, -0.335, -1.03, 2.02, 0.04, 0.08]
+  ]);
+
+  // the roof lining: dark quilted vinyl
+  const quilt = canvasTex(128, 128, (c, w, h) => {
+    c.fillStyle = '#2a2b31'; c.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 32) for (let x = 0; x < w; x += 32) { const g = c.createRadialGradient(x + 16, y + 14, 2, x + 16, y + 16, 20); g.addColorStop(0, '#3a3b42'); g.addColorStop(1, '#222328'); c.fillStyle = g; c.beginPath(); c.moveTo(x + 16, y); c.lineTo(x + 32, y + 16); c.lineTo(x + 16, y + 32); c.lineTo(x, y + 16); c.closePath(); c.fill(); }
+    c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = 1.5; for (let k = -h; k < w + h; k += 32) { c.beginPath(); c.moveTo(k, 0); c.lineTo(k + h, h); c.stroke(); c.beginPath(); c.moveTo(k + h, 0); c.lineTo(k, h); c.stroke(); }
+  }, true);
+  quilt.repeat.set(9, 5.5);
+  const roof = new THREE.Mesh(new THREE.PlaneGeometry(2.08, 1.26), new THREE.MeshLambertMaterial({ map: quilt })); roof.rotation.x = Math.PI / 2; roof.position.set(0.43, 0.307, -0.12); ce.add(roof);
+
+  // the instruments, on engine-turned aluminium: a tach and a speedometer in the pod in front of you (you see them
+  // through the top of the wheel), and to the right of the wheel the nitro panel: the NOS gauge, a light for each
+  // bottle you have, three switches and the red NOS button
+  const turned = (w, h, draw) => canvasTex(w, h, (c) => {
+    c.fillStyle = '#8d929a'; c.fillRect(0, 0, w, h);
+    const s = 17;
+    for (let row = -1; row * s * 0.7 < h + s; row++) for (let col = -1; col * s < w + s; col++) {
+      const x = col * s + (row & 1 ? s / 2 : 0), y = row * s * 0.7;
+      if (c.createConicGradient) { const g = c.createConicGradient(0.9, x, y); g.addColorStop(0, '#d9dce2'); g.addColorStop(0.22, '#7d828a'); g.addColorStop(0.48, '#c3c7cd'); g.addColorStop(0.74, '#6e737b'); g.addColorStop(1, '#d9dce2'); c.fillStyle = g; }
+      else c.fillStyle = (row + col) & 1 ? '#a9aeb5' : '#979ca4';
+      c.beginPath(); c.arc(x, y, s * 0.64, 0, TAU); c.fill();
+    }
+    draw(c);
+    c.fillStyle = 'rgba(30,30,34,.7)'; [[6, 6], [w - 6, 6], [6, h - 6], [w - 6, h - 6]].forEach(([x, y]) => { c.beginPath(); c.arc(x, y, 3, 0, TAU); c.fill(); });
+    c.strokeStyle = 'rgba(0,0,0,.6)'; c.lineWidth = 3; c.strokeRect(1.5, 1.5, w - 3, h - 3);
+  });
+  // a panel: its size (metres), where it sits and how far it leans back; u, v on it are metres from its middle
+  const panel = (pw, ph, pos, lean, draw, yaw) => {
+    const w = 256, h = Math.round(256 * ph / pw), k = w / pw, px = u => (u + pw / 2) * k, py = v => (ph / 2 - v) * k;
+    const tex = turned(w, h, c => draw(c, px, py, k));
+    const g = new THREE.Group(); g.position.set(...pos); g.rotation.order = 'YXZ'; g.rotation.set(lean, yaw || 0, 0); ce.add(g);
+    g.add(new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshPhongMaterial({ map: tex, specular: 0x8a8a8a, shininess: 40 })));
+    return g;
+  };
+  const ring = (c, px, py, k, u, v, r) => { c.fillStyle = 'rgba(0,0,0,.5)'; c.beginPath(); c.arc(px(u), py(v) + 2, r * k * 1.16, 0, TAU); c.fill(); };
+  const GT = [-0.083, 0.012, 0.064], GS = [0.083, 0.012, 0.064], GN = [0, 0.026, 0.06];
+  const P = panel(0.36, 0.20, [0, -0.235, -0.572], -0.25, (c, px, py, k) => { ring(c, px, py, k, ...GT); ring(c, px, py, k, ...GS); });
+  // the nitro pod sits on top of the dash, right of the wheel and turned toward you, so nothing covers it
+  const NP = panel(0.18, 0.18, [0.29, -0.18, -0.70], -0.24, (c, px, py, k) => {
+    ring(c, px, py, k, ...GN);
+    c.fillStyle = 'rgba(0,0,0,.6)'; c.beginPath(); c.roundRect(px(-0.077), py(-0.045), px(0.077) - px(-0.077), py(-0.065) - py(-0.045), 5); c.fill();
+    c.fillStyle = '#121317'; c.font = 'bold 15px Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('NITRO BOTTLES', px(0), py(-0.077));
+  }, -0.40);
+  add([['box', DASH2, 0, 0, -0.037, 0.196, 0.196, 0.072], ['box', DASH2, 0, 0.096, 0.004, 0.2, 0.012, 0.07], ['box', DASH, 0, -0.115, -0.04, 0.07, 0.06, 0.05]], mVC, NP);
+  // below the dash on the right: the switch panel with the red NOS button
+  const N = panel(0.22, 0.10, [0.285, -0.40, -0.577], -0.16, (c, px, py) => {
+    c.fillStyle = '#121317'; c.font = 'bold 13px Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    ['IGN', 'FUEL', 'FAN'].forEach((t, i) => c.fillText(t, px(-0.075 + i * 0.03), py(-0.033))); c.fillText('NOS', px(0.06), py(-0.038));
+  });
+  const sheen = canvasTex(64, 64, (c) => { const g = c.createLinearGradient(8, 0, 40, 64); g.addColorStop(0, 'rgba(255,255,255,.22)'); g.addColorStop(0.45, 'rgba(255,255,255,.04)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.beginPath(); c.arc(32, 32, 32, 0, TAU); c.fill(); });
+  const bezM = new THREE.MeshPhongMaterial({ color: CHR, specular: 0xffffff, shininess: 110 });
+  const gauge = (pan, [u, v, r], tex) => {
+    const g = new THREE.Group(); g.position.set(u, v, 0); pan.add(g);
+    const face = new THREE.Mesh(new THREE.CircleGeometry(r, 48), new THREE.MeshBasicMaterial({ map: tex })); face.position.z = 0.003; g.add(face);
+    const bez = new THREE.Mesh(new THREE.TorusGeometry(r * 1.03, r * 0.075, 8, 48), bezM); bez.position.z = 0.006; g.add(bez);
+    const nd = new THREE.Group(); nd.position.z = 0.008; g.add(nd);
+    nd.add(new THREE.Mesh(mergeGeo([['box', 0xff5a14, 0, r * 0.36, 0, r * 0.065, r * 0.84, 0.002], ['box', 0xff5a14, 0, -r * 0.1, 0, r * 0.1, r * 0.2, 0.002]]), mGlow));
+    add([['cyl', 0x0c0c0e, 0, 0, 0.011, r * 0.14, 0.008, r * 0.14, Math.PI / 2, 0, 0]], mShine, g);
+    const gl = new THREE.Mesh(new THREE.CircleGeometry(r, 32), new THREE.MeshBasicMaterial({ map: sheen, transparent: true, depthWrite: false })); gl.position.z = 0.014; g.add(gl);
+    return { g, nd };
+  };
+  const tach = gauge(P, GT, dialTex({ max: 8, minor: 0.5, every: 2, label: 'RPM', sub: 'x1000', subY: 86, zones: [[6.5, 8, '#e8261c']] }));
+  const spd = gauge(P, GS, dialTex({ max: 100, minor: 5, every: 4, label: 'MPH', fs: 30 }));
+  const nos = gauge(NP, GN, dialTex({ max: 12, minor: 1, every: 4, label: 'NOS', sub: 'PSI x100', col: '#4ac8ff', zones: [[9, 11, '#2fd35a']] }));
+  const gearC = document.createElement('canvas'); gearC.width = 64; gearC.height = 48; const gearT = new THREE.CanvasTexture(gearC);
+  const gearM = new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.0225), new THREE.MeshBasicMaterial({ map: gearT })); gearM.position.set(0, -0.026, 0.004); tach.g.add(gearM);
+  const led = { on: new THREE.MeshBasicMaterial({ color: 0x3dff6a }), off: new THREE.MeshBasicMaterial({ color: 0x10261a }), burn: new THREE.MeshBasicMaterial({ color: 0x6ae0ff }) };
+  const ledG = new THREE.CircleGeometry(0.0064, 14), leds = [];
+  for (let i = 0; i < 9; i++) { const m = new THREE.Mesh(ledG, led.off); m.position.set(-0.066 + i * 0.0165, -0.055, 0.003); NP.add(m); leds.push(m); }
+  const lens = (pan, u, v, col) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 16, 10), new THREE.MeshBasicMaterial({ color: col })); m.scale.z = 0.5; m.position.set(u, v, 0.006); pan.add(m); return m; };
+  const shiftL = lens(P, 0, 0.07, 0x2a1a06), nosL = lens(NP, 0.075, 0.075, 0x0b1c26);
+  add([...[-0.075, -0.045, -0.015].flatMap(u => [['box', 0x0b0b0d, u, 0.005, 0.003, 0.02, 0.026, 0.006], tube(CHR, [u, 0.001, 0.004], [u, 0.017, 0.026], 0.0032), ['sph', CHR, u, 0.018, 0.027, 0.0046, 0.0046, 0.0046]]),
+    ['cyl', 0x1a0404, 0.06, 0.006, 0.004, 0.021, 0.008, 0.021, Math.PI / 2, 0, 0]], mShine, N);
+  const nosBtn = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.012, 20), new THREE.MeshPhongMaterial({ color: 0xc81e1e, specular: 0x999999, shininess: 60 })); nosBtn.rotation.x = Math.PI / 2; nosBtn.position.set(0.06, 0.006, 0.012); N.add(nosBtn);
+
+  // the steering wheel: dished three-spoke, suede rim with a top marker, your number on the horn button
+  const WR = 0.165, SW = new THREE.Group(); SW.position.set(0, -0.30, -0.50); SW.rotation.x = -0.45; ce.add(SW);
+  add([['cyl', 0x18181c, 0, 0, -0.17, 0.03, 0.26, 0.03, Math.PI / 2, 0, 0], ['cyl', 0x2a2b30, 0, 0, -0.058, 0.04, 0.03, 0.04, Math.PI / 2, 0, 0]], mShine, SW);
+  const SWR = new THREE.Group(); SW.add(SWR);
+  SWR.add(new THREE.Mesh(new THREE.TorusGeometry(WR, 0.017, 12, 64), new THREE.MeshLambertMaterial({ color: 0x2a2a2f })));
+  const mk = new THREE.Mesh(new THREE.TorusGeometry(WR, 0.0178, 12, 6, 0.22), new THREE.MeshLambertMaterial({ color: 0xff5a14 })); mk.rotation.z = Math.PI / 2 - 0.11; SWR.add(mk);
+  const sp3 = [];
+  [0, Math.PI, -Math.PI / 2].forEach(a => {
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -0.28, a, 'ZYX')), ca = Math.cos(a), sa = Math.sin(a);
+    sp3.push(['box', 0xb8bcc4, ca * 0.095, sa * 0.095, -0.0175, 0.125, 0.034, 0.006, 0, 0, 0, q]);
+    [0.072, 0.12].forEach(r => sp3.push(['cyl', 0x0c0c0e, ca * r, sa * r, -0.035 + (r - 0.035) * 0.28 + 0.0035, 0.008, 0.002, 0.008, Math.PI / 2, 0, 0]));
+  });
+  sp3.push(['cyl', 0x111114, 0, 0, -0.04, 0.046, 0.03, 0.046, Math.PI / 2, 0, 0]);
+  add(sp3, mShine, SWR);
+  const horn = new THREE.Mesh(new THREE.CircleGeometry(0.034, 32), new THREE.MeshLambertMaterial({ map: numTex(CREW[0].num, RED) })); horn.position.z = -0.0245; SWR.add(horn);
+
+  // gloved hands at a quarter past nine (clear of the gauges), and the arms of your fire suit (a two-bone reach from
+  // the shoulders, worked out each picture)
+  const hand = side => {
+    const th = side < 0 ? Math.PI * 11 / 12 : Math.PI / 12, hg = new THREE.Group();
+    hg.position.set(Math.cos(th) * WR, Math.sin(th) * WR, 0); hg.rotation.z = th - Math.PI / 2; SWR.add(hg);   // x along the rim, y outward, z toward you
+    add([
+      ['sph', GLOVE, 0, 0.006, 0.016, 0.052, 0.035, 0.034], ['sph', GLOVE, 0, -0.006, -0.018, 0.047, 0.027, 0.021],
+      ['sph', 0x2e2e34, -0.031, 0.026, 0, 0.0125, 0.0125, 0.0125], ['sph', 0x2e2e34, -0.0105, 0.029, -0.002, 0.0125, 0.0125, 0.0125],
+      ['sph', 0x2e2e34, 0.0105, 0.029, -0.002, 0.0125, 0.0125, 0.0125], ['sph', 0x2e2e34, 0.031, 0.026, 0, 0.0125, 0.0125, 0.0125],
+      ['sph', RED, 0, 0.02, 0.034, 0.038, 0.018, 0.016], ['sph', 0xf2f0ea, 0, 0.024, 0.041, 0.012, 0.006, 0.006],
+      ['sph', GLOVE, side * 0.03, -0.028, 0.014, 0.016, 0.03, 0.015]
+    ], mVC, hg);
+    return hg;
+  };
+  const suit = new THREE.MeshLambertMaterial({ color: 0xc0261f }), gloveM = new THREE.MeshLambertMaterial({ color: GLOVE }), whiteM = new THREE.MeshLambertMaterial({ color: 0xf2f0ea });
+  const seg = (r0, r1, mat) => { const g = new THREE.CylinderGeometry(r1, r0, 1, 16, 1); g.translate(0, 0.5, 0); const m = new THREE.Mesh(g, mat); ce.add(m); return m; };
+  const arms = [-1, 1].map(side => {
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.039, 16, 12), suit); ce.add(elbow);
+    return { side, hg: hand(side), S: new THREE.Vector3(side * 0.22, -0.36, 0.16), pole: new THREE.Vector3(side * 0.8, -1, -0.1).normalize(),
+      up: seg(0.047, 0.039, suit), fore: seg(0.038, 0.029, suit), band: seg(0.040, 0.039, whiteM), cuff: seg(0.035, 0.032, gloveM), elbow,
+      W: new THREE.Vector3(), E: new THREE.Vector3(), Sx: new THREE.Vector3() };
+  });
+
+  // the roll cage: chrome bars up the windshield posts, across the top and back along the roof, door bars on your side,
+  // black padding where your helmet would hit
+  add([
+    bar(CHR, [-0.465, -0.31, -0.95], [-0.435, 0.225, -0.665], 0.021), bar(CHR, [1.325, -0.31, -0.95], [1.295, 0.225, -0.665], 0.021),
+    bar(CHR, [-0.435, 0.225, -0.665], [1.295, 0.225, -0.665], 0.021),
+    bar(CHR, [-0.435, 0.225, -0.665], [-0.435, 0.262, 0.40], 0.021), bar(CHR, [1.295, 0.225, -0.665], [1.295, 0.262, 0.40], 0.021),
+    bar(CHR, [-0.42, 0.272, -0.62], [1.28, 0.29, 0.40], 0.015), bar(CHR, [1.28, 0.272, -0.62], [-0.42, 0.29, 0.40], 0.015),   // an X across the roof
+    bar(CHR, [-0.48, -0.36, -0.95], [-0.48, -0.36, 0.40], 0.019), bar(CHR, [-0.48, -0.20, -0.92], [-0.48, -0.22, 0.40], 0.019),
+    bar(CHR, [-0.48, -0.36, -0.62], [-0.48, -0.21, -0.10], 0.017),
+    ['sph', CHR, -0.435, 0.225, -0.665, 0.03, 0.03, 0.03], ['sph', CHR, 1.295, 0.225, -0.665, 0.03, 0.03, 0.03]
+  ], mShine);
+  add([
+    bar(PAD, [-0.26, 0.225, -0.665], [0.24, 0.225, -0.665], 0.031), bar(PAD, [-0.435, 0.226, -0.56], [-0.435, 0.258, 0.30], 0.031),
+    ...[-0.14, 0.12].map(x => bar(0x34343a, [x - 0.004, 0.225, -0.665], [x + 0.004, 0.225, -0.665], 0.0325))
+  ]);
+  // the window net in your door
+  const netTex = canvasTex(160, 56, (c, w, h) => { c.clearRect(0, 0, w, h); c.strokeStyle = '#0e0e10'; c.lineWidth = 3.4; for (let x = -h; x < w + h; x += 14) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x + h, h); c.stroke(); c.beginPath(); c.moveTo(x + h, 0); c.lineTo(x, h); c.stroke(); } c.lineWidth = 7; c.strokeRect(0, 0, w, h); });
+  const net = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.35), new THREE.MeshBasicMaterial({ map: netTex, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, color: 0x444448 }));
+  net.position.set(-0.535, 0.05, -0.25); net.rotation.y = Math.PI / 2; ce.add(net);
+
+  // the windshield: a faint tint, a sun strip across the top and a little dust low down
+  const glassTex = canvasTex(768, 256, (c, w, h) => {
+    let g = c.createLinearGradient(0, 0, w * 0.5, h); g.addColorStop(0, 'rgba(190,215,255,.11)'); g.addColorStop(0.5, 'rgba(190,215,255,.025)'); g.addColorStop(1, 'rgba(190,215,255,.06)'); c.fillStyle = g; c.fillRect(0, 0, w, h);
+    g = c.createLinearGradient(0, 0, 0, h * 0.16); g.addColorStop(0, 'rgba(5,7,12,.94)'); g.addColorStop(1, 'rgba(5,7,12,.8)'); c.fillStyle = g; c.fillRect(0, 0, w, h * 0.16);
+    c.fillStyle = 'rgba(255,255,255,.55)'; c.font = 'bold 15px Impact, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('MUDSLINGER  TIRES', w * 0.2, h * 0.083);
+    for (let i = 0; i < 260; i++) { c.fillStyle = 'rgba(205,175,135,' + (0.04 + Math.random() * 0.1) + ')'; const s = 1 + Math.random() * 2; c.fillRect(Math.random() * w, h * (0.7 + Math.random() * 0.3), s, s); }
+  });
+  const gq = new THREE.BufferGeometry();
+  gq.setAttribute('position', new THREE.Float32BufferAttribute([-0.48, -0.32, -0.985, 1.34, -0.32, -0.985, 1.31, 0.237, -0.70, -0.45, 0.237, -0.70], 3));
+  gq.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2)); gq.setIndex([0, 1, 2, 0, 2, 3]);
+  ce.add(new THREE.Mesh(gq, new THREE.MeshBasicMaterial({ map: glassTex, transparent: true, depthWrite: false, side: THREE.DoubleSide })));
+
+  // the rear-view mirror: a little camera looking back out of the cab draws into it (a mirror shows it flipped)
+  const mir = new THREE.Group(); mir.position.set(0.24, 0.155, -0.632); ce.add(mir);
+  mir.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), mir.position.clone().negate().normalize());
+  add([['box', TRIM, 0, 0, -0.013, 0.286, 0.08, 0.024]], mShine, mir);
+  add([tube(TRIM, [0.24, 0.215, -0.662], [0.24, 0.185, -0.645], 0.007)], mShine);
+  const rt = new THREE.WebGLRenderTarget(320, 74), mg = new THREE.PlaneGeometry(0.262, 0.06), uv = mg.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
+  const mirG = new THREE.Mesh(mg, new THREE.MeshBasicMaterial({ map: rt.texture, color: 0xd4dae2 })); mirG.position.z = 0.0005; mir.add(mirG);
+  const mirCam = new THREE.PerspectiveCamera(15, 0.262 / 0.06, 0.6, 260);
+  ce.updateMatrix(); const mirM = new THREE.Matrix4().makeTranslation(...mir.position.clone().applyMatrix4(ce.matrix).toArray());   // in the truck's frame, looking out the back
+
+  CK = { S, ce, cam, hemi, sun, fill, tires, P, tach, spd, nos, gearC, gearT, gearS: '', led, leds, shiftL, nosL, nosBtn, SWR, arms, rt, mirCam, mirM, mf: 0,
+    mph: 0, rpm: 0.9, psi: 10, dip: 0, roll: 0 };
+  drawGear(CK, 'N');
+  return CK;
+}
+function limb(m, a, b) { _ke.subVectors(b, a); const L = _ke.length() || 1e-4; m.position.copy(a); m.scale.set(1, L, 1); m.quaternion.setFromUnitVectors(_kY, _ke.divideScalar(L)); }
+// one arm: shoulder S, wrist W (on the glove); the elbow bends out and down toward A.pole. If the wheel's turned so far
+// that the arm can't reach, the shoulder comes forward to meet it.
+function solveArm(A) {
+  const ua = 0.33, fa = 0.35, S = A.Sx.copy(A.S), W = A.W, e = _ka.subVectors(W, S); let d = e.length();
+  if (d > ua + fa - 0.004) { d = ua + fa - 0.004; S.copy(W).addScaledVector(e.normalize(), -d); e.subVectors(W, S); }
+  e.normalize();
+  const x = (ua * ua - fa * fa + d * d) / (2 * d), h = Math.sqrt(Math.max(0, ua * ua - x * x)), p = _kb.copy(A.pole).addScaledVector(e, -A.pole.dot(e)).normalize();
+  A.E.copy(S).addScaledVector(e, x).addScaledVector(p, h);
+  limb(A.up, S, A.E); A.elbow.position.copy(A.E);
+  const toE = _kc.subVectors(A.E, W).normalize(), c0 = _kd.copy(W).addScaledVector(toE, 0.085);
+  limb(A.fore, A.E, c0); limb(A.cuff, c0, W);
+  _kv.copy(W).addScaledVector(toE, 0.108); limb(A.band, _kv, c0);
+}
+function cockpitCam(dt) {
+  const C = buildCockpit(), t = me, H = HWd > HHd ? HEAD.land : HEAD.port, now = performance.now();
+  const sp = Math.hypot(t.vx, t.vz), fwd = t.vx * Math.sin(t.a) + t.vz * Math.cos(t.a);
+  // your head: dips on a hard landing, leans into the turns, buzzes over the dirt and shakes when you get hit
+  C.dip += (-t.squash * 0.07 - C.dip) * Math.min(1, dt * 14);
+  C.roll += (-t.steerVis * clamp(sp / 28, 0, 1) * 0.04 - C.roll) * Math.min(1, dt * 5);
+  const buzz = t.air ? 0 : Math.sin(now / 47) * Math.min(0.004, sp * 0.00018), sh = shake * 0.025;
+  if (shake > 0) shake = Math.max(0, shake - dt * 1.5);
+  C.cam.position.set(H.x + (Math.random() - 0.5) * sh, H.y + C.dip + buzz + (Math.random() - 0.5) * sh, H.z);
+  C.cam.rotation.set(-H.pitch + C.dip * 0.5, 0, C.roll);
+  C.cam.fov = camera.fov = H.fov + clamp(sp, 0, 32) * 0.12 + (t.nitroT > 0 ? 5 : 0); C.cam.aspect = camera.aspect;
+  C.cam.updateProjectionMatrix(); camera.updateProjectionMatrix();
+  // the wheel turns with your steering (the hands go with it, the arms follow); the front tyres bounce, steer and spin
+  C.SWR.rotation.z = -t.steerVis * 0.9;
+  t.mesh.root.updateMatrixWorld(true); _kM2.copy(t.mesh.body.matrix).invert();
+  C.tires.forEach((w, k) => { const r = t.mesh.wheels[k]; _kv.copy(r.piv.position).applyMatrix4(_kM2); w.piv.position.y = w.y0 + clamp(_kv.y - 0.62, -0.4, 0.12); w.piv.rotation.y = r.piv.rotation.y; w.m.rotation.x = -r.m.rotation.x; });
+  C.S.updateMatrixWorld(true); _kM2.copy(C.ce.matrixWorld).invert();
+  C.arms.forEach(A => { A.W.set(0, 0.012, 0.05).applyMatrix4(A.hg.matrixWorld).applyMatrix4(_kM2); solveArm(A); });
+  // the stadium camera is your truck's body times the eye pose; the stadium's lights are turned into the truck's frame
+  _kM.multiplyMatrices(t.mesh.body.matrixWorld, C.cam.matrixWorld); _kM.decompose(camera.position, camera.quaternion, _kS);
+  t.mesh.body.getWorldQuaternion(_kQ).invert();
+  C.sun.position.copy(SUN_D).applyQuaternion(_kQ); C.fill.position.copy(FILL_D).applyQuaternion(_kQ); C.hemi.position.set(0, 1, 0).applyQuaternion(_kQ);
+  // the gauges
+  const k = x => Math.min(1, dt * x), gas = t.gasIn || 0;
+  C.mph += (sp * 2.237 - C.mph) * k(7); C.spd.nd.rotation.z = needleA(clamp(C.mph, 0, 100) / 100);
+  const gw = 7.2, gear = Math.min(4, Math.floor(sp / gw)), frac = clamp((sp - gear * gw) / gw, 0, 1);
+  let rpm = sp < 0.8 ? (gas ? 3.2 : 0.9) : gas ? 2.6 + frac * 4.4 : Math.max(1.2, (2.6 + frac * 4.4) * 0.65);
+  if (t.air) rpm = gas ? 7.4 : 2.4; else if (state === 'count') rpm = gas ? 5.8 + Math.sin(now / 70) * 0.9 : 0.9 + Math.sin(now / 160) * 0.08;
+  if (t.nitroT > 0 && !t.air) rpm = Math.min(7.8, rpm + 0.5);
+  C.rpm += (rpm - C.rpm) * k(9); C.tach.nd.rotation.z = needleA(clamp(C.rpm, 0, 8) / 8);
+  C.shiftL.material.color.setHex(C.rpm > 6.6 && now % 180 < 110 ? 0xffb020 : 0x2a1a06);
+  const gs = fwd < -0.5 ? 'R' : sp < 0.8 ? 'N' : String(gear + 1); if (gs !== C.gearS) { C.gearS = gs; drawGear(C, gs); }
+  const burn = 2.2 + t.up.eng * 0.12, psi = t.nitroT > 0 ? 3 + 7 * t.nitroT / burn : t.nitros > 0 ? 10 : 0.3;
+  C.psi += (psi - C.psi) * k(t.nitroT > 0 ? 12 : 2.5); C.nos.nd.rotation.z = needleA(clamp(C.psi, 0, 12) / 12);
+  const fl = now % 240 < 140;
+  C.leds.forEach((m, i) => { m.material = i < t.nitros ? C.led.on : t.nitroT > 0 && i === t.nitros && fl ? C.led.burn : C.led.off; });
+  C.nosL.material.color.setHex(t.nitroT > 0 ? 0x5ad8ff : 0x0b1c26);
+  C.nosBtn.position.z = t.nitroT > 0 ? 0.007 : 0.012; C.nosBtn.material.emissive.setHex(t.nitroT > 0 ? 0x701414 : 0);
+}
+// the mirror: every other picture, the stadium is drawn from the mirror looking out the back (dust sized for its little picture)
+function mirrorPass() {
+  const C = CK; if (!C || PR < 0.9) return;
+  C.mf = (C.mf + 1) % 2; if (C.mf) return;
+  _kM.multiplyMatrices(me.mesh.body.matrixWorld, C.mirM); _kM.decompose(C.mirCam.position, C.mirCam.quaternion, _kS);
+  const s0 = PUFF.mat.uniforms.scale.value, m0 = PUFF.mat.uniforms.maxs.value, ms = C.rt.height / (2 * Math.tan(C.mirCam.fov * Math.PI / 360));
+  [PUFF, GLOW].forEach(S => { S.mat.uniforms.scale.value = ms; S.mat.uniforms.maxs.value = 0.6 * ms; });
+  renderer.setRenderTarget(C.rt); renderer.render(scene, C.mirCam); renderer.setRenderTarget(null);
+  [PUFF, GLOW].forEach(S => { S.mat.uniforms.scale.value = s0; S.mat.uniforms.maxs.value = m0; });
+}
 
 // ---------------------------------------------------------------- camera
 let camPos = new THREE.Vector3(0, 40, 90), camLook = new THREE.Vector3(), camYaw = 0, camY = 0, orbit = 0;
@@ -605,10 +938,11 @@ function camUpdate(dt) {
   const sp = Math.hypot(me.vx, me.vz), va = sp > 3 ? Math.atan2(me.vx, me.vz) : me.a;
   const want = me.a + wrapA(va - me.a) * 0.45; camYaw += wrapA(want - camYaw) * Math.min(1, dt * 3.2);
   camY += ((me.air ? Math.max(me.y - 1.2, gH(me.x, me.z)) : me.y) - camY) * Math.min(1, dt * (me.air ? 2.5 : 6));
-  const back = view ? 16 : 7.4, up = view ? 12.5 : 4.0, ahead = view ? 6 : 7;
+  if (cockpitOn()) { cockpitCam(dt); camSnap = true; return; }
+  const hi = view === 2, back = hi ? 16 : 7.4, up = hi ? 12.5 : 4.0, ahead = hi ? 6 : 7;
   const tx = me.x - Math.sin(camYaw) * back, tz = me.z - Math.cos(camYaw) * back, ty = Math.max(gH(tx, tz) + 1.6, camY + up);
-  camPos.lerp(_v4.set(tx, ty, tz), Math.min(1, dt * 7));
-  camLook.set(me.x + Math.sin(camYaw) * ahead, camY + (view ? 0 : 1.3), me.z + Math.cos(camYaw) * ahead);
+  if (camSnap) { camPos.set(tx, ty, tz); camSnap = false; } else camPos.lerp(_v4.set(tx, ty, tz), Math.min(1, dt * 7));
+  camLook.set(me.x + Math.sin(camYaw) * ahead, camY + (hi ? 0 : 1.3), me.z + Math.cos(camYaw) * ahead);
   const sh = shake > 0 ? shake * 0.35 : 0; if (shake > 0) shake = Math.max(0, shake - dt * 1.5);
   camera.position.set(camPos.x + (Math.random() - 0.5) * sh, camPos.y + (Math.random() - 0.5) * sh, camPos.z + (Math.random() - 0.5) * sh); camera.lookAt(camLook);
   camera.fov = (land ? 58 : 76) + clamp(sp, 0, 32) * 0.18 + (me.nitroT > 0 ? 7 : 0); camera.updateProjectionMatrix();
@@ -627,10 +961,12 @@ function hudDraw() {
   const pos = position(me);
   txt(c, ord(pos), x0, top + 18, land ? 32 : 28, pos === 1 ? '#ffd23f' : '#fff6e8');
   txt(c, 'LAP ' + Math.min(LAPS, me.lap + 1) + '/' + LAPS, x0, top + 48, 15, '#fff');
-  // nitro bottles
-  for (let k = 0; k < Math.min(9, me.nitros); k++) { const bx = x0 + k * 13, by = top + 64; c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(bx - 1, by - 1, 10, 22); c.fillStyle = '#2fe06a'; c.fillRect(bx, by + 4, 8, 16); c.fillStyle = '#f4f4f4'; c.fillRect(bx + 2, by, 4, 4); }
-  if (me.nitroT > 0) { c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(x0, top + 90, 80, 6); c.fillStyle = '#5ac8ff'; c.fillRect(x0, top + 90, 80 * me.nitroT / (2.2 + me.up.eng * 0.12), 6); }
-  txt(c, Math.round(Math.hypot(me.vx, me.vz) * 2.237) + ' MPH', x0, top + (me.nitroT > 0 ? 110 : 98), 13, '#ffd9b0');
+  // nitro bottles and speed (in the driver's seat they're on the dash instead)
+  if (!cockpitOn()) {
+    for (let k = 0; k < Math.min(9, me.nitros); k++) { const bx = x0 + k * 13, by = top + 64; c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(bx - 1, by - 1, 10, 22); c.fillStyle = '#2fe06a'; c.fillRect(bx, by + 4, 8, 16); c.fillStyle = '#f4f4f4'; c.fillRect(bx + 2, by, 4, 4); }
+    if (me.nitroT > 0) { c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(x0, top + 90, 80, 6); c.fillStyle = '#5ac8ff'; c.fillRect(x0, top + 90, 80 * me.nitroT / (2.2 + me.up.eng * 0.12), 6); }
+    txt(c, Math.round(Math.hypot(me.vx, me.vz) * 2.237) + ' MPH', x0, top + (me.nitroT > 0 ? 110 : 98), 13, '#ffd9b0');
+  }
   // minimap
   const ms = land ? 92 : 78, mx = w - ms - (land ? 14 : 10), my = top + 2, bw = trackBox.x1 - trackBox.x0, bh = trackBox.z1 - trackBox.z0, sc = ms / Math.max(bw, bh), ox = mx + (ms - bw * sc) / 2, oy = my + (ms - bh * sc) / 2;
   c.fillStyle = 'rgba(0,0,0,.4)'; c.beginPath(); c.roundRect(mx - 6, my - 6, ms + 12, ms + 12, 8); c.fill();
@@ -656,12 +992,12 @@ function attract() {
 }
 function title() {
   attract();
-  K.card({ title: 'DIRT BOWL', text: 'Stadium off-road racing under the lights: four trucks, four laps, big jumps, bumps and sticky mud. Your truck drives itself. Steer with the stick, tap NITRO for a burst of speed, hold BRAKE to slow down or back up. Land on the far side of a jump to keep your speed. Grab nitro cans and cash bags, win prize money, then upgrade your engine, tires and shocks in the pit shop. Finish last and you lose a truck. Lose all three and the season is over. VIEW switches the camera.', best: best ? 'BEST ' + money(best) : '', button: 'Start season', onStart: newSeason });
+  K.card({ title: 'DIRT BOWL', text: 'Stadium off-road racing under the lights: four trucks, four laps, big jumps, bumps and sticky mud. Hold GAS to drive and steer with the stick. Tap NITRO for a burst of speed, and hold BRAKE to slow down or back up. In the Joystik app the phone\'s side buttons work too: volume up is gas, volume down is brake. Land on the far side of a jump to keep your speed. Grab nitro cans and cash bags, win prize money, then upgrade your engine, tires and shocks in the pit shop. Finish last and you lose a truck. Lose all three and the season is over. VIEW switches between the chase camera, the cockpit (the driver\'s seat) and the high camera.', best: best ? 'BEST ' + money(best) : '', button: 'Start season', onStart: newSeason });
 }
 function newSeason() { audioOn(); season = SEASON0(); startRace(); }
 function startRace() {
-  audioOn(); const ti = trackFor(season.race); setTrack(ti); placeGrid(false);
-  state = 'count'; countdown = 3.6; raceT = 0; raceBonus = 0; airBonus = 0; doneT = 0; msgT = 0; camY = me.y; camYaw = me.a; camPos.set(me.x - Math.sin(me.a) * 9, me.y + 4, me.z - Math.cos(me.a) * 9);
+  audioOn(); const ti = trackFor(season.race); setTrack(ti); placeGrid(false); if (view === 1) buildCockpit();
+  state = 'count'; countdown = 3.6; raceT = 0; raceBonus = 0; airBonus = 0; doneT = 0; msgT = 0; camY = me.y; camYaw = me.a; camSnap = false; camPos.set(me.x - Math.sin(me.a) * 9, me.y + 4, me.z - Math.cos(me.a) * 9);
   K.set('race', 'RACE ' + (season.race + 1) + ' · ' + TRACKS[ti].n.toUpperCase()); K.set('cash', money(season.cash));
 }
 function finishRace() {
@@ -722,7 +1058,11 @@ function shop() {
 let slowF = [], slowSkip = 60;
 function update(dt) { if (renderer && !DB.pause) tick(dt); }   // DB.pause freezes the game (tests step it with tick)
 function tick(dt) {
-  if (K.hit('v')) view = 1 - view;
+  if (K.hit('v')) {
+    view = (view + 1) % 3; camSnap = true; if (view === 1) buildCockpit();
+    try { localStorage.setItem('pa-dirtbowl-view', view); } catch (e) {}
+    if (state === 'count' || state === 'race' || state === 'done') say(VIEWS[view], 0.9);
+  }
   if (msgT > 0) msgT -= dt;
   if (state === 'count') { const b = Math.ceil(countdown); countdown -= dt; if (Math.ceil(countdown) !== b && countdown > 0 && countdown <= 3) K.beep(440, 0.15, { vol: 0.06 }); if (countdown <= 0) { state = 'race'; raceT = 0; K.beep(880, 0.4, { vol: 0.07 }); } }
   else if (state === 'race' || state === 'title' || state === 'card' || state === 'done') raceT += dt;
@@ -747,16 +1087,23 @@ function draw() {
   if (!renderer) return;
   const now = performance.now(), el = draw.last ? (now - draw.last) / 1000 : 0.016; draw.last = now;
   trucks.forEach(t => pose(t, Math.min(0.05, el)));
+  // in the driver's seat your own truck is hidden (you're inside it) and the cockpit is drawn over the stadium
+  const ck = cockpitOn(); if (me) me.mesh.root.visible = !ck;
   camUpdate(Math.min(0.05, el)); engineSound();
-  trucks.forEach(t => { const d = t === me || state === 'title' || state === 'card' ? 99 : camera.position.distanceTo(t.mesh.root.position), op = Math.round(clamp((d - 4) / 4, 0.12, 1) * 20) / 20, m = t.mesh;
+  trucks.forEach(t => { const d = t === me || ck || state === 'title' || state === 'card' ? 99 : camera.position.distanceTo(t.mesh.root.position), op = Math.round(clamp((d - 4) / 4, 0.12, 1) * 20) / 20, m = t.mesh;
     if (m.op !== op) { m.op = op; const tr = op < 0.99; [m.mat, m.nm].forEach(x => { if (x.transparent !== tr) { x.transparent = tr; x.depthWrite = !tr; x.needsUpdate = true; } x.opacity = op; }); } });
-  renderer.render(scene, camera); hudDraw();
+  if (ck) mirrorPass();
+  renderer.render(scene, camera);
+  if (ck) { renderer.autoClear = false; renderer.clearDepth(); renderer.render(CK.S, CK.cam); renderer.autoClear = true; }
+  hudDraw();
   // a phone that can't keep up: draw fewer pixels
   if (state === 'race' && !document.hidden) { if (slowSkip > 0) slowSkip--; else { slowF.push(el); if (slowF.length >= 60) { const med = slowF.slice().sort((a, b) => a - b)[30]; slowF.length = 0; if (med > 0.03 && PR > 0.8) { PR = Math.max(0.8, PR - 0.35); renderer.setPixelRatio(PR); fit(); slowSkip = 60; } } } }
 }
 setup(); title();
 K.run(update, draw);
-window.DB = DB; DB.state = () => ({ state, raceT, lap: me && me.lap, pos: me && position(me), trucks: trucks.map(t => ({ n: t.name, x: +t.x.toFixed(1), z: +t.z.toFixed(1), lap: t.lap, prog: t.prog, air: t.air, v: +Math.hypot(t.vx, t.vz).toFixed(1) })), season, picks: picks.length, PR });
+window.DB = DB; DB.state = () => ({ state, raceT, view, lap: me && me.lap, pos: me && position(me), trucks: trucks.map(t => ({ n: t.name, x: +t.x.toFixed(1), z: +t.z.toFixed(1), lap: t.lap, prog: t.prog, air: t.air, v: +Math.hypot(t.vx, t.vz).toFixed(1) })), season, picks: picks.length, PR });
+DB.view = v => { view = v; camSnap = true; if (v === 1) buildCockpit(); };   // test hook: 0 chase, 1 driver's seat, 2 high
+DB.me = () => me;
 </script>
 </body>
 </html>

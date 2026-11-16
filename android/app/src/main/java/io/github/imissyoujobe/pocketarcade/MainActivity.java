@@ -3,6 +3,7 @@ package io.github.imissyoujobe.pocketarcade;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -13,10 +14,12 @@ import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.DisplayCutout;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -43,6 +46,8 @@ public class MainActivity extends Activity {
     private WebView web;
     private View offline;
     private boolean clearHistoryOnLoad;
+    /** True while a game wants the volume buttons as game buttons (set from the page, cleared on every new page). */
+    private volatile boolean volumeKeys;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -80,6 +85,11 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageStarted(WebView v, String url, Bitmap icon) {
+                volumeKeys = false; // a new page: the volume buttons go back to changing the volume
+            }
+
+            @Override
             public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if (r.isForMainFrame()) offline.setVisibility(View.VISIBLE);
             }
@@ -93,6 +103,11 @@ public class MainActivity extends Activity {
             }
         });
         web.setWebChromeClient(new WebChromeClient());
+        // the page's link to the app: a game calls JoystikApp.volumeKeys(true) while it's being played (lib/kit.js K.sideKeys)
+        web.addJavascriptInterface(new Object() {
+            @JavascriptInterface
+            public void volumeKeys(boolean on) { volumeKeys = on; }
+        }, "JoystikApp");
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
 
         offline = buildOfflineView();
@@ -145,6 +160,27 @@ public class MainActivity extends Activity {
     @SuppressWarnings("deprecation")
     public void onBackPressed() { // Android 12 and older
         goBack();
+    }
+
+    /**
+     * The phone's side buttons as game buttons: while a game has asked for them, volume up and down go to the page
+     * as AudioVolumeUp / AudioVolumeDown key presses (held keys repeat on Android; only the first press and the
+     * release are sent) and the volume doesn't change. Any other time they work as usual.
+     */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        int k = e.getKeyCode();
+        if (volumeKeys && (k == KeyEvent.KEYCODE_VOLUME_UP || k == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            String key = k == KeyEvent.KEYCODE_VOLUME_UP ? "AudioVolumeUp" : "AudioVolumeDown";
+            if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) sideKey("keydown", key);
+            else if (e.getAction() == KeyEvent.ACTION_UP) sideKey("keyup", key);
+            return true;
+        }
+        return super.dispatchKeyEvent(e);
+    }
+
+    private void sideKey(String type, String key) {
+        web.evaluateJavascript("dispatchEvent(new KeyboardEvent('" + type + "',{key:'" + key + "',code:'" + key + "'}))", null);
     }
 
     private View buildOfflineView() {
