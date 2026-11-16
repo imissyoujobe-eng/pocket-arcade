@@ -62,10 +62,11 @@ function setup() {
   bindLook(); addEventListener('resize', fit); fit();
 }
 function fit() {
-  const r = stageEl.getBoundingClientRect(), H = Math.max(120, Math.floor(r.height - 6)), W = Math.max(100, Math.floor(Math.min(r.width - 6, H * 0.75)));
+  // phone on its side: the 3D view fills the whole wide screen (upright it stays a 3:4 frame)
+  const r = stageEl.getBoundingClientRect(), land = r.width > r.height * 1.15, H = Math.max(120, Math.floor(r.height - 6)), W = Math.max(100, Math.floor(Math.min(r.width - 6, H * (land ? 2.4 : 0.75))));
   fitW = W; fitH = H; const L = Math.floor((r.width - W) / 2) + 'px', T = Math.floor((r.height - H) / 2) + 'px';
   renderer.setSize(W, H, false); for (const el of [renderer.domElement, hudC]) { el.style.left = L; el.style.top = T; el.style.width = W + 'px'; el.style.height = H + 'px'; }
-  camera.aspect = vmCam.aspect = W / H; camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
+  camera.aspect = vmCam.aspect = W / H; camera.fov = W > H ? 58 : 72; camera.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
   const d = Math.min(devicePixelRatio || 1, 2.5); hudC.width = W * d; hudC.height = H * d; hx.setTransform(d, 0, 0, d, 0, 0);
 }
 // drag on the 3D view to turn / look; a quick tap advances dialog

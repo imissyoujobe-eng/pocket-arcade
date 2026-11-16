@@ -11,8 +11,10 @@
 <script>
 // Fortress Flight: an isometric run through a floating fortress. Watch your altitude and shadow, thread the walls, and blow up fuel tanks to stay in the air.
 K.theme({ bg: '#05070f', ink: '#e8f0ff', accent: '#4ad8ff', accentInk: '#001a24' });
-const W = 320, H = 240;
+let W = 320; const H = 240;
 K.screen(W, H);
+K.flex(320, H, w => { W = w; }, { maxW: 560 }); // phone on its side: see further ahead
+const AHEAD = () => 300 + Math.max(0, W - 320) * 1.15; // how far ahead things are built and drawn
 K.hud(['score', 'fuel', 'lives']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'FIRE' }] });
 
@@ -35,14 +37,14 @@ function update(dt) {
   if (state !== 'play') return;
   if (K.down('left')) me.x -= 70 * dt; if (K.down('right')) me.x += 70 * dt;
   if (K.down('up')) me.alt += 50 * dt; if (K.down('down')) me.alt -= 50 * dt;
-  if (K.ptr.down) { me.x += K.clamp((K.ptr.x - 160) / 2, -70, 70) * dt; me.alt += K.clamp((150 - K.ptr.y) / 2, -50, 50) * dt; }
+  if (K.ptr.down) { me.x += K.clamp((K.ptr.x - W / 2) / 2, -70, 70) * dt; me.alt += K.clamp((150 - K.ptr.y) / 2, -50, 50) * dt; }
   me.x = K.clamp(me.x, -50, 50); me.alt = K.clamp(me.alt, 4, 70);
   const sp = 70; z += sp * dt; score += Math.round(sp * dt * 0.5);
   if (!inSpace) fuel -= 4.5 * dt;
   if (fuel <= 0) { fuel = 0; hurt('OUT OF FUEL'); if (state !== 'play') return; }
   fireCd -= dt;
   if ((K.down('a') || K.ptr.tapped) && fireCd <= 0) { shots.push({ x: me.x, z: z + 46, alt: me.alt, life: 1.1 }); fireCd = 0.22; K.beep(800, 0.05, { to: 300 }); }
-  if (!inSpace) { while (nextZ < z + 300) spawn(); if (z > 1600 + spaceT * 0) { inSpace = true; spaceT = 12; things = things.filter(t => t.z < z + 120); } }
+  if (!inSpace) { while (nextZ < z + AHEAD()) spawn(); if (z > 1600 + spaceT * 0) { inSpace = true; spaceT = 12; things = things.filter(t => t.z < z + 120); } }
   else { spaceT -= dt; if (Math.random() < dt * 1.5) things.push({ k: 'ship', z: z + 260, x: K.rnd(-50, 50), alt: K.rnd(10, 65), vx: K.rnd(-20, 20) }); if (spaceT <= 0) { inSpace = false; score += 1000; K.tune([523, 659, 784, 1046], 0.1); z = 0; nextZ = 160; things = []; } }
   const myZ = z + 40;
   things.forEach(t => {
@@ -65,15 +67,15 @@ function update(dt) {
 function poly(c, pts, col) { c.fillStyle = col; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p.x, p.y) : c.moveTo(p.x, p.y)); c.fill(); }
 function draw(c, t) {
   const sg = c.createLinearGradient(0, 0, W, H); sg.addColorStop(0, '#05030f'); sg.addColorStop(1, '#10183a'); c.fillStyle = sg; c.fillRect(0, 0, W, H);
-  A.glow(c, 240, 50, 120, '120,60,200', 0.18); A.glow(c, 60, 200, 100, '40,120,220', 0.15);
+  A.glow(c, W * 0.75, 50, 120, '120,60,200', 0.18); A.glow(c, 60, 200, 100, '40,120,220', 0.15);
   for (let i = 0; i < 70; i++) { const x = ((i * 97 - z * (0.2 + (i % 3) * 0.15)) % W + W) % W; c.fillStyle = 'rgba(255,255,255,' + (0.3 + (i % 4) * 0.18) + ')'; c.fillRect(x, (i * 53) % H, i % 7 ? 1 : 1.6, i % 7 ? 1 : 1.6); }
   if (!inSpace) {
     // fortress deck: metal plates with seams, rivets and lit trim
-    for (let zz = Math.floor((z - 40) / 20) * 20; zz < z + 400; zz += 20) for (let xx = -60; xx < 60; xx += 20) { const a = iso(xx, zz, 0), b = iso(xx + 20, zz, 0), cc = iso(xx + 20, zz + 20, 0), d = iso(xx, zz + 20, 0), k = (Math.abs(zz / 20 | 0) + (xx / 20 | 0)) % 2; poly(c, [a, b, cc, d], k ? '#3a4260' : '#353c58'); c.strokeStyle = 'rgba(0,0,0,.45)'; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.lineTo(cc.x, cc.y); c.stroke(); c.strokeStyle = 'rgba(255,255,255,.06)'; c.beginPath(); c.moveTo(a.x, a.y + 0.5); c.lineTo(d.x, d.y + 0.5); c.stroke(); const m = iso(xx + 3, zz + 3, 0); c.fillStyle = 'rgba(160,180,220,.35)'; c.fillRect(m.x, m.y, 1, 1); }
-    const e1 = iso(-60, z - 40, 0), e2 = iso(-60, z + 400, 0), e3 = iso(60, z - 40, 0), e4 = iso(60, z + 400, 0);
+    for (let zz = Math.floor((z - 40) / 20) * 20; zz < z + AHEAD() + 100; zz += 20) for (let xx = -60; xx < 60; xx += 20) { const a = iso(xx, zz, 0), b = iso(xx + 20, zz, 0), cc = iso(xx + 20, zz + 20, 0), d = iso(xx, zz + 20, 0), k = (Math.abs(zz / 20 | 0) + (xx / 20 | 0)) % 2; poly(c, [a, b, cc, d], k ? '#3a4260' : '#353c58'); c.strokeStyle = 'rgba(0,0,0,.45)'; c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.lineTo(cc.x, cc.y); c.stroke(); c.strokeStyle = 'rgba(255,255,255,.06)'; c.beginPath(); c.moveTo(a.x, a.y + 0.5); c.lineTo(d.x, d.y + 0.5); c.stroke(); const m = iso(xx + 3, zz + 3, 0); c.fillStyle = 'rgba(160,180,220,.35)'; c.fillRect(m.x, m.y, 1, 1); }
+    const e1 = iso(-60, z - 40, 0), e2 = iso(-60, z + AHEAD() + 100, 0), e3 = iso(60, z - 40, 0), e4 = iso(60, z + AHEAD() + 100, 0);
     c.strokeStyle = A.INK; c.lineWidth = 3; c.beginPath(); c.moveTo(e1.x, e1.y); c.lineTo(e2.x, e2.y); c.moveTo(e3.x, e3.y); c.lineTo(e4.x, e4.y); c.stroke(); c.lineWidth = 1;
     c.fillStyle = '#20263a'; c.beginPath(); c.moveTo(e3.x, e3.y); c.lineTo(e4.x, e4.y); c.lineTo(e4.x, e4.y + 14); c.lineTo(e3.x, e3.y + 14); c.fill();
-    for (let zz = Math.floor(z / 40) * 40; zz < z + 400; zz += 40) { const p = iso(60, zz, 0); c.fillStyle = Math.floor(t / 300 + zz / 40) % 2 ? '#4ad8ff' : '#1a5a7a'; c.fillRect(p.x - 1, p.y + 3, 3, 3); A.glow(c, p.x, p.y + 4, 8, '74,216,255', 0.2); }
+    for (let zz = Math.floor(z / 40) * 40; zz < z + AHEAD() + 100; zz += 40) { const p = iso(60, zz, 0); c.fillStyle = Math.floor(t / 300 + zz / 40) % 2 ? '#4ad8ff' : '#1a5a7a'; c.fillRect(p.x - 1, p.y + 3, 3, 3); A.glow(c, p.x, p.y + 4, 8, '74,216,255', 0.2); }
   }
   const list = things.slice().sort((a, b) => b.z - a.z);
   const myZ = z + 40;

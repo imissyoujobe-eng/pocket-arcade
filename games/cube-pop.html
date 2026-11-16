@@ -10,8 +10,9 @@
 <script>
 // Cube Pop: tap groups of matching cubes to pop them. Big groups build rockets, bombs and rainbow balls. Hit each level's goals before you run out of moves.
 K.theme({ bg: '#1a1240', ink: '#fff', accent: '#ff5ac8', accentInk: '#fff' });
-const COLS = 8, ROWS = 9, CS = 34, W = 300, H = 400, GX = (W - COLS * CS) / 2, GY = 70;
+const COLS = 8, ROWS = 9, CS = 34, H = 400, GY = 70; let W = 300, GX = (W - COLS * CS) / 2;
 K.screen(W, H, { smooth: true });
+K.flex(300, H, w => { W = w; GX = (W - COLS * CS) / 2; }, { smooth: true, maxW: 900 }); // phone on its side: the board in the middle, the goals across the top
 K.hud(['score', 'level', 'moves']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'POP' }] });
 const COLORS = ['#ff4a5a', '#3a9aff', '#3ad06a', '#ffd23a', '#b06aff'];

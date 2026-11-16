@@ -10,8 +10,9 @@
 <script>
 // Marble Run: roll a marble down tilted isometric courses against the clock. Mind the edges, the slopes and the black marble.
 K.theme({ bg: '#0c0c1a', ink: '#f0f0ff', accent: '#4ae0ff', accentInk: '#002030' });
-const W = 320, H = 240, T = 16;
+let W = 320; const H = 240, T = 16;
 K.screen(W, H, { smooth: true });
+K.flex(320, H, w => { W = w; }, { smooth: true, maxW: 560 }); // phone on its side: more of the course in view
 K.hud(['score', 'course', 'time']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'BOOST' }] });
 
@@ -66,7 +67,7 @@ const COURSES = [
 ];
 let state = 'title', score, ci, map, rows, cols, ball, enemy, timeLeft, check, camX, camY, fallT, msg, msgT, best = K.best('marblerun');
 const tile = (gx, gy) => (gy < 0 || gy >= rows || gx < 0 || gx >= cols) ? '.' : map[gy][gx];
-function iso(x, y, z) { return { x: (x - y) * 15 + 160 - camX, y: (x + y) * 7.5 - (z || 0) + 60 - camY }; }
+function iso(x, y, z) { return { x: (x - y) * 15 + W / 2 - camX, y: (x + y) * 7.5 - (z || 0) + 60 - camY }; }
 function title() { K.card({ title: 'MARBLE RUN', text: 'Roll the marble with the arrows (or drag the way you want to roll). Reach the green goal before the clock runs out. Slopes push you, edges drop you, and the black marble shoves you around. Leftover time carries into the next course.', best: best ? 'BEST ' + best : '', button: 'Roll', onStart: start }); }
 function start() { score = 0; ci = 0; timeLeft = 0; load(); state = 'play'; }
 function load() {
@@ -101,7 +102,7 @@ function update(dt) {
   if (nt === 'G') { score += Math.round(timeLeft) * 100 + 1000; K.tune([523, 659, 784, 1046, 1318], 0.09); ci++;
     if (ci >= COURSES.length) { state = 'over'; best = K.saveBest('marblerun', score); K.card({ title: 'FINISH!', text: 'All three courses done! Score ' + score + '.', best: 'BEST ' + best, button: 'Again', onStart: start }); return; }
     load(); }
-  const p = iso(ball.x / T, ball.y / T, 0); camX += (p.x + camX - 160 - camX) * Math.min(1, dt * 4); camY += (p.y + camY - 120 - camY) * Math.min(1, dt * 4);
+  const p = iso(ball.x / T, ball.y / T, 0); camX += (p.x + camX - W / 2 - camX) * Math.min(1, dt * 4); camY += (p.y + camY - 120 - camY) * Math.min(1, dt * 4);
   K.set('score', score); K.set('course', 'COURSE ' + (ci + 1)); K.set('time', Math.ceil(timeLeft) + 's');
 }
 function hsh(i, k) { const v = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return v - Math.floor(v); }

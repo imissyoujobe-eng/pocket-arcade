@@ -11,8 +11,9 @@
 <script>
 // Sundown Showdown: an Old West gunfight. Two gunslingers, a cactus and a wagon between them. Angle your shots, bounce them off the canyon walls, first to 10 wins.
 K.theme({ bg: '#2a1408', ink: '#fff2d8', accent: '#ffb02a', accentInk: '#2a1400' });
-const W = 320, H = 220, TOP = 22, BOT = H - 14;
+let W = 320; const H = 220, TOP = 22, BOT = H - 14;
 K.screen(W, H);
+K.flex(320, H, w => { W = w; }, { maxW: 560 }); // phone on its side: the whole street
 K.hud(['you', 'round', 'cpu']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'FIRE' }] });
 let state = 'title', me, cpu, shots, props, scoreMe, scoreCpu, round, msg, msgT, diff, best = K.best('sundown'), pauseT, parts;
@@ -22,10 +23,10 @@ function start() { scoreMe = 0; scoreCpu = 0; round = 1; diff = Math.min(1, 0.6 
 function newRound() {
   me = { x: 30, y: H / 2, face: 1, cd: 0, hit: 0, col: '#4a8aff' }; cpu = { x: W - 30, y: H / 2, face: -1, cd: 1, hit: 0, col: '#e04a3a', ty: H / 2, think: 0 };
   shots = []; parts = []; pauseT = 1.2; msg = round === 1 ? 'DRAW!' : 'ROUND ' + round; msgT = 1.2;
-  props = [{ k: 'cactus', x: 160, y: K.rnd(70, 150), w: 14, h: 34, hp: 4 }]; if (round % 2 === 0) props.push({ k: 'wagon', x: 160, y: props[0].y > 110 ? 50 : 160, w: 40, h: 22, hp: 6 });
-  if (round > 4) props.push({ k: 'cactus', x: K.rnd(110, 210), y: K.rnd(40, 180), w: 12, h: 28, hp: 3 });
+  props = [{ k: 'cactus', x: W / 2, y: K.rnd(70, 150), w: 14, h: 34, hp: 4 }]; if (round % 2 === 0) props.push({ k: 'wagon', x: W / 2, y: props[0].y > 110 ? 50 : 160, w: 40, h: 22, hp: 6 });
+  if (round > 4) props.push({ k: 'cactus', x: W / 2 + K.rnd(-50, 50), y: K.rnd(40, 180), w: 12, h: 28, hp: 3 });
 }
-function fire(g, dy) { if (g.cd > 0 || shots.some(s => s.owner === g)) return; g.cd = 0.35; shots.push({ owner: g, x: g.x + g.face * 12, y: g.y - 6, vx: g.face * 210, vy: dy * 120, bounces: 0 }); K.noise(0.12, 0.3); K.beep(900, 0.05, { to: 200 }); }
+function fire(g, dy) { if (g.cd > 0 || shots.some(s => s.owner === g)) return; g.cd = 0.35; shots.push({ owner: g, x: g.x + g.face * 12, y: g.y - 6, vx: g.face * 210 * Math.pow(Math.max(1, W / 320), 0.5), vy: dy * 120, bounces: 0 }); K.noise(0.12, 0.3); K.beep(900, 0.05, { to: 200 }); }
 function hitBox(s, p) { return s.x > p.x - p.w / 2 && s.x < p.x + p.w / 2 && s.y > p.y - p.h / 2 && s.y < p.y + p.h / 2; }
 function score(winner) {
   const loser = winner === me ? cpu : me; loser.hit = 1.2; K.beep(200, 0.5, { to: 60, type: 'sawtooth' }); for (let i = 0; i < 14; i++) parts.push({ x: loser.x, y: loser.y - 6, vx: K.rnd(-60, 60), vy: K.rnd(-90, 0), t: 0.6, c: '#c8a070' });
@@ -49,14 +50,14 @@ function update(dt) {
   if (pauseT > 0) { pauseT -= dt; return; }
   me.cd -= dt; cpu.cd -= dt;
   const dx = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0), dy = (K.down('down') ? 1 : 0) - (K.down('up') ? 1 : 0);
-  moveG(me, dx, dy, dt, 14, 120);
+  moveG(me, dx, dy, dt, 14, W * 0.375);
   if (K.hit('a')) fire(me, dy);
   // CPU: line up with you (or with a bank shot), dodge bullets, shoot
   cpu.think -= dt;
   if (cpu.think <= 0) { cpu.think = K.rnd(0.25, 0.7) / (0.5 + diff); const clear = !props.some(p => Math.abs(p.y - me.y) < p.h / 2 + 4); cpu.ty = clear ? me.y : (me.y < H / 2 ? me.y + 50 : me.y - 50); }
   const danger = shots.find(s => s.owner === me && s.vx > 0 && Math.abs(s.y - (cpu.y - 6)) < 16 && s.x < cpu.x);
   let cdy = danger && Math.random() < diff ? (cpu.y > H / 2 ? -1 : 1) : Math.abs(cpu.ty - cpu.y) > 4 ? Math.sign(cpu.ty - cpu.y) : 0;
-  moveG(cpu, 0, cdy, dt * (0.7 + diff * 0.5), 200, W - 14);
+  moveG(cpu, 0, cdy, dt * (0.7 + diff * 0.5), W * 0.625, W - 14);
   if (cpu.cd <= 0 && Math.random() < dt * (1 + diff * 2.5)) { const dyAim = Math.abs(me.y - cpu.y) < 12 ? 0 : Math.sign(me.y - cpu.y); fire(cpu, dyAim); }
   // bullets
   shots.forEach(s => { s.x += s.vx * dt; s.y += s.vy * dt;

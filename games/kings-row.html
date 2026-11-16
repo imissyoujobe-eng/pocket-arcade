@@ -11,8 +11,9 @@
 <script>
 // Kings Row: checkers against the computer. Captures are forced, multi-jumps chain, reach the far row to be crowned.
 K.theme({ bg: '#1b1410', ink: '#fff5e6', accent: '#e63946', accentInk: '#fff' });
-const W = 304, H = 344, S = 36, BX = 8, BY = 36;
+let W = 304, BX = 8; const H = 344, S = 36, BY = 36;
 K.screen(W, H, { smooth: true });
+K.flex(304, H, w => { W = w; BX = (W - S * 8) / 2; }, { smooth: true, maxW: 780 }); // phone on its side: the board in the middle of a wide table
 K.hud(['you', 'level', 'cpu']);
 
 
@@ -134,7 +135,7 @@ function draw(c, t) {
 }
 let _board = null;
 function boardArt() {
-  if (_board) return _board;
+  if (_board && _board.lw === W) return _board;
   const R = 3, cv = document.createElement('canvas'); cv.width = W * R; cv.height = H * R; const c = cv.getContext('2d'); c.scale(R, R);
   // walnut table with grain
   c.fillStyle = '#2a1a10'; c.fillRect(0, 0, W, H);
@@ -152,7 +153,7 @@ function boardArt() {
     for (let k = 0; k < (dark ? 30 : 6); k++) { if (dark) { c.fillStyle = 'rgba(0,0,0,.12)'; c.fillRect(x + A.hash(k, r * 8 + col) * S, y + A.hash(k + 50, r * 8 + col) * S, 1, 1); } else { c.strokeStyle = 'rgba(160,130,90,.25)'; c.lineWidth = 0.5; c.beginPath(); const sy = y + A.hash(k, r * 8 + col) * S; c.moveTo(x, sy); c.quadraticCurveTo(x + S / 2, sy + (A.hash(k, 9) - 0.5) * 16, x + S, sy + (A.hash(k, 7) - 0.5) * 10); c.stroke(); } }
     c.fillStyle = 'rgba(255,255,255,' + (dark ? 0.08 : 0.3) + ')'; c.fillRect(x, y, S, 1); c.fillStyle = 'rgba(0,0,0,.15)'; c.fillRect(x, y + S - 1, S, 1); }
   c.strokeStyle = A.INK; c.lineWidth = 1; c.strokeRect(BX, BY, S * 8, S * 8);
-  return (_board = cv);
+  cv.lw = W; return (_board = cv);
 }
 function piece(c, x, y, p) {
   const red = p > 0;

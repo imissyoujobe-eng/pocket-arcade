@@ -12,11 +12,15 @@
 <script>
 // Girder Gauntlet: climb the construction site past the barrels the Wrecker bot keeps rolling down, and rescue the puppy at the top.
 K.theme({ bg: '#0a0a14', ink: '#fff6ea', accent: '#ff5a36', accentInk: '#fff' });
-const W = 240, H = 330;
+let W = 240; const H = 330;
 // the tower is laid out in a 200x275 space and drawn 1.2x bigger, one girder level shorter than before
 const SCL = 1.2, DW = W / SCL, DH = H / SCL;
 K.screen(W, H);
 K.zoomLand(1.6, () => pl ? pl.y * SCL - 24 : H); // phone on its side: zoomed in, the view follows you up the tower
+// ...and the picture is widened to fill the screen: the tower stays in the middle at the same size, with the night
+// city filling the rest of the wide screen
+function shape() { const land = innerWidth > innerHeight * 1.15, r = K.stageSize(), w = land ? Math.round(K.clamp(r.w / ((r.h / H) * 1.6), 240, 700)) : 240; if (w !== W) { W = w; K.screen(W, H); } }
+shape(); addEventListener('resize', () => { shape(); setTimeout(shape, 150); });
 K.hud(['score', 'bonus', 'stage', 'lives']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'JUMP' }] });
 
@@ -102,9 +106,9 @@ function die() { deadT = 2; K.tune([392, 330, 262, 196], 0.15, { type: 'sawtooth
 function over() { state = 'over'; best = K.saveBest('girder', score); K.card({ title: 'GAME OVER', text: 'You reached stage ' + stage + ' with ' + score + ' points.', best: 'BEST ' + best, button: 'Climb again', onStart: () => { stage = 1; score = 0; lives = 3; begin(); state = 'play'; } }); }
 
 function draw(c, t) {
-  A.sky(c, W, H, { top: '#04040e', mid: '#141a3a', bottom: '#3a2a4a', stars: true, sun: '#fff4d8', moon: true, sunX: 205, sunY: 30, sunR: 12, sunGlow: '200,210,255', clouds: false }, t);
+  A.sky(c, W, H, { top: '#04040e', mid: '#141a3a', bottom: '#3a2a4a', stars: true, sun: '#fff4d8', moon: true, sunX: (W - 240) / 2 + 205, sunY: 30, sunR: 12, sunGlow: '200,210,255', clouds: false }, t);
   A.skyline(c, 0, { factor: 0, base: H, col: '#0e1024', amp: 140, win: 'rgba(255,210,120,.35)' });
-  c.save(); c.scale(SCL, SCL);
+  c.save(); c.translate((W - 240) / 2, 0); c.scale(SCL, SCL);
   // construction crane in the background with a blinking warning light
   c.strokeStyle = 'rgba(255,200,60,.32)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(194, DH); c.lineTo(194, 18); c.lineTo(110, 18); c.moveTo(194, 26); c.lineTo(212, 26); c.stroke();
   c.lineWidth = 0.8; for (let y = 26; y < DH; y += 12) { c.beginPath(); c.moveTo(190, y); c.lineTo(198, y + 12); c.moveTo(198, y); c.lineTo(190, y + 12); c.stroke(); } for (let x = 114; x < 194; x += 10) { c.beginPath(); c.moveTo(x, 14); c.lineTo(x + 10, 18); c.stroke(); }
