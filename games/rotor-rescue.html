@@ -16,14 +16,17 @@
 // river valley to the coloured smoke, land, load the people and bring them home, with gun nests, flak guns,
 // missile sites, gun boats and enemy choppers shooting at you the whole way there and back. Bullets, missiles and
 // bombs never run out (flares do: land at the firebase for more). Big gun towers stand
-// above the trees and concrete bunkers sit in the clearings: lock on with missiles or bomb them. Shot-down enemy
-// choppers burn, spin down and crash, and the pilot falls out.
-// Drag the screen to look around: the helmet sight aims the gun wherever you look.
+// above the trees and concrete bunkers sit in the clearings. Shot-down enemy choppers burn, spin down and crash,
+// and the pilot falls out.
+// Drag the screen to look around: the helmet sight aims the gun wherever you look. Look at an enemy and the sight
+// LOCKS ON to it: the gun then aims itself (leading a moving chopper) and missiles home in on it.
 K.theme({ bg: '#07100a', ink: '#eaffe0', accent: '#8cff6a', accentInk: '#0a2006' });
 K.hud([]);
+// the buttons: one block of six big buttons, GUN MSL BOMB on top and ▲ ▼ FLR right under them (see the CSS below)
 K.pad({ dpad: '4', buttons: [
-  { id: 'climb', label: '▲', top: true }, { id: 'dive', label: '▼', top: true }, { id: 'flr', label: 'FLR', top: true },
-  { id: 'a', label: 'GUN' }, { id: 'msl', label: 'MSL' }, { id: 'bomb', label: 'BOMB' }] });
+  { id: 'a', label: 'GUN' }, { id: 'msl', label: 'MSL' }, { id: 'bomb', label: 'BOMB' },
+  { id: 'climb', label: '▲' }, { id: 'dive', label: '▼' }, { id: 'flr', label: 'FLR' }] });
+(function () { const g = document.querySelector('#kp .kb'), j = document.querySelector('#kp .kj'); if (g) g.id = 'rrg'; if (j) j.id = 'rrj'; })();
 // keyboard: arrows/WASD fly, Space gun, Q/E climb/descend, M missile, B bomb, F flares, C centre your view
 const KEYX = { q: 'climb', Q: 'climb', PageUp: 'climb', e: 'dive', E: 'dive', PageDown: 'dive', f: 'flr', F: 'flr', b: 'bomb', B: 'bomb', m: 'msl', M: 'msl', c: 'center', C: 'center' };
 addEventListener('keydown', e => { const n = KEYX[e.key]; if (n && !K.cardOpen()) { K.press(n); e.preventDefault(); } });
@@ -465,13 +468,29 @@ function dropMissionObjs() { for (const o of missionObjs) scene.remove(o); missi
 
 // ---------------------------------------------------------------- menus
 const css = document.createElement('style');
-css.textContent = 'html body.touch.land:has(#kp .kbw){--bmax:84px}html body.touch.land #kp .kbw,html body.touch.land #kp .kbw .kb{width:auto}html body.touch.land #kp .kbw .kb.top{gap:12px}' +
+css.textContent =
+  // the button block: 3 across, 2 down (the ids win over the kit's own button sizes)
+  '#kp #rrg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;width:auto}' +
+  '#kp #rrg button{width:auto;height:auto;border-radius:18px;padding:0;line-height:1}' +
+  // phone upright: the stick on the left and the block filling the rest of the row, as big as fits
+  'html body.touch:not(.land) #kp{padding:10px 10px 12px;gap:10px}' +
+  'body.touch:not(.land) #kp #rrj{width:clamp(112px,31vw,140px);height:clamp(112px,31vw,140px)}' +
+  'body.touch:not(.land) #kp #rrg{flex:1 1 auto;max-width:340px}' +
+  'body.touch:not(.land) #kp #rrg button{height:clamp(68px,20vw,86px);font-size:clamp(16px,4.6vw,21px)}' +
+  'body.touch:not(.land) #kp #rrg button:nth-child(-n+3){background:rgba(255,96,64,.22)}body.touch:not(.land) #kp #rrg button:nth-child(6){background:rgba(255,207,74,.18)}' +
+  'body.touch:not(.land) #kp #rrg button.on{background:var(--accent)}' +
+  'body.touch:not(.land) #kp #rrg button:nth-child(4),body.touch:not(.land) #kp #rrg button:nth-child(5){font-size:clamp(22px,6.6vw,30px)}' +
+  // phone on its side: the block sits in the bottom-right corner over the picture
+  'body.touch.land #kp #rrg{--rb:clamp(80px,24vh,96px);--rb:clamp(80px,24dvh,96px);grid-template-columns:repeat(3,var(--rb));gap:8px}' +
+  'body.touch.land #kp #rrg button{width:var(--rb);height:var(--rb);border-radius:20px;font-size:calc(var(--rb) * .21)}' +
+  'body.touch.land #kp #rrg button:nth-child(4),body.touch.land #kp #rrg button:nth-child(5){font-size:calc(var(--rb) * .3)}' +
   '#ko{overflow-y:auto;justify-content:safe center;background:rgba(4,12,6,.72)}' +
   '.rr-pick{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}' +
-  '.rr-opt{all:unset;box-sizing:border-box;width:154px;padding:8px 8px 7px;border-radius:14px;border:3px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:#fff;font:12px/1.3 Rubik,system-ui,sans-serif;text-align:center}' +
-  '.rr-opt[aria-pressed="true"]{border-color:var(--accent);background:rgba(140,255,106,.16)}.rr-opt:focus-visible{outline:3px solid #fff;outline-offset:2px}' +
+  // (#ko in front, or the kit's big green card-button style wins and both choppers look picked)
+  '#ko .rr-opt{all:unset;box-sizing:border-box;width:154px;padding:8px 8px 7px;border-radius:14px;border:3px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;color:#fff;font:12px/1.3 Rubik,system-ui,sans-serif;text-align:center}' +
+  '#ko .rr-opt[aria-pressed="true"]{border-color:var(--accent);background:rgba(140,255,106,.16)}#ko .rr-opt:focus-visible{outline:3px solid #fff;outline-offset:2px}' +
   '.rr-opt canvas{width:126px;height:58px}.rr-opt b{font:15px Bungee,Impact,sans-serif;font-weight:400;letter-spacing:.02em}' +
-  '@media (max-height:560px){#ko{gap:8px;padding-block:10px}#ko h1{font-size:clamp(26px,9vh,44px)}#ko p{font-size:13.5px;line-height:1.35;max-width:60ch}.rr-opt{width:140px;padding:4px 6px}.rr-opt canvas{width:96px;height:44px}.rr-opt span{font-size:11px}}';
+  '@media (max-height:560px){#ko{gap:8px;padding-block:10px}#ko h1{font-size:clamp(26px,9vh,44px)}#ko p{font-size:13.5px;line-height:1.35;max-width:60ch}#ko .rr-opt{width:140px;padding:4px 6px}.rr-opt canvas{width:96px;height:44px}.rr-opt span{font-size:11px}}';
 document.head.appendChild(css);
 function drawHeliIcon(g, id) {
   g.clearRect(0, 0, 240, 110); g.save(); g.translate(122, 66); g.lineJoin = 'round';
@@ -510,7 +529,7 @@ function addPicker() {
 }
 function title() {
   state = 'title'; dropMissionObjs(); setSky(false); setAttractHeli(); smokeSite = null;
-  K.card({ title: 'ROTOR RESCUE', text: 'Jungle rescue missions from the cockpit. Pick your chopper, lift off from the firebase, fly to the smoke, land, load the people and bring them home. Drag the screen to look around: your helmet sight aims the gun wherever you look.', best: best ? 'BEST ' + best.toLocaleString() : '', button: 'Fly', onStart: () => { mi = 0; score = 0; brief(); } });
+  K.card({ title: 'ROTOR RESCUE', text: 'Jungle rescue missions from the cockpit. Pick your chopper, lift off from the firebase, fly to the smoke, land, load the people and bring them home. Drag the screen to look around: look at an enemy and your sight locks on to it.', best: best ? 'BEST ' + best.toLocaleString() : '', button: 'Fly', onStart: () => { mi = 0; score = 0; brief(); } });
   addPicker();
 }
 function brief() {
@@ -524,7 +543,7 @@ function startMission() {
   dropMissionObjs(); if (attractHeli) { scene.remove(attractHeli); attractHeli = null; }
   missionScore = score;
   P = { x: pd.x, y: FLATS[0].h + 2.2, z: pd.z, yaw: Math.atan2(-(S.x - pd.x), -(S.z - pd.z)), v: 0, vx: 0, vz: 0, vy: 0, yawRate: 0, pitch: 0, roll: 0, rpm: 0, landed: true, agl: 0,
-    armor: H0.armor, gun: H0.gun, msl: H0.msl, bomb: H0.bomb, flr: H0.flr, gunT: 0, mslT: 0, bombT: 0, shots: 0, mslN: 0, flrT: 0, muzzle: 0, lock: null, limitT: 0, kills: 0 };
+    armor: H0.armor, gun: H0.gun, msl: H0.msl, bomb: H0.bomb, flr: H0.flr, gunT: 0, mslT: 0, bombT: 0, shots: 0, mslN: 0, flrT: 0, muzzle: 0, lock: null, glock: null, lockY: 0, lockD: 0, gunLockT: 0, limitT: 0, kills: 0 };
   head.yaw = 0; head.pitch = -0.08; head.idle = 0;
   phase = 'pad'; aboard = 0; remaining = M.people; rescued = 0; rearmT = 0; ambushed = false; helosOut = 0; clock = 0; tuned = false; perfT = 0; perfN = 0;
   placeEnemies(M); placePeople(S, remaining); smokeSite = S;
@@ -550,8 +569,14 @@ function aimY(e) { return e.y + (e.hy || 1.5); }
 function distE(e, x, y, z) { const ey = e.hy > 6 ? clamp(y, e.y, aimY(e)) : aimY(e); return Math.hypot(e.x - x, ey - y, e.z - z); }
 function hitE(e, x0, y0, z0, x1, y1, z1) {
   if (!(e.hy > 6)) return segHit(x0, y0, z0, x1, y1, z1, e.x, aimY(e), e.z, e.r);
-  for (let k = 0; k <= 3; k++) if (segHit(x0, y0, z0, x1, y1, z1, e.x, e.y + 4 + (e.hy - 4) * k / 3, e.z, k === 3 ? e.r : e.r * 0.75)) return true;
-  return false;
+  // a tall tower: anywhere on the shaft from just above its feet up to the gun deck, or the guns on top
+  return segHitV(x0, y0, z0, x1, y1, z1, e.x, e.z, e.y + 4, aimY(e), e.r * 0.75) || segHit(x0, y0, z0, x1, y1, z1, e.x, aimY(e), e.z, e.r);
+}
+// does a segment pass within r of an upright column (centre cx,cz, from height ya up to yb)?
+function segHitV(x0, y0, z0, x1, y1, z1, cx, cz, ya, yb, r) {
+  const dx = x1 - x0, dz = z1 - z0, L = dx * dx + dz * dz, t = L > 1e-6 ? c01(((cx - x0) * dx + (cz - z0) * dz) / L) : 0;
+  const hx = x0 + dx * t - cx, hz = z0 + dz * t - cz; if (hx * hx + hz * hz > r * r) return false;
+  const y = y0 + (y1 - y0) * t; return y > ya && y < yb;
 }
 function placeEnemies(m) {
   SPOTS.forEach(s => s.used = false);
@@ -668,13 +693,66 @@ function damage(n, why, quiet) {
   if (P.armor <= 0) { P.armor = 0; state = 'dead'; deadT = 2.6; P.vy = Math.min(P.vy, 0); banner(why === 'GROUND!' ? 'CRASHED' : 'SHOT DOWN', 'Going in…', 2.6); boom(P.x, P.y, P.z, 1.2); }
 }
 
+// ---------------------------------------------------------------- target lock
+// Look at an enemy and the sight locks on to it: whichever one sits closest to the middle of your view. It stays
+// locked while it's anywhere near where you look (so it doesn't flicker off); look straight at another one to switch.
+// Close enough for the gun, the gun aims itself at the locked target and leads it, so the rounds get there at the
+// same time it does; farther out the lock is for missiles only. Nothing hidden behind a hill can be locked.
+const LOCK_IN = 0.2, LOCK_KEEP = 0.42, GUN_RANGE = 800, MSL_RANGE = 1300;
+const _lk = V3(), _ld = V3(), _lq = new THREE.Quaternion(), _le = new THREE.Euler(), _ls = { x: 0, y: 0, d: 0 };
+// the part of a target to aim at: a tall tower anywhere from its feet to the guns on top (the bit nearest your sight)
+function lockY(e, fwd) {
+  if (!(e.hy > 6)) return aimY(e);
+  const c = camera.position; let best = 9, by = aimY(e);
+  for (let k = 0; k <= 4; k++) { const y = e.y + 6 + (e.hy - 6) * k / 4, a = _lk.set(e.x - c.x, y - c.y, e.z - c.z).angleTo(fwd); if (a < best) { best = a; by = y; } }
+  return by;
+}
+// no hill in the way (the trees don't count)
+function clearView(x0, y0, z0, x1, y1, z1) {
+  for (let k = 1; k < 10; k++) { const t = k / 10, x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t; if (y0 + (y1 - y0) * t < groundH(x, z) - 1) return false; }
+  return true;
+}
+// can the gun point there? (the same limits as gunOK) The chin gun swings 100° each way but not up into the
+// rotor; the door guns only fire out of the door you're looking out of.
+function gunReach(H0, x, y, z) {
+  const dx = x - P.x, dz = z - P.z, fw = -dx * Math.sin(P.yaw) - dz * Math.cos(P.yaw), rt = dx * Math.cos(P.yaw) - dz * Math.sin(P.yaw);
+  const rel = Math.atan2(-rt, fw), el = Math.atan2(y - P.y, Math.hypot(dx, dz));   // rel: + is to your left, like head.yaw
+  return H0.door ? Math.abs(rel) >= 22 * D2R && rel * head.yaw > 0 : Math.abs(rel) <= 100 * D2R && el < 0.25;
+}
+function lockOn(dt, H0) {
+  const fwd = aimDir(_v3), c = camera.position, was = P.lock, wasGun = P.glock;
+  let cand = null, candY = 0, best = 1e9;
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const ly = lockY(e, fwd), d = _ld.set(e.x - c.x, ly - c.y, e.z - c.z).length(); if (d > MSL_RANGE) continue;
+    const a = _ld.angleTo(fwd), cur = e === was;
+    // (something close looks big, so it locks from a little farther off the middle)
+    if (a > (cur ? LOCK_KEEP : LOCK_IN) + Math.max(0, 1 - d / 260) * 0.15) continue;
+    const s = a - (cur ? 0.1 : 0) + d * 0.00004;
+    if (s >= best) continue;
+    const sc = toScreen(e.x, ly, e.z, _ls); if (!sc || sc.x < 8 || sc.x > HW - 8 || sc.y < 8 || sc.y > HH - 8) continue;   // it has to be on screen
+    if (!clearView(c.x, c.y, c.z, e.x, ly, e.z)) continue;
+    best = s; cand = e; candY = ly;
+  }
+  P.lock = cand; P.lockY = candY; P.lockD = cand ? Math.hypot(cand.x - c.x, candY - c.y, cand.z - c.z) : 0;
+  P.glock = cand && P.lockD <= GUN_RANGE && gunReach(H0, cand.x, candY, cand.z) ? cand : null;
+  P.gunLockT = P.glock && P.glock === wasGun ? P.gunLockT + dt : 0;
+  // lock tone: a quick rising double beep when the gun grabs on
+  if (P.glock && P.glock !== wasGun) { K.beep(1250, 0.06, { type: 'sine', vol: 0.05 }); K.beep(1650, 0.09, { type: 'sine', vol: 0.05, at: 0.07 }); }
+  // holding GUN on a locked target, your view follows it so it stays in the sight (drag the screen to take over)
+  if (P.glock && K.down('a') && head.drag == null) {
+    _lq.setFromEuler(_le.set(P.pitch, P.yaw, P.roll, 'YXZ')).invert();
+    _ld.set(P.glock.x - c.x, candY - c.y, P.glock.z - c.z).applyQuaternion(_lq);
+    const ty = Math.atan2(-_ld.x, -_ld.z), tp = Math.atan2(_ld.y, Math.hypot(_ld.x, _ld.z)), k = 1 - Math.exp(-dt * 5), mx = 1.6 * dt;
+    head.yaw = clamp(head.yaw + clamp((ty - head.yaw) * k, -mx, mx), -2.3, 2.3);
+    head.pitch = clamp(head.pitch + clamp((tp - head.pitch) * k, -mx, mx), -1.15, 0.38);
+  }
+}
+
 // ---------------------------------------------------------------- your weapons
 function weapons(dt, H0) {
   P.gunT -= dt; P.mslT -= dt; P.flrT -= dt; P.bombT -= dt;
-  // missile lock: whatever enemy sits closest to the middle of your sight
-  aimDir(_v3); let cand = null, candA = 0.13;
-  for (const e of enemies) { if (e.dead) continue; _v1.set(e.x - camera.position.x, aimY(e) - camera.position.y, e.z - camera.position.z); const d = _v1.length(); if (d > 1300) continue; const a = _v1.angleTo(_v3); if (a < candA) { candA = a; cand = e; } }
-  P.lock = cand;
+  lockOn(dt, H0);
   // gun
   // (bullets, missiles and bombs are unlimited; the fire rate is the only limit)
   if (K.down('a')) {
@@ -684,8 +762,16 @@ function weapons(dt, H0) {
       const right = _v2.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
       let ox = P.x, oy = P.y - 0.6, oz = P.z;
       if (H0.door) { const side = head.yaw > 0 ? -1 : 1; ox += right.x * side * 1.4; oz += right.z * side * 1.4; oy = P.y + 0.3; } else { ox += -Math.sin(P.yaw) * 3; oz += -Math.cos(P.yaw) * 3; }
-      aimDir(_v3); _v3.x += rnd(-1, 1) * H0.spread; _v3.y += rnd(-1, 1) * H0.spread; _v3.z += rnd(-1, 1) * H0.spread; _v3.normalize();
-      const sp = 820; rounds.push({ x: ox, y: oy, z: oz, vx: _v3.x * sp + P.vx, vy: _v3.y * sp, vz: _v3.z * sp + P.vz, life: 1.7, dmg: H0.dmg, splash: H0.splash });
+      const sp = 820, e = P.glock; let spread = H0.spread;
+      if (e) {
+        // locked on: aim where the target will be when the rounds get there (they also carry your own forward
+        // speed and drop a little on the way), and keep the burst tighter
+        let t = Math.hypot(e.x - ox, P.lockY - oy, e.z - oz) / sp, ax = 0, ay = 0, az = 0;
+        for (let k = 0; k < 3; k++) { ax = e.x + ((e.mvx || 0) - P.vx) * t - ox; ay = P.lockY + (e.mvy || 0) * t + 1.5 * t * t - oy; az = e.z + ((e.mvz || 0) - P.vz) * t - oz; t = Math.hypot(ax, ay, az) / sp; }
+        _v3.set(ax, ay, az).normalize(); spread *= 0.6;
+      } else aimDir(_v3);
+      _v3.x += rnd(-1, 1) * spread; _v3.y += rnd(-1, 1) * spread; _v3.z += rnd(-1, 1) * spread; _v3.normalize();
+      rounds.push({ x: ox, y: oy, z: oz, vx: _v3.x * sp + P.vx, vy: _v3.y * sp, vz: _v3.z * sp + P.vz, life: 1.7, dmg: H0.dmg, splash: H0.splash, tgt: e });
       if (P.shots % 3 === 0) { K.noise(0.05, H0.door ? 0.08 : 0.16); K.beep(H0.door ? 220 : 90, 0.04, { type: 'square', vol: 0.03 }); }
     }
   }
@@ -695,7 +781,8 @@ function weapons(dt, H0) {
       P.mslT = 0.4; const side = P.mslN++ % 2 ? 1 : -1, right = _v2.set(Math.cos(P.yaw), 0, -Math.sin(P.yaw));
       const m = new THREE.Mesh(GEO.msl, MAT);
       const x = P.x + right.x * side * 2.2, z = P.z + right.z * side * 2.2; m.position.set(x, P.y - 0.4, z); scene.add(m);
-      aimDir(_v3); pmsl.push({ m, x, y: P.y - 0.4, z, dir: _v3.clone(), sp: Math.max(40, P.v + 30), target: P.lock, life: 7 });
+      // (enough fuel to reach anything it can lock on to, 1.3 km)
+      aimDir(_v3); pmsl.push({ m, x, y: P.y - 0.4, z, dir: _v3.clone(), sp: Math.max(40, P.v + 30), target: P.lock, life: 9.5 });
       K.noise(0.35, 0.18); K.beep(300, 0.3, { to: 900, type: 'sawtooth', vol: 0.03 });
     }
   }
@@ -788,7 +875,7 @@ function enemiesStep(dt) {
   const live = state === 'fly', diff = 1 + mi * 0.12;
   for (const e of enemies) {
     if (e.dead) { deadStep(e, dt); continue; }
-    const dx = P.x - e.x, dy = P.y - e.y, dz = P.z - e.z, d = Math.hypot(dx, dy, dz), face = Math.atan2(-dx, -dz);
+    const dx = P.x - e.x, dy = P.y - e.y, dz = P.z - e.z, d = Math.hypot(dx, dy, dz), face = Math.atan2(-dx, -dz), x0 = e.x, y0 = e.y, z0 = e.z;
     if (e.type === 'truck') {
       const [a, b] = e.seg, L = Math.hypot(b[0] - a[0], b[1] - a[1]); e.u += e.dir * 7 / L * dt; if (e.u > 1 || e.u < 0) { e.dir *= -1; e.u = c01(e.u); }
       e.x = a[0] + (b[0] - a[0]) * e.u; e.z = a[1] + (b[1] - a[1]) * e.u; e.y = groundH(e.x, e.z); e.g.position.set(e.x, e.y, e.z); e.g.rotation.y = Math.atan2(-(b[0] - a[0]) * e.dir, -(b[1] - a[1]) * e.dir);
@@ -805,6 +892,8 @@ function enemiesStep(dt) {
       e.g.position.set(e.x, e.y, e.z); e.g.rotation.y = face; e.g.rotation.z = Math.sin(clock + e.orbit) * 0.1;
       e.g.userData.rotor.rotation.y += dt * 30; e.g.userData.tail.rotation.x += dt * 40;
     }
+    // (how fast it's moving, so a locked-on gun can lead it)
+    if (dt > 0) { e.mvx = (e.x - x0) / dt; e.mvy = (e.y - y0) / dt; e.mvz = (e.z - z0) / dt; }
     if (e.top) e.top.rotation.y = face - e.g.rotation.y;
     // a red warning light blinks on top of every gun tower, so you can pick them out from far away
     if (e.type === 'tower' && d < 1150 && Math.floor(clock * 1.3 + e.x) !== Math.floor((clock - dt) * 1.3 + e.x)) glow(e.x, e.y + 58.5, e.z, 9, 0xff2a1a, 0.42);
@@ -828,6 +917,7 @@ function enemiesStep(dt) {
 function killEnemy(e, big) {
   if (e.dead) return; e.dead = true; e.smokeT = 14; P.kills++; score += PTS[e.type] || 100;
   if (P.lock === e) P.lock = null;
+  if (P.glock === e) P.glock = null;
   if (PTS[e.type] >= 350) { kmsg = NAMES[e.type] + ' DOWN  +' + PTS[e.type]; kmsgT = 2; }
   if (e.type === 'helo') {
     // engine hit: it bursts into flames and spins down trailing smoke, and the pilot falls out
@@ -919,7 +1009,8 @@ function projectiles(dt, H0) {
     const x1 = r.x + r.vx * dt, y1 = r.y + r.vy * dt, z1 = r.z + r.vz * dt; let hit = false;
     for (const e of enemies) { if (e.dead) continue; if (Math.abs(e.x - x1) > 60 || Math.abs(e.z - z1) > 60) continue; if (hitE(e, r.x, r.y, r.z, x1, y1, z1)) { hit = true; e.hp -= r.dmg; glow(x1, y1, z1, 3, 0xffe08a, 0.15); if (e.hp <= 0) killEnemy(e); break; } }
     if (!hit) for (const m of emsl) { if (segHit(r.x, r.y, r.z, x1, y1, z1, m.x, m.y, m.z, 3)) { hit = true; m.life = 0; boom(m.x, m.y, m.z, 0.6); score += 50; break; } }
-    if (!hit) { const g = groundH(x1, z1); if (y1 < Math.max(g, 0.4) || (y1 < g + CANOPY - 3 && isJungle(x1, z1))) { hit = true; const wet = g < 0.4; glow(x1, Math.max(y1, 0.5), z1, 3.2, 0xffc06a, 0.18); puff(x1, Math.max(y1, 0.5), z1, 2.2, wet ? 0xd8e0e0 : (y1 > g + 3 ? 0x4a7a3a : 0x8a7a5a), 0.9, { vy: 3, grow: 1.5, a: 0.6 }); splash(x1, y1, z1, r.splash, r.dmg * 0.7); } }
+    // (rounds fired on a lock find their way down through the treetops to a target in a clearing)
+    if (!hit) { const g = groundH(x1, z1); if (y1 < Math.max(g, 0.4) || (y1 < g + CANOPY - 3 && !(r.tgt && !r.tgt.dead) && isJungle(x1, z1))) { hit = true; const wet = g < 0.4; glow(x1, Math.max(y1, 0.5), z1, 3.2, 0xffc06a, 0.18); puff(x1, Math.max(y1, 0.5), z1, 2.2, wet ? 0xd8e0e0 : (y1 > g + 3 ? 0x4a7a3a : 0x8a7a5a), 0.9, { vy: 3, grow: 1.5, a: 0.6 }); splash(x1, y1, z1, r.splash, r.dmg * 0.7); } }
     if (hit) continue;
     r.x = x1; r.y = y1; r.z = z1; r.vy -= 3 * dt;
     bolt(r.x, r.y, r.z, 1.5, 1, 0.82, 0.35, 1); bolt(r.x - r.vx * 0.012, r.y - r.vy * 0.012, r.z - r.vz * 0.012, 1.0, 1, 0.6, 0.2, 0.7);
@@ -950,7 +1041,7 @@ function projectiles(dt, H0) {
     puff(m.x, m.y, m.z, 1.4, 0xd8d8d0, 1.4, { vy: 0.5, grow: 2, a: 0.5 }); bolt(m.x - m.dir.x * 1.6, m.y - m.dir.y * 1.6, m.z - m.dir.z * 1.6, 2.4, 1, 0.75, 0.35, 1);
     let hit = m.life <= 0, g = groundH(m.x, m.z);
     if (!hit) for (const e of enemies) if (!e.dead && distE(e, m.x, m.y, m.z) < e.r + 3) { hit = true; break; }
-    if (!hit && (m.y < g || (m.y < g + CANOPY - 4 && isJungle(m.x, m.z)))) hit = true;
+    if (!hit && (m.y < g || (m.y < g + CANOPY - 4 && !(m.target && !m.target.dead) && isJungle(m.x, m.z)))) hit = true;
     if (hit) { scene.remove(m.m); boom(m.x, m.y, m.z, 1.1); splash(m.x, m.y, m.z, 16, 6); continue; }
     pmsl[n++] = m;
   }
@@ -1116,10 +1207,11 @@ function drawHUD() {
   const H0 = HELIS[heliId], f = (H / 2) / Math.tan(camera.fov * D2R / 2);
   drawCockpit(c, f, H0);
   // ---- helmet sight (fixed to your eye, so it stays in the middle wherever you look) ----
-  const cx = W / 2, cy = H / 2, ok = gunOK(H0);
-  c.strokeStyle = ok ? GRN : DIM; c.lineWidth = 2;
+  // (it dims while the gun is locked on, because then the sight that counts is the one on the target)
+  const cx = W / 2, cy = H / 2, ok = gunOK(H0), lk = state === 'fly' ? P.lock : null, bright = ok && !(lk && P.glock === lk);
+  c.strokeStyle = bright ? GRN : DIM; c.lineWidth = 2;
   c.beginPath(); c.arc(cx, cy, 15, 0, TAU); c.moveTo(cx - 28, cy); c.lineTo(cx - 9, cy); c.moveTo(cx + 9, cy); c.lineTo(cx + 28, cy); c.moveTo(cx, cy - 28); c.lineTo(cx, cy - 9); c.moveTo(cx, cy + 9); c.lineTo(cx, cy + 28); c.stroke();
-  c.fillStyle = ok ? GRN : DIM; c.fillRect(cx - 1.5, cy - 1.5, 3, 3);
+  c.fillStyle = bright ? GRN : DIM; c.fillRect(cx - 1.5, cy - 1.5, 3, 3);
   if (!ok && (P.limitT > 0 || K.down('a'))) { c.strokeStyle = REDC; c.beginPath(); c.moveTo(cx - 12, cy - 12); c.lineTo(cx + 12, cy + 12); c.moveTo(cx + 12, cy - 12); c.lineTo(cx - 12, cy + 12); c.stroke(); txt(c, H0.door ? 'DOOR GUNS: LOOK LEFT OR RIGHT' : 'GUN LIMIT', cx, cy + 44, REDC, 'center'); }
   // horizon line
   const fwd = aimDir(_v3), hp = Math.asin(clamp(fwd.y, -1, 1)), hy = cy + Math.tan(hp) * f, rollA = P.roll * Math.cos(head.yaw) + P.pitch * Math.sin(head.yaw);
@@ -1135,23 +1227,24 @@ function drawHUD() {
   // waypoint caret on the tape
   const wp = waypoint(), brg = ((Math.atan2(wp.x - P.x, -(wp.z - P.z)) / D2R) + 360) % 360; let rel = ((brg - hdg + 540) % 360) - 180;
   const wx = cx + clamp(rel, -45, 45) * ppd; c.fillStyle = AMBER; c.beginPath(); c.moveTo(wx, ty + 10); c.lineTo(wx - 6, ty + 2); c.lineTo(wx + 6, ty + 2); c.closePath(); c.fill();
-  // speed and radar altitude
+  // speed and radar altitude (sideways on a phone they sit a bit higher, clear of the button block)
   const kts = Math.round(Math.abs(P.v) * 1.944), ft = Math.round(P.agl * 3.28), lx = cx - Math.min(W * 0.28, 240), rx = cx + Math.min(W * 0.28, 240);
-  c.strokeStyle = GRN; c.lineWidth = 2; c.strokeRect(lx - 30, cy - 12, 60, 24); c.strokeRect(rx - 30, cy - 12, 60, 24);
-  txt(c, String(kts), lx, cy, GRN, 'center', 15, 700); txt(c, 'KTS', lx, cy + 22, DIM, 'center', 10); txt(c, String(ft), rx, cy, P.agl < 20 && !P.landed ? AMBER : GRN, 'center', 15, 700); txt(c, 'R ALT FT', rx, cy + 22, DIM, 'center', 10);
-  const vs = clamp(P.vy / 15, -1, 1); c.strokeStyle = GRN; c.lineWidth = 2; c.beginPath(); c.moveTo(rx + 38, cy); c.lineTo(rx + 38, cy - vs * 40); c.stroke(); c.beginPath(); c.arc(rx + 38, cy - vs * 40, 3, 0, TAU); c.fill();
-  txt(c, 'TQ ' + Math.round(40 + P.rpm * 30 + Math.abs(P.vy) * 2 + Math.abs(P.v) / H0.speed * 25) + '%', lx - 30, cy - 26, DIM, 'left', 11);
+  const sy = land && document.body.classList.contains('touch') ? cy - Math.min(60, H * 0.17) : cy;
+  c.strokeStyle = GRN; c.lineWidth = 2; c.strokeRect(lx - 30, sy - 12, 60, 24); c.strokeRect(rx - 30, sy - 12, 60, 24);
+  txt(c, String(kts), lx, sy, GRN, 'center', 15, 700); txt(c, 'KTS', lx, sy + 22, DIM, 'center', 10); txt(c, String(ft), rx, sy, P.agl < 20 && !P.landed ? AMBER : GRN, 'center', 15, 700); txt(c, 'R ALT FT', rx, sy + 22, DIM, 'center', 10);
+  const vs = clamp(P.vy / 15, -1, 1); c.strokeStyle = GRN; c.lineWidth = 2; c.beginPath(); c.moveTo(rx + 38, sy); c.lineTo(rx + 38, sy - vs * 40); c.stroke(); c.beginPath(); c.arc(rx + 38, sy - vs * 40, 3, 0, TAU); c.fill();
+  txt(c, 'TQ ' + Math.round(40 + P.rpm * 30 + Math.abs(P.vy) * 2 + Math.abs(P.v) / H0.speed * 25) + '%', lx - 30, sy - 26, DIM, 'left', 11);
   // head tracker: where you are looking compared with the nose
   const pt = ck(0, -24, f), wy = Math.min(H - 58, (pt ? pt[1] : H) - 34);
   const bx = cx, byy = wy - 32; c.strokeStyle = DIM; c.lineWidth = 1.5; c.strokeRect(bx - 40, byy - 12, 80, 24);
   c.fillStyle = GRN; c.fillRect(bx - head.yaw / 2.3 * 38 - 2, byy - head.pitch / 1.15 * 10 - 2, 5, 5);
-  // targets: little diamonds on every enemy you can see, a box on the one your missiles will go for
+  // targets: little diamonds on every enemy you can see; the locked one gets the lock marks instead
   for (const e of enemies) {
-    if (e.dead) continue; const big = e.type === 'tower' || e.type === 'bunker', s = toScreen(e.x, big ? aimY(e) : e.y + 2, e.z, SC); if (!s || s.d > 1100 || s.x < 0 || s.x > W || s.y < 0 || s.y > H) continue;
-    const r = big ? clamp(1300 / s.d, 8, 20) : clamp(900 / s.d, 5, 14); c.strokeStyle = e === P.lock ? AMBER : 'rgba(255,110,90,.85)'; c.lineWidth = big ? 2.5 : 2;
-    if (e === P.lock && P.msl > 0) { c.strokeRect(s.x - r - 6, s.y - r - 6, (r + 6) * 2, (r + 6) * 2); txt(c, 'LOCK', s.x, s.y - r - 16, AMBER, 'center', 11); txt(c, NAMES[e.type] + '  ' + Math.round(s.d) + ' m', s.x, s.y + r + 18, AMBER, 'center', 11); }
-    else { c.beginPath(); c.moveTo(s.x, s.y - r); c.lineTo(s.x + r, s.y); c.lineTo(s.x, s.y + r); c.lineTo(s.x - r, s.y); c.closePath(); c.stroke(); if (big) { c.fillStyle = 'rgba(255,110,90,.85)'; c.fillRect(s.x - 2, s.y - 2, 4, 4); if (s.d < 900) txt(c, NAMES[e.type], s.x, s.y + r + 13, 'rgba(255,140,120,.9)', 'center', 10); } }
+    if (e.dead || e === lk) continue; const big = e.type === 'tower' || e.type === 'bunker', s = toScreen(e.x, big ? aimY(e) : e.y + 2, e.z, SC); if (!s || s.d > 1100 || s.x < 0 || s.x > W || s.y < 0 || s.y > H) continue;
+    const r = big ? clamp(1300 / s.d, 8, 20) : clamp(900 / s.d, 5, 14); c.strokeStyle = 'rgba(255,110,90,.85)'; c.lineWidth = big ? 2.5 : 2;
+    c.beginPath(); c.moveTo(s.x, s.y - r); c.lineTo(s.x + r, s.y); c.lineTo(s.x, s.y + r); c.lineTo(s.x - r, s.y); c.closePath(); c.stroke(); if (big) { c.fillStyle = 'rgba(255,110,90,.85)'; c.fillRect(s.x - 2, s.y - 2, 4, 4); if (s.d < 900) txt(c, NAMES[e.type], s.x, s.y + r + 13, 'rgba(255,140,120,.9)', 'center', 10); }
   }
+  if (lk) drawLock(c, cx, cy, W, H);
   if (kmsgT > 0) { c.globalAlpha = c01(kmsgT * 2); txt(c, kmsg, cx, cy - 104, AMBER, 'center', 16, 800); c.globalAlpha = 1; }
   // incoming missile: red marker or an arrow toward it
   if (P.threat) { const m = P.threat.m, s = toScreen(m.x, m.y, m.z, SC), fl = Math.floor(clock * 8) % 2;
@@ -1184,6 +1277,28 @@ function drawHUD() {
   if (warnT > 0 && Math.floor(clock * 6) % 2) txt(c, warnTxt, cx, cy + 70, REDC, 'center', 15, 800);
   if (hitFlash > 0) { const g = c.createRadialGradient(cx, cy, H * 0.25, cx, cy, H * 0.8); g.addColorStop(0, 'rgba(255,40,20,0)'); g.addColorStop(1, 'rgba(255,40,20,' + (hitFlash * 0.45) + ')'); c.fillStyle = g; c.fillRect(0, 0, W, H); }
   if (state === 'dead') { c.fillStyle = 'rgba(0,0,0,' + c01(1 - deadT / 2.6) * 0.6 + ')'; c.fillRect(0, 0, W, H); }
+}
+// the lock marks. Close enough for the gun, the sight snaps onto the target: a green ring with brackets that close in
+// as it grabs on, LOCKED above it and a faint line back to the middle of your view. Farther out, the amber missile box.
+function drawLock(c, cx, cy, W, H) {
+  const e = P.lock, s = toScreen(e.x, P.lockY, e.z, _ls); if (!s || s.x < -30 || s.x > W + 30 || s.y < -30 || s.y > H + 30) return;
+  const label = NAMES[e.type] + '  ' + Math.round(P.lockD) + ' m', sx = s.x, sy = s.y;
+  if (P.glock === e) {
+    const k = c01(P.gunLockT / 0.22), R = 19, B = R + 9 + (1 - k) * 34;
+    if (Math.hypot(sx - cx, sy - cy) > 36) { c.strokeStyle = 'rgba(140,255,106,.4)'; c.lineWidth = 1.5; c.setLineDash([4, 6]); c.beginPath(); c.moveTo(cx, cy); c.lineTo(sx, sy); c.stroke(); c.setLineDash([]); }
+    c.strokeStyle = GRN; c.lineWidth = 2.5; c.beginPath(); c.arc(sx, sy, R, 0, TAU);
+    c.moveTo(sx - R - 8, sy); c.lineTo(sx - R + 6, sy); c.moveTo(sx + R - 6, sy); c.lineTo(sx + R + 8, sy); c.moveTo(sx, sy - R - 8); c.lineTo(sx, sy - R + 6); c.moveTo(sx, sy + R - 6); c.lineTo(sx, sy + R + 8); c.stroke();
+    c.fillStyle = GRN; c.fillRect(sx - 2, sy - 2, 4, 4);
+    c.lineWidth = 3; c.beginPath();
+    for (const [ux, uy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const bx = sx + ux * B, by = sy + uy * B; c.moveTo(bx, by - uy * 11); c.lineTo(bx, by); c.lineTo(bx - ux * 11, by); }
+    c.stroke();
+    txt(c, 'LOCKED', sx, sy - B - 13, GRN, 'center', 13, 800); txt(c, label, sx, sy + B + 14, GRN, 'center', 11, 700);
+  } else {
+    const big = e.type === 'tower' || e.type === 'bunker', r = big ? clamp(1300 / s.d, 8, 20) : clamp(900 / s.d, 5, 14);
+    c.strokeStyle = AMBER; c.lineWidth = 2.5; c.strokeRect(sx - r - 6, sy - r - 6, (r + 6) * 2, (r + 6) * 2);
+    txt(c, 'MSL LOCK', sx, sy - r - 16, AMBER, 'center', 11); txt(c, label, sx, sy + r + 18, AMBER, 'center', 11);
+    if (P.lockD > GUN_RANGE && K.down('a')) txt(c, 'GET CLOSER FOR THE GUN', sx, sy + r + 32, AMBER, 'center', 10);
+  }
 }
 function edgeArrow(c, x, y, z, col, label) {
   const v = viewDir(x, y, z); let a = Math.atan2(-v.y, v.x); if (v.z > 0) a = Math.atan2(clamp(-v.y / (Math.abs(v.x) + 1), -0.4, 0.4), v.x >= 0 ? 1 : -1);   // behind you: point to the side it is on
