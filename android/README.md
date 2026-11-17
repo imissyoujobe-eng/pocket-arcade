@@ -6,7 +6,7 @@ It replaced the PWABuilder (Trusted Web Activity) build in Nov 2026 because Test
 
 ## Build
 - Needs JDK 17+ and the Android SDK (platform 36, build-tools 36.0.0). Put `sdk.dir=/path/to/android-sdk` in `local.properties`.
-- Raise `versionCode` in `app/build.gradle` for every upload (10 = version 1.1.0, the first WebView build; 11 = 1.1.1, the new icon lettering; 12 = 1.1.2, the phone's side buttons as game buttons).
+- Raise `versionCode` in `app/build.gradle` for every upload (10 = version 1.1.0, the first WebView build; 11 = 1.1.1, the new icon lettering; 12 = 1.1.2, the phone's side buttons as game buttons; 13 = 1.1.3, the same app rebuilt on Nov 17 so the green JOYSTIK icon can go up on Play).
 - `./gradlew bundleRelease` makes the unsigned bundle at `app/build/outputs/bundle/release/app-release.aab`.
 - `./gradlew assembleDebug` makes a test copy (`io.github.imissyoujobe.pocketarcade.preview`, "Joystik test") that installs next to the Play version.
 
