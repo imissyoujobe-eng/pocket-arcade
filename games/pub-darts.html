@@ -23,6 +23,12 @@ canvas{width:100%;height:100%;display:block;cursor:crosshair}
 .chip{font-family:var(--display);font-size:14px;padding:9px 14px;border-radius:10px;border:2px solid #34483e;background:transparent;color:var(--chalk);cursor:pointer}
 .chip[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
 #go{font-family:var(--display);font-size:20px;padding:12px 32px;border:0;border-radius:999px;background:var(--red);color:#fff;box-shadow:0 5px 0 #8a1526;cursor:pointer}
+/* James's cover art in place of the title (art/pub-darts.jpg, also the game's tile on the menu). Upright it takes the
+   room the card has left (100-280 px tall); it shows on the card at the end of a game too */
+#overlay.cv>*{flex-shrink:0}
+#overlay.cv>h1.cover{flex:0 1 280px;min-height:100px;width:100%;display:flex;justify-content:center;font-size:0;text-shadow:none}
+@media (orientation:portrait){#overlay.cv{padding-top:44px}} /* keeps the cover clear of the arcade's ◀ ARCADE button */
+#overlay h1.cover img{display:block;flex:none;height:100%;width:auto;max-width:min(280px,80vw);aspect-ratio:1;object-fit:cover;border-radius:14px;box-shadow:0 0 0 3px rgba(255,255,255,.2),0 10px 28px rgba(0,0,0,.55)}
 button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
 /* phone on its side: the pub wall fills the whole screen, the board sits left of centre and the scores hang on the
    wall to the right like a chalkboard */
@@ -36,11 +42,17 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
 #overlay{z-index:3;border-radius:0;gap:8px;overflow-y:auto;justify-content:safe center;padding-block:10px}
 #overlay h1{font-size:clamp(30px,12vh,56px)}#overlay p{font-size:14px;line-height:1.35;max-width:44ch}
 #overlay #go{position:sticky;bottom:4px;flex:none}
+/* the cover stands on the left, how to play, the choices and the button beside it */
+#overlay.cv{display:grid;grid-template-columns:auto minmax(0,400px);column-gap:26px;row-gap:10px;align-content:safe center;justify-content:center;align-items:center;justify-items:center}
+#overlay.cv>h1.cover{grid-column:1;grid-row:1/span 4;width:min(300px,80vh);height:auto;min-height:0;aspect-ratio:1}
+#overlay.cv h1.cover img{width:100%;height:100%;max-width:none}
+#overlay.cv>:not(h1){grid-column:2}
 }
 </style>
 <div id="app">
   <div id="stage"><canvas id="c"></canvas>
-    <div id="overlay"><h1>PUB DARTS</h1><p id="msg">Race from 301 down to exactly zero. Press and drag to aim (your hand wobbles a little), then let go to throw.</p>
+    <div id="overlay" class="cv"><h1 class="cover"><img src="../art/pub-darts.jpg" alt="Pub Darts" width="600" height="600"
+      onerror="var h=this.parentNode;h.className='';h.textContent='PUB DARTS';h.parentNode.classList.remove('cv')"></h1><p id="msg">Race from 301 down to exactly zero. Press and drag to aim (your hand wobbles a little), then let go to throw.</p>
       <div class="row" id="opp"><button class="chip" aria-pressed="true" data-o="cpu">vs CPU</button><button class="chip" aria-pressed="false" data-o="2p">2 Players</button></div>
       <div class="row" id="start"><button class="chip" aria-pressed="true" data-s="301">301</button><button class="chip" aria-pressed="false" data-s="501">501</button></div>
       <button id="go">Play</button></div>
