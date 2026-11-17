@@ -74,7 +74,7 @@ window.ARCADE_GAMES = [
   { id: 'knockout-kid', name: 'Knockout Kid', genre: 'Action', tag: 'Box your way to the title', key: 'knockout', kind: 'fights' },
   { id: 'vine-kings', name: 'Vine Kings', genre: 'Platform', tag: 'Jungle romp and mine carts', key: 'vinekings' },
   { id: 'deep-core', name: 'Deep Core', genre: 'Adventure', tag: 'Explore the alien base', key: 'deepcore', kind: 'time' },
-  { id: 'jungle-fire', name: 'Jungle Fire', genre: 'Action', tag: 'Run-and-gun commando', key: 'junglefire' },
+  { id: 'jungle-fire', name: 'Jungle Fire', genre: 'Action', tag: 'Run-and-gun commando', key: 'junglefire', art: { src: 'art/jungle-fire.jpg', w: 600, h: 600 } },
   { id: 'girder-gauntlet', name: 'Girder Gauntlet', genre: 'Platform', tag: 'Climb past rolling barrels', key: 'girder' },
   { id: 'fairway-nine', name: 'Fairway Nine', genre: 'Sports', tag: '3D golf through your own eyes', key: 'fairway9', kind: 'par' },
   { id: 'ramp-rally', name: 'Ramp Rally', genre: 'Racing', tag: '3D motocross, tricks and wrecks', key: 'ramprally3d', kind: 'cs' },
@@ -93,5 +93,5 @@ window.ARCADE_GAMES = [
   { id: 'doodle-dino', name: "Doodle Dino", genre: 'Platform', tag: "Gulp critters, throw eggs, save the storybook", key: 'doodledino' },
   { id: 'claw-fury', name: "Claw Fury", genre: 'Action', tag: "Claw combos vs a robot army", key: 'clawfury' },
   { id: 'check-these-pawns', name: 'Check These Pawns', genre: 'Puzzle', tag: 'Chess vs the computer or a friend', key: 'pawns-wins', kind: 'wins' },
-  { id: 'bubble-blitz', name: 'Bubble Blitz', genre: 'Puzzle', tag: 'Tap bubble groups, beat the clock', key: 'bubbleblitz' }
+  { id: 'bubble-blitz', name: 'Bubble Blast', genre: 'Puzzle', tag: 'Tap bubble groups, beat the clock', key: 'bubbleblitz', art: { src: 'art/bubble-blitz.jpg', w: 600, h: 600 } }
 ];

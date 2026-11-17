@@ -44,7 +44,8 @@ let Z = ZRUN, ZW = VW / Z, ZH = VH / Z;
 K.flex(240, VH, w => { VW = w; ZW = VW / Z; }); // phone on its side: wider view that fills the screen
 let state = 'title', si, w, p, cam, ents, shots, eshots, fx, caps, cans, tanks, ride, score, lives, gun, deadT, spawnT, boss, winT, msg, msgT, best = K.best('junglefire');
 function newGame() { si = 0; score = 0; lives = 5; gun = 'N'; load(); state = 'play'; }
-function title() { K.card({ title: 'JUNGLE FIRE', text: 'Hold FIRE to shoot. Hold up or down while firing to aim diagonally or straight up; press down on the ground to lie flat. Watch for helmets peeking out from behind rocks, logs and tall grass. Walk into a parked tank to drive it: FIRE blasts the cannon, JUMP hops, down + JUMP climbs out. Keep an eye on its fuel and armor!', best: best ? 'BEST ' + best : '', button: 'Lock and load', onStart: newGame }); }
+function title() { K.card({ title: 'JUNGLE FIRE', text: 'Hold FIRE to shoot. Hold up or down while firing to aim diagonally or straight up; press down on the ground to lie flat. Watch for helmets peeking out from behind rocks, logs and tall grass. Walk into a parked tank to drive it: FIRE blasts the cannon, JUMP hops, down + JUMP climbs out. Keep an eye on its fuel and armor!', best: best ? 'BEST ' + best : '', button: 'Lock and load', onStart: newGame,
+  art: { src: '../art/jungle-fire.jpg', w: 600, h: 600, band: [0.2, 0.72] } }); }
 function load() {
   const S = STAGES[si];
   w = P.world(P.join(S.chunks.map(k => CH[k])));

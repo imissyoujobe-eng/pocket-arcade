@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Bubble Blitz</title>
+<title>Bubble Blast</title>
 <style>
   .bm{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;overflow-y:auto;
     padding:max(56px,calc(env(safe-area-inset-top,0px) + 50px)) 16px max(24px,env(safe-area-inset-bottom,0px));box-sizing:border-box;
@@ -29,16 +29,28 @@
   body #ks canvas{border-radius:0}
   /* standing up, the score strip sits just under the app's ARCADE button instead of behind it */
   body #kh{padding-top:max(8px,calc(env(safe-area-inset-top,0px) + 48px))}
+  /* James's cover art in place of the title on the start menu (art/bubble-blitz.jpg, also the game's tile on the menu):
+     upright it takes the room the menu has left (100-260 px tall); sideways it stands on the left with the rest beside it */
+  .bm.cv>*{flex-shrink:0}
+  .bm.cv>h1.cover{flex:0 1 260px;min-height:100px;width:100%;display:flex;justify-content:center;font-size:0;text-shadow:none}
+  .bm h1.cover img{display:block;flex:none;height:100%;width:auto;max-width:min(260px,74vw);aspect-ratio:1;object-fit:cover;border-radius:14px;box-shadow:0 0 0 3px rgba(255,255,255,.2),0 10px 28px rgba(0,0,0,.55)}
   @media (max-height:520px){
     .bm{gap:10px;padding-top:max(14px,env(safe-area-inset-top,0px));padding-bottom:max(14px,env(safe-area-inset-bottom,0px))}
     .bm h1{font-size:34px}.bm h1 br{display:none}.bm p{max-width:56ch}.bm .tips{display:none}.bm .mode{padding:10px 12px}.bm .big{font-size:40px}
+  }
+  @media (orientation:landscape) and (max-height:600px){
+    .bm.cv{display:grid;grid-template-columns:auto minmax(0,460px);column-gap:26px;row-gap:12px;align-content:safe center;justify-content:center;align-items:center;justify-items:center}
+    .bm.cv>h1.cover{grid-column:1;grid-row:1/span 3;width:min(300px,80vh);height:auto;min-height:0;aspect-ratio:1}
+    .bm.cv h1.cover img{width:100%;height:100%;max-width:none}
+    .bm.cv>:not(h1){grid-column:2}
+    .bm.cv .mode{flex-basis:140px;padding:10px}.bm.cv .mode span{font-size:13px}
   }
 </style>
 </head>
 <body>
 <script src="../lib/kit.js"></script>
 <script>
-// Bubble Blitz: tap 2 or more touching bubbles of the same color to pop them; the rest float up into the gaps.
+// Bubble Blast (was Bubble Blitz): tap 2 or more touching bubbles of the same color to pop them; the rest float up into the gaps.
 // BLITZ: 60 seconds, quick pops chain into combos, clock bubbles add time, power bubbles left at the end go off.
 // CHILL: no clock and no refills; empty columns close up; clear the tank for a big bonus.
 // Same 9 x 9 honeycomb standing up or on its side: on its side the tank fills the height and the score sits beside it.
@@ -417,15 +429,20 @@ function rr(c, x, y, w, h, r) { r = Math.min(r, h / 2, w / 2); c.beginPath(); c.
 const menu = document.createElement('div'); menu.className = 'bm'; document.body.appendChild(menu);
 function showMenu() {
   state = 'menu';
-  menu.innerHTML = '<h1>BUBBLE <br>BLITZ</h1><p>Tap 2 or more touching bubbles of the same color to pop them. Pop 5 at once for a ZAP bubble, 8 for a BOOM and 11 for a PRISM. Tap a power bubble to set it off.</p>' +
+  menu.innerHTML = '<h1 class="cover"><img src="../art/bubble-blitz.jpg" alt="Bubble Blast" width="600" height="600"></h1><p>Tap 2 or more touching bubbles of the same color to pop them. Pop 5 at once for a ZAP bubble, 8 for a BOOM and 11 for a PRISM. Tap a power bubble to set it off.</p>' +
     '<div class="modes"><button class="mode blitz" id="mB"><b>BLITZ</b><span>60 seconds. Pop fast for combos. Clock bubbles add time.</span><i>BEST ' + (best.blitz || 0) + '</i></button>' +
     '<button class="mode chill" id="mC"><b>CHILL</b><span>No clock, no refills. Clear the tank for a big bonus.</span><i>BEST ' + (best.chill || 0) + '</i></button></div>' +
     '<p class="tips">Stuck? Wait a moment and the biggest group glows.</p>';
+  menu.classList.add('cv');
+  // if the cover can't load, the title text comes back
+  const im = menu.querySelector('h1.cover img');
+  im.onerror = () => { const h = im.parentNode; h.className = ''; h.innerHTML = 'BUBBLE <br>BLAST'; menu.classList.remove('cv'); };
   menu.hidden = false;
   menu.querySelector('#mB').onclick = () => { wake(); start('blitz'); };
   menu.querySelector('#mC').onclick = () => { wake(); start('chill'); };
 }
 function showOver(title, text, record) {
+  menu.classList.remove('cv');
   menu.innerHTML = '<h1>' + title.toUpperCase() + '</h1><div class="big">' + score + '</div><p>' + text + (record ? ' New best!' : ' Best: ' + (best[mode] || 0) + '.') + '</p>' +
     '<div class="row"><button class="btn" id="again">Play again</button><button class="btn ghost" id="toMenu">Menu</button></div>';
   menu.hidden = false;
