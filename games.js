@@ -38,7 +38,7 @@ window.ARCADE_GAMES = [
   { id: 'lake-showdown', name: 'Lake Showdown', genre: 'Sports', tag: 'Fishing race to 99 lbs', key: 'lake-wins', kind: 'wins' },
   { id: 'box-out', name: 'Box Out', genre: 'Arcade', tag: 'Trap your rival with your trail' },
   { id: 'snow-siege', name: 'Snow Siege', genre: 'Shooter', tag: 'Stop the Stompers at the base', store: 'siege-best' },
-  { id: 'jungle-dash', name: 'Jungle Dash', genre: 'Arcade', tag: 'Treasure run to the temple', store: 'jungledash-best' },
+  { id: 'jungle-dash', name: 'Jungle Dash', genre: 'Arcade', tag: 'Treasure run to the temple', store: 'jungledash-best', art: { src: 'art/jungle-dash.jpg', w: 600, h: 600 } },
   { id: 'sky-shield', name: 'Sky Shield', genre: 'Shooter', tag: 'Guard six cities from rockets', store: 'skyshield-best' },
   { id: 'spy-guy', name: 'Spy Guy', genre: 'Arcade', tag: 'Top-secret road chase', store: 'spyguy-best' },
   { id: 'space-cadet', name: 'Space Cadet', genre: 'Shooter', tag: 'Break the rocks, dodge the bits', store: 'spacecadet-best' },

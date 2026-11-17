@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body class="jd-cover">
 <title>Jungle Dash</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@700;900&display=swap">
@@ -42,6 +42,33 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .card h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
 .card p { margin: 0; line-height: 1.45; text-shadow: 0 1px 3px #000; }
 .card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; text-shadow: 0 1px 3px #000; }
+/* James's cover art in place of the title (art/jungle-dash.jpg, also the game's tile on the menu). Upright it takes
+   the room the card has left (90-260 px tall), so the player pick and the start button fit under it; on a very short
+   screen the card scrolls instead of running off the bottom */
+#start { grid-template-rows: minmax(0, 1fr); }
+#start .card { box-sizing: border-box; max-height: 100%; overflow-y: auto; padding: 4px 0; }
+#start .card > * { flex-shrink: 0; }
+#start .card > h1.cover { flex: 0 1 260px; min-height: 90px; width: 100%; display: flex; justify-content: center; font-size: 0; text-shadow: none; }
+/* held upright on a touch phone the stick pokes up into the bottom of the playfield: keep the start button clear of it */
+@media (orientation: portrait) and (min-height: 681px) {
+  body:has(.jy-wrap) #start { padding-bottom: 46px; }
+}
+/* short phone held upright: a little less space between lines, no "pick your player" heading, so it all fits */
+@media (orientation: portrait) and (max-height: 680px) {
+  #start .card { gap: 8px; }
+  #start .card #rp .rp-t { display: none; }
+}
+.card h1.cover img { display: block; flex: none; height: 100%; width: auto; max-width: min(260px, 74vw); aspect-ratio: 1; object-fit: cover; border-radius: 14px; box-shadow: 0 0 0 3px rgba(255,255,255,.2), 0 10px 28px rgba(0,0,0,.55); }
+/* phone on its side: the cover on the left; how to play, the player pick and the button beside it. The stick, JUMP
+   and the score bar (which would sit over the card and do nothing here) are hidden until the game starts */
+@media (orientation: landscape) and (max-height: 600px) {
+  #start .card { max-width: none; max-height: none; overflow: visible; padding: 0; display: grid; grid-template-columns: auto minmax(0, 440px); column-gap: 26px; row-gap: 10px; align-items: center; justify-items: center; }
+  #start .card h1.cover { grid-column: 1; grid-row: 1 / span 4; width: min(300px, 80vh); height: auto; min-height: 0; aspect-ratio: 1; }
+  #start .card h1.cover img { width: 100%; height: 100%; max-width: none; }
+  #start .card > :not(h1) { grid-column: 2; }
+  #start .card #rp-wrap { flex-wrap: wrap; justify-content: center; }
+  body.jd-cover .controls, body.jd-cover .jy-wrap, body.jd-cover .hud { visibility: hidden; }
+}
 .btn { font-family: var(--display); font-size: 1.2rem; color: var(--panel); background: var(--gold); border: 0; border-radius: 12px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 var(--gold-deep); }
 .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--gold-deep); }
 .banner { position: absolute; left: 0; right: 0; top: 16%; text-align: center; font-family: var(--display); font-size: clamp(1.5rem, 8vw, 2.5rem); color: #fff; text-shadow: 0 3px 0 var(--leaf-deep), 0 0 16px rgba(0,0,0,.5); pointer-events: none; padding-inline: 16px; }
@@ -58,7 +85,8 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     <div class="banner" id="banner" hidden></div>
     <div class="overlay" id="start">
       <div class="card">
-        <h1>Jungle Dash</h1>
+        <h1 class="cover"><img src="../art/jungle-dash.jpg" alt="Jungle Dash" width="600" height="600"
+          onerror="var h=this.parentNode;h.className='';h.textContent='Jungle Dash';document.body.classList.remove('jd-cover')"></h1>
         <ul>
           <li><b>◀ ▶</b> run through the jungle</li>
           <li><b>JUMP</b> over pits, snakes and logs</li>
@@ -204,7 +232,7 @@ window.addEventListener('error', function (e) { var b = document.getElementById(
   function begin(e) {
     if (e) e.preventDefault();
     if ($('start').hidden && $('over').hidden) return;
-    audio(); $('start').hidden = true; $('over').hidden = true; newGame();
+    audio(); $('start').hidden = true; $('over').hidden = true; document.body.classList.remove('jd-cover'); newGame();
   }
   if (window.Roster) Roster.mount(document.querySelector('#start .card'), $('play'), { classic: 'Explorer', thumb: (g, w, h) => {
     // the classic explorer: fedora, green shirt, khaki trousers
