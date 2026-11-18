@@ -18,6 +18,13 @@ canvas{width:100%;height:100%;display:block;border-radius:10px;box-shadow:0 0 0 
 #overlay p{margin:0;max-width:30ch;line-height:1.5}
 #overlay .how{font-size:12px;color:var(--dim);max-width:34ch}
 #overlay .best{font-family:var(--display);font-size:14px;color:var(--acc2)}
+/* James's cover art in place of the title (art/rink-rumble.jpg, also the game's tile on the menu). It takes the room the card
+   has left (60-240 px tall) and shows on the end-of-game card too; if it can't load, the title text comes back */
+#overlay{overflow-y:auto;justify-content:safe center;padding-block:10px;box-sizing:border-box}
+#overlay>*{flex-shrink:0}
+#overlay>h1.cover{flex:0 1 240px;min-height:60px;width:100%;display:flex;justify-content:center;font-size:0;text-shadow:none}
+#overlay h1.cover img{display:block;flex:none;height:100%;width:auto;max-width:min(240px,80%);aspect-ratio:1;object-fit:cover;border-radius:14px;box-shadow:0 0 0 3px rgba(255,255,255,.2),0 10px 28px rgba(0,0,0,.55)}
+html.fit-land #stage>#overlay{padding-top:40px} /* sideways: clear of the score bar */
 #go{font-family:var(--display);font-size:20px;padding:12px 34px;border:0;border-radius:999px;background:var(--acc);color:#06101a;box-shadow:0 5px 0 rgba(0,0,0,.45);cursor:pointer}
 button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid var(--acc2);outline-offset:3px}
 [hidden]{display:none!important}
@@ -26,7 +33,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
 <div id="app">
   <div id="hud"><div><span class="lbl" id="l1">YOU</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">CLOCK</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">CPU</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
   <div id="stage"><canvas id="c" width="400" height="600"></canvas>
-    <div id="overlay"><h1>Rink Rumble</h1><p id="msg">Three-on-three arcade hockey. Outskate the red team and bury the puck in their net.</p><p class="how">Skate with the stick. Hold SHOOT to wind up and let go to fire: the longer you hold, the harder the shot (a full wind-up is a slap shot). Tap SHOOT near a carrier to check. PASS passes. Turn your phone sideways for the full rink. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+    <div id="overlay"><h1 class="cover"><img src="../art/rink-rumble.jpg" alt="Rink Rumble" width="600" height="600" onerror="const h=this.parentNode;h.className='';h.textContent='Rink Rumble'"></h1><p id="msg">Three-on-three arcade hockey. Outskate the red team and bury the puck in their net.</p><p class="how">Skate with the stick. Hold SHOOT to wind up and let go to fire: the longer you hold, the harder the shot (a full wind-up is a slap shot). Tap SHOOT near a carrier to check. PASS passes. Turn your phone sideways for the full rink. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
 <script>if(innerWidth>innerHeight*1.15){const c=document.getElementById('c');c.width=600;c.height=400}</script>
