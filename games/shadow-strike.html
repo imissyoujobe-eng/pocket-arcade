@@ -43,7 +43,8 @@ const STAGES = [
 ];
 let state = 'title', si, w, p, cam, foes, stars, eshots, fx, score, lives, magic, hostages, saved, deadT, msg, msgT, slashT, boss, best = K.best('shadowstrike');
 function newGame() { si = 0; score = 0; lives = 5; load(); state = 'play'; }
-function title() { K.card({ title: 'SHADOW STRIKE', text: 'Free every hostage (kneeling, in yellow) and reach the exit. STAR throws a shuriken, or slashes when an enemy is close. Shield guards block stars from the front, so jump over them or slash. MAGIC wipes the screen once per stage. One hit costs a life! Keyboard: Z jump, X star, C magic.', best: best ? 'BEST ' + best : '', button: 'Begin Mission', onStart: newGame }); }
+function title() { K.card({ title: 'SHADOW STRIKE', text: 'Free every hostage (kneeling, in yellow) and reach the exit. STAR throws a shuriken, or slashes when an enemy is close. Shield guards block stars from the front, so jump over them or slash. MAGIC wipes the screen once per stage. One hit costs a life! Keyboard: Z jump, X star, C magic.', best: best ? 'BEST ' + best : '', button: 'Begin Mission', onStart: newGame ,
+  art: { src: '../art/shadow-strike.jpg', w: 600, h: 600, band: [0.0, 0.55] } }); }
 function load() {
   const S = STAGES[si]; w = P.world(P.join(S.chunks.map(k => CH[k]))); P.SOLID = '#H'; P.ONEWAY = '=';
   foes = []; stars = []; eshots = []; fx = []; hostages = 0; saved = 0; magic = 1; boss = null; cam = { x: 0, y: 0 }; msg = 'MISSION ' + (si + 1) + ': ' + S.n.toUpperCase(); msgT = 2;

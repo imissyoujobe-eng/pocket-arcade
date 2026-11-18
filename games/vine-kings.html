@@ -50,7 +50,8 @@ const LVLS = [
 ];
 let state = 'title', li, w, p, cam, ents, fx, score, lives, fruit, letters, deadT, winT, rollT, cannon, msg, msgT, best = K.best('vinekings');
 function newGame() { li = 0; score = 0; lives = 4; fruit = 0; load(); state = 'play'; }
-function title() { K.card({ title: 'VINE KINGS', text: 'Swing through the jungle as Bongo the lemur. Tap JUMP again in the air for a double jump. ROLL to bowl over enemies (bees need a roll, not a stomp). Jump into barrel cannons and press JUMP to blast off. Grab 100 fruit for an extra life and spell V-I-N-E in each level for a bonus.', best: best ? 'BEST ' + best : '', button: 'Into the jungle', onStart: newGame }); }
+function title() { K.card({ title: 'VINE KINGS', text: 'Swing through the jungle as Bongo the lemur. Tap JUMP again in the air for a double jump. ROLL to bowl over enemies (bees need a roll, not a stomp). Jump into barrel cannons and press JUMP to blast off. Grab 100 fruit for an extra life and spell V-I-N-E in each level for a bonus.', best: best ? 'BEST ' + best : '', button: 'Into the jungle', onStart: newGame ,
+  art: { src: '../art/vine-kings.jpg', w: 600, h: 600, band: [0.08, 0.5] } }); }
 function load() {
   const L = LVLS[li];
   w = P.world(P.join(L.chunks.map(k => CH[k])));

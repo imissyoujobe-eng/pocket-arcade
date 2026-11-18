@@ -21,7 +21,8 @@ const FIELD = [['P', 0, 60], ['1B', 38, 92], ['2B', 14, 140], ['SS', -14, 140], 
 const INNINGS = 3;
 let state = 'title', inn, isTop, outs, balls, strikes, runs, bases, mode, pitch, target, swingT, swingAnim, result, fieldAnim, msg, msgT, lastType, wins = K.best('diamond-wins');
 
-function title() { K.card({ title: 'DIAMOND DASH', text: 'Three innings against the computer. When you pitch: move the target with the arrows or tap the strike zone, then throw a FASTBALL (SWING button) or a CURVE. When you bat you see the pitch come in from home plate: press SWING (or tap) just as it reaches you. Swing early to pull it, late to go the other way. The camera follows every hit out to where it lands.', best: wins ? 'WINS ' + wins : '', button: 'Play ball', onStart: () => { if (!renderer) setup(); start(); } }); }
+function title() { K.card({ title: 'DIAMOND DASH', text: 'Three innings against the computer. When you pitch: move the target with the arrows or tap the strike zone, then throw a FASTBALL (SWING button) or a CURVE. When you bat you see the pitch come in from home plate: press SWING (or tap) just as it reaches you. Swing early to pull it, late to go the other way. The camera follows every hit out to where it lands.', best: wins ? 'WINS ' + wins : '', button: 'Play ball', onStart: () => { if (!renderer) setup(); start(); } ,
+  art: { src: '../art/diamond-dash.jpg', w: 600, h: 600, band: [0.02, 0.55] } }); }
 function start() { inn = 1; isTop = true; runs = [0, 0]; lastType = ''; newHalf(); state = 'play'; }
 function newHalf() { outs = 0; bases = [false, false, false]; newCount(); mode = isTop ? 'pitchAim' : 'batWait'; target = { x: 120, y: 269 }; say((isTop ? 'TOP ' : 'BOTTOM ') + inn + (isTop ? ' · YOU PITCH' : ' · YOU BAT'), 1.8); if (!isTop) queueCpuPitch(1.6); hud(); }
 function newCount() { balls = 0; strikes = 0; }

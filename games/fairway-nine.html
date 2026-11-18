@@ -613,7 +613,8 @@ function miniMap(c, w) {
   c.fillStyle = '#fff'; c.beginPath(); c.arc(X(ball.x), Y(ball.z), 2.6, 0, 7); c.fill();
 }
 
-function title() { K.card({ title: 'FAIRWAY NINE', text: 'Nine holes of 3D golf through your own eyes. Stand behind the ball and aim with ◀ ▶ (or drag), tap CLUB to switch clubs. Hold SWING: you step up and look down at the ball as the power meter climbs, and let go to hit. Your eyes follow the ball. Wind pushes it, and it rolls down the hills. On the green, the dotted line shows how the putt breaks. Sand, water and big trees are waiting.', best: best ? 'BEST ' + fmtPar(best - 100) : '', button: 'Tee off', onStart: () => { cards = []; hole = 0; loadHole(); state = 'play'; } }); }
+function title() { K.card({ title: 'FAIRWAY NINE', text: 'Nine holes of 3D golf through your own eyes. Stand behind the ball and aim with ◀ ▶ (or drag), tap CLUB to switch clubs. Hold SWING: you step up and look down at the ball as the power meter climbs, and let go to hit. Your eyes follow the ball. Wind pushes it, and it rolls down the hills. On the green, the dotted line shows how the putt breaks. Sand, water and big trees are waiting.', best: best ? 'BEST ' + fmtPar(best - 100) : '', button: 'Tee off', onStart: () => { cards = []; hole = 0; loadHole(); state = 'play'; } ,
+  art: { src: '../art/fairway-nine.jpg', w: 600, h: 600, band: [0.1, 0.5] } }); }
 setup(); calibrate(); hole = 0; loadHole(); state = 'title'; title();
 K.run(update, () => {});
 // a peek for the tests

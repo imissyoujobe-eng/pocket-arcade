@@ -33,7 +33,8 @@ function fy(f, x) { const g = FL[f]; const k = (x - g[0]) / (g[2] - g[0]); retur
 function downhill(f) { const g = FL[f]; return g[3] > g[1] ? 1 : -1; }
 
 let state = 'title', stage, score, lives, bonus, pl, barrels, fires, hammers, throwT, deadT, winT, parts, best = K.best('girder');
-function title() { K.card({ title: 'GIRDER GAUNTLET', text: 'The Wrecker bot grabbed the puppy! Climb ladders with up and down, JUMP over the rolling barrels, and grab a hammer to smash them. Reach the top girder to win the stage.', best: best ? 'BEST ' + best : '', button: 'Climb', onStart: () => { stage = 1; score = 0; lives = 3; begin(); state = 'play'; } }); }
+function title() { K.card({ title: 'GIRDER GAUNTLET', text: 'The Wrecker bot grabbed the puppy! Climb ladders with up and down, JUMP over the rolling barrels, and grab a hammer to smash them. Reach the top girder to win the stage.', best: best ? 'BEST ' + best : '', button: 'Climb', onStart: () => { stage = 1; score = 0; lives = 3; begin(); state = 'play'; } ,
+  art: { src: '../art/girder-gauntlet.jpg', w: 600, h: 600, band: [0.05, 0.6] } }); }
 function begin() { pl = { f: 0, x: 20, y: fy(0, 20), vy: 0, air: false, climb: null, face: 1, hammer: 0, jumped: [] }; barrels = []; fires = []; parts = []; hammers = HAMMERS.map(h => ({ x: h[0], f: h[1], got: false })); throwT = 1.5; deadT = 0; winT = 0; bonus = 5000; hud(); }
 function hud() { K.set('score', score); K.set('bonus', 'BONUS ' + bonus); K.set('stage', 'STAGE ' + stage); K.set('lives', '♥'.repeat(Math.max(0, lives))); }
 // barrels roll faster and come more often on every stage
