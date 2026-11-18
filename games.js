@@ -29,7 +29,7 @@ window.ARCADE_GAMES = [
   { id: 'deep-dive', name: 'Deep Dive', genre: 'Shooter', tag: 'Rescue divers before air runs out', store: 'best_deep-dive' },
   { id: 'downtown-dash', name: 'Downtown Dash', genre: 'Racing', tag: 'Open 3D city, jobs and cash', store: 'downtown-best', kind: 'cash' },
   { id: 'paddle-party', name: 'Paddle Party', genre: 'Sports', tag: 'Four paddle games in one' },
-  { id: 'road-hopper', name: 'Road Hopper', genre: 'Arcade', tag: 'Get Pip the toad home', store: 'hop-best' },
+  { id: 'road-hopper', name: 'Road Hopper', genre: 'Arcade', tag: 'Get Pip the toad home', store: 'hop-best', art: { src: 'art/road-hopper.jpg', w: 600, h: 600 } },
   { id: 'volt-maze', name: 'Volt Maze', genre: 'Shooter', tag: 'Robots, electric walls, keep moving', store: 'best_volt-maze' },
   { id: 'dirt-bowl', name: 'Dirt Bowl', genre: 'Racing', tag: 'Stadium trucks: jumps, mud and nitro', key: 'dirtbowl', kind: 'cash' },
   { id: 'ping', name: 'Ping', genre: 'Sports', tag: 'Table tennis, first to seven', store: 'ping-best-rally', kind: 'rally' },
