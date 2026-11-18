@@ -12,7 +12,7 @@
 <script>
 // River Rats: a jungle river run in a fast jet boat. A minigun on the bow, a rocket pod on the cabin roof and a
 // crew of three SEALs with rifles who shoot at anything on the banks. Race upriver past gunners in the trees, gun
-// nests, towers, sampans, floating mines, log booms and booby-trapped banks, and knock down the bridge at the top.
+// nests, towers, sampans, enemy gunboats (they turn around and chase you), floating mines, log booms and booby-trapped banks, and knock down the bridge at the top.
 K.theme({ bg: '#0c1408', ink: '#f0ffe6', accent: '#8cff6a', accentInk: '#0a1a04' });
 K.hud(['mission', 'score']);
 K.pad({ dpad: '4', buttons: [{ id: 'v', label: 'VIEW', top: true }, { id: 'b', label: 'RKT' }, { id: 'a', label: 'GUN' }] });
@@ -120,6 +120,17 @@ function unitModel(type) {
     for (let k = 0; k < 5; k++) { const z = -1.6 + k * 0.6; L.push(['tor', THATCH, 0, 0.7, z, 1.6, 1.8, 2.2, 0, Math.PI / 2, 0]); }
     L.push(['box', THATCH, 0, 1.55, -0.4, 1.7, 0.12, 2.8]);
     T.push(['box', MET, 0, 1.25, 2.2, 0.16, 0.16, 1.7], ['box', 0x222222, 0, 1.05, 1.4, 0.5, 0.8, 0.36], ['cone8', 0xd8c890, 0, 1.75, 1.4, 0.8, 0.26, 0.8], ['sph', 0xb88a5a, 0, 1.55, 1.4, 0.32, 0.34, 0.32]);
+  } else if (type === 'gunboat') {
+    // a steel river gunboat, about 9 m: grey-green hull, cabin with a red star flag, a twin-gun turret on the bow
+    // and two gunners in black at the stern. The turret (top) sits at z 2.6 and turns to track you.
+    const HG = 0x4a5446, HD2 = 0x3a4238, DK = 0x6a6a5a;
+    L.push(['box', HG, 0, 0.45, -0.4, 2.8, 1.0, 7.6], ['box', HG, 0, 0.6, 3.9, 1.7, 0.8, 1.6, 0.3, 0, 0], ['box', HD2, 0, 0.02, 0, 2.9, 0.12, 8.6], ['box', DK, 0, 1.0, -0.2, 2.5, 0.08, 7.2]);
+    L.push(['box', 0xe8e0c8, 1.41, 0.7, 1.4, 0.04, 0.28, 1.6], ['box', 0xe8e0c8, -1.41, 0.7, 1.4, 0.04, 0.28, 1.6]);
+    L.push(['box', HD2, 0, 1.75, -0.9, 2.0, 1.5, 2.6], ['box', 0x5a6456, 0, 2.55, -0.9, 2.2, 0.14, 2.8], ['box', 0x111111, 0, 1.95, 0.42, 1.6, 0.42, 0.05], ['box', 0x111111, 1.01, 1.95, -0.9, 0.05, 0.42, 1.8], ['box', 0x111111, -1.01, 1.95, -0.9, 0.05, 0.42, 1.8]);
+    L.push(['cyl6', MET, 0, 3.6, -1.6, 0.07, 2.2, 0.07], ['box', 0xc8281e, 0.55, 4.3, -1.6, 1.1, 0.7, 0.04], ['box', 0xffd23f, 0.55, 4.3, -1.59, 0.3, 0.3, 0.04]);
+    L.push(['tor', SB, 0, 1.25, 2.6, 2.0, 2.0, 1.4, Math.PI / 2, 0, 0], ['box', MET, 0, 1.2, -3.9, 1.2, 0.5, 0.6]);
+    for (const s of [-1, 1]) L.push(['box', 0x1a1a1a, s * 0.7, 1.55, -3.0, 0.4, 1.1, 0.3], ['sph', 0xb88a5a, s * 0.7, 2.25, -3.0, 0.3, 0.32, 0.3], ['cone8', 0xd8c890, s * 0.7, 2.5, -3.0, 0.8, 0.26, 0.8], ['box', 0x222222, s * 0.9, 1.75, -2.6, 0.1, 0.1, 0.8]);
+    T.push(['cyl', OD, 0, 1.35, 0, 1.0, 0.5, 1.0], ['box', MET, 0.2, 1.6, 1.0, 0.14, 0.14, 2.0], ['box', MET, -0.2, 1.6, 1.0, 0.14, 0.14, 2.0], ['box', OD, 0, 1.75, 0.2, 1.1, 0.5, 0.12], ['box', 0x1a1a1a, 0, 1.7, -0.45, 0.45, 0.9, 0.32], ['cone8', 0xd8c890, 0, 2.45, -0.45, 0.8, 0.26, 0.8], ['sph', 0xb88a5a, 0, 2.25, -0.45, 0.3, 0.32, 0.3]);
   } else if (type === 'bunker') {
     L.push(['box', 0x5a4a32, 0, 1.2, 0, 8, 2.4, 6], ['box', WOOD, 0, 2.55, 0, 8.6, 0.5, 6.6], ['box', 0x5a4a32, 0, 3.0, 0, 8.4, 0.5, 6.4]);
     for (let k = 0; k < 7; k++) L.push(['cyl', WOOD, -3.6 + k * 1.2, 2.55, 0, 0.5, 6.7, 0.5, Math.PI / 2, 0, 0]);
@@ -130,7 +141,7 @@ function unitModel(type) {
     L.push(['tor', SB, 0, 0.35, 0, 4.5, 4.5, 5, Math.PI / 2, 0, 0], ['box', 0x4a3a26, 0, 0.05, 0, 2.6, 0.2, 2.6], ['cyl', MET, 0, 0.9, 0, 0.22, 1.6, 0.22, 0.5, 0, 0], ['box', MET, 0, 0.2, -0.3, 0.6, 0.12, 0.6], ['box', 0x222222, 0.8, 0.7, 0.3, 0.4, 1.0, 0.3], ['cone8', 0xd8c890, 0.8, 1.35, 0.3, 0.8, 0.24, 0.8]);
   }
   const g = new THREE.Group(); g.add(new THREE.Mesh(merge(L), MAT));
-  let top = null; if (T.length) { top = new THREE.Mesh(merge(T), MAT); g.add(top); } g.userData.top = top;
+  let top = null; if (T.length) { top = new THREE.Mesh(merge(T), MAT); g.add(top); if (type === 'gunboat') top.position.z = 2.6; } g.userData.top = top;
   return g;
 }
 const GEO = {
@@ -291,6 +302,7 @@ const T = {
   nest: { hp: 14, r: 3, hy: 1.4, pts: 150, name: 'GUN NEST', fire: [2.0, 3.2], dmg: 2, range: 260, burst: 6 },
   tower: { hp: 18, r: 3, hy: 10.4, pts: 200, name: 'WATCHTOWER', fire: [2.2, 3.4], dmg: 2, range: 280, burst: 5 },
   sampan: { hp: 12, r: 3.4, hy: 1.4, pts: 150, name: 'SAMPAN', fire: [1.8, 2.8], dmg: 2, range: 220, burst: 4 },
+  gunboat: { hp: 26, r: 4, hy: 1.6, pts: 350, name: 'GUNBOAT', fire: [1.5, 2.5], dmg: 2, range: 260, burst: 8 },
   bunker: { hp: 40, r: 5, hy: 3.8, pts: 300, name: 'BUNKER', fire: [2.4, 3.6], dmg: 3, range: 300, burst: 7 },
   mortar: { hp: 8, r: 2.5, hy: 1, pts: 200, name: 'MORTAR', fire: [4.2, 6], dmg: 22, range: 340, burst: 1 },
   mine: { hp: 1, r: 1.8, hy: 0.3, pts: 25, name: 'MINE' },
@@ -300,16 +312,23 @@ const T = {
 let enemies = [], traps = [], crates = [], rounds = [], erounds = [], rockets = [], shells = [], bridge = null, checkpoints = [];
 function bankPos(z, side, d) { return { x: cx(z) + side * (hw(z) + d), z }; }
 function addEnemy(type, x, z, o) {
-  const D = T[type], e = Object.assign({ type, x, z, y: type === 'sampan' || type === 'mine' || type === 'boom' ? 0 : H(x, z), hp: D.hp, max: D.hp, dead: false, cd: 1 + Math.random() * 2, burst: 0, aimA: 0, hy: D.hy, r: D.r }, o || {});
+  const D = T[type], e = Object.assign({ type, x, z, y: type === 'sampan' || type === 'gunboat' || type === 'mine' || type === 'boom' ? 0 : H(x, z), hp: D.hp, max: D.hp, dead: false, cd: 1 + Math.random() * 2, burst: 0, aimA: 0, hy: D.hy, r: D.r }, o || {});
   if (e.g0) { e.g = e.g0; enemies.push(e); return e; }
   e.g = type === 'rifle' ? rifleModel() : type === 'mine' ? new THREE.Mesh(GEO.mine, MAT) : type === 'boom' ? new THREE.Mesh(GEO.float, MAT) : unitModel(type);
   e.g.position.set(x, e.y, z); e.g.rotation.y = Math.atan2(cx(z) - x, 0); world.add(e.g); enemies.push(e); return e;
 }
+function addGunboat(x, z) { const e = addEnemy('gunboat', x, z, { h: Math.PI, sp: 10, chase: false, chaseT: 0, side: 1 }); e.g.rotation.y = Math.PI; return e; }
 function makeMission(mi) {
   enemies = []; traps = []; crates = []; rounds = []; erounds = []; rockets = []; shells = []; bridge = null;
   seed = 31337 + mi * 7907;
-  const L = RV.L, kinds = ['rifles', 'rifles', 'rifles', 'nest', 'nest', 'tower', 'sampan', 'sampan', 'mines', 'mines', 'trip', 'boom'].concat(mi >= 1 ? ['bunker', 'mortar'] : []).concat(mi >= 2 ? ['bunker', 'mortar', 'tower'] : []);
-  let z = 200;
+  const L = RV.L, kinds = ['rifles', 'rifles', 'rifles', 'nest', 'nest', 'tower', 'sampan', 'sampan', 'gunboat', 'gunboat', 'mines', 'mines', 'trip', 'boom'].concat(mi >= 1 ? ['bunker', 'mortar', 'gunboat'] : []).concat(mi >= 2 ? ['bunker', 'mortar', 'tower', 'gunboat'] : []);
+  // a pack of 1-3 gunboats in a staggered line, sometimes with a sampan tagging along
+  function gunPack(z, side) {
+    const n = 1 + (srand() < 0.4 + mi * 0.15 ? 1 : 0) + (mi >= 2 && srand() < 0.35 ? 1 : 0);
+    for (let i = 0; i < n; i++) { const zz = z + 50 + i * 22, x = cx(zz) + (i % 2 ? 1 : -1) * side * hw(zz) * (0.25 + srand() * 0.3); addGunboat(x, zz); }
+    if (srand() < 0.35) { const zz = z + 50 + n * 22 + 10; addEnemy('sampan', cx(zz) + (srand() - 0.5) * hw(zz), zz, { moving: true }); }
+  }
+  let z = 200, packs = 0;
   while (z < L - 260) {
     const k = kinds[Math.floor(srand() * kinds.length)], side = srand() < 0.5 ? -1 : 1;
     if (k === 'rifles') { const n = 3 + Math.floor(srand() * (3 + mi)); for (let i = 0; i < n; i++) { const zz = z + i * (5 + srand() * 6), s2 = i % 3 === 2 ? -side : side, p = bankPos(zz, s2, 2 + srand() * 6); addEnemy('rifle', p.x, p.z); } }
@@ -317,7 +336,8 @@ function makeMission(mi) {
     else if (k === 'tower') { const p = bankPos(z, side, 9); addEnemy('tower', p.x, p.z); }
     else if (k === 'bunker') { const p = bankPos(z, side, 8); addEnemy('bunker', p.x, p.z); }
     else if (k === 'mortar') { const p = bankPos(z + 60, side, 18); addEnemy('mortar', p.x, p.z); }
-    else if (k === 'sampan') { const n = 1 + (srand() < 0.3 + mi * 0.15 ? 1 : 0); for (let i = 0; i < n; i++) { const zz = z + 40 + i * 30, x = cx(zz) + (srand() - 0.5) * hw(zz); addEnemy('sampan', x, zz, { moving: true }); } }
+    else if (k === 'sampan') { const n = 1 + (srand() < 0.5 + mi * 0.15 ? 1 : 0) + (mi >= 2 && srand() < 0.4 ? 1 : 0); for (let i = 0; i < n; i++) { const zz = z + 40 + i * 30, x = cx(zz) + (srand() - 0.5) * hw(zz); addEnemy('sampan', x, zz, { moving: true }); } }
+    else if (k === 'gunboat') { gunPack(z, side); packs++; }
     else if (k === 'mines') { const n = 4 + Math.floor(srand() * (3 + mi)); for (let i = 0; i < n; i++) { const zz = z + srand() * 50, x = cx(zz) + (srand() - 0.5) * 1.5 * hw(zz); addEnemy('mine', x, zz, { bob: srand() * 6 }); } }
     else if (k === 'trip') { const p = bankPos(z, side, 2.5); const m = new THREE.Mesh(GEO.stake, MAT); m.position.set(p.x, H(p.x, p.z), p.z); world.add(m); traps.push({ type: 'trip', x: cx(z) + side * (hw(z) - 7), z, side, m, armed: true, t: 0 }); }
     else if (k === 'boom') {
@@ -331,6 +351,8 @@ function makeMission(mi) {
     if (srand() < 0.22) { const zz = z + 30, x = cx(zz) + (srand() - 0.5) * hw(zz); const m = new THREE.Mesh(GEO.crate, MAT); m.position.set(x, 0.2, zz); world.add(m); crates.push({ x, z: zz, m }); }
     z += Math.max(55, 120 - mi * 10) + srand() * 70;
   }
+  // every mission gets at least 2 gunboat packs on the way up (3 from mission 3), spread along the river
+  const want = mi >= 2 ? 3 : 2; for (let k = packs; k < want; k++) gunPack(L * (0.22 + 0.6 * (k - packs + 0.5) / (want - packs)), k % 2 ? 1 : -1);
   // the target: a wooden trestle bridge across the river, guarded at both ends
   { const zb = L, w = hw(zb), c0 = cx(zb), span = w * 2 + 24, Lb = [];
     Lb.push(['box', WOOD, 0, 8.2, 0, span, 0.7, 5.6], ['box', 0x7a5a38, 0, 8.6, 0, span, 0.12, 5.2]);
@@ -343,6 +365,7 @@ function makeMission(mi) {
     Lb.push(['box', RED, -span * 0.18, 9.2, 0, 2.2, 1.2, 1.4], ['cyl', 0x3a4a2a, span * 0.2, 9.3, 1.2, 1.0, 1.4, 1.0], ['cyl', 0x3a4a2a, span * 0.2 + 1.2, 9.3, 1.2, 1.0, 1.4, 1.0]);
     const bm = new THREE.Mesh(merge(Lb), MAT); bm.position.set(c0, 0, zb); world.add(bm);
     bridge = addEnemy('bridge', c0, zb, { y: 4, g0: bm, span });
+    for (const side of [-1, 1]) addGunboat(cx(zb - 70) + side * hw(zb - 70) * 0.4, zb - 70 + (side > 0 ? 18 : 0));
     for (const side of [-1, 1]) { const p = bankPos(zb - 14, side, 5); addEnemy('nest', p.x, p.z); const q = bankPos(zb - 30, side, 3); addEnemy('rifle', q.x, q.z); const g2 = bankPos(zb + 2, side, 1); addEnemy('rifle', cx(zb) + side * (span / 2 - 14), zb + 1.5, { y: 8.7 }); }
   }
   checkpoints = []; for (let c = 0; c < L - 300; c += 600) checkpoints.push(c);
@@ -484,7 +507,7 @@ function killEnemy(e) {
   if (e.type === 'mine') { geyser(e.x, e.z, 1.6); boom(e.x, 0.5, e.z, 1); world.remove(e.g); if (Math.hypot(e.x - P.x, e.z - P.z) < 9) damage(24, 'MINE'); return; }
   if (e.type === 'boom') { geyser(e.x, e.z, 1); world.remove(e.g); const tr = traps.find(t => t.type === 'boom' && t.floats.includes(e)); if (tr && tr.floats.every(f => f.dead)) { tr.broken = true; tr.logs.forEach((m, i) => { m.userData.dr = (i % 2 ? 1 : -1) * (0.6 + Math.random() * 0.5); }); banner('BOOM BROKEN', '', 1.2); } return; }
   boom(e.x, e.y + Math.min(4, e.hy * 0.5), e.z, e.type === 'rifle' ? 0.6 : e.type === 'bunker' ? 2.2 : 1.4);
-  if (e.type === 'rifle') { e.fallT = 0; } else { e.g.traverse(o => { if (o.isMesh) o.material = BURNT; }); if (e.g.userData.top) e.g.userData.top.visible = false; if (e.type === 'tower') e.fallT = 0; if (e.type === 'sampan') e.sinkT = 0; }
+  if (e.type === 'rifle') { e.fallT = 0; } else { e.g.traverse(o => { if (o.isMesh) o.material = BURNT; }); if (e.g.userData.top) e.g.userData.top.visible = false; if (e.type === 'tower') e.fallT = 0; if (e.type === 'sampan' || e.type === 'gunboat') e.sinkT = 0; if (e.type === 'gunboat') geyser(e.x, e.z, 1.4); }
 }
 const BURNT = new THREE.MeshLambertMaterial({ color: 0x1e1a16 });
 
@@ -507,6 +530,21 @@ function enemiesStep(dt) {
       e.vz = -6 - (d < 120 ? 3 : 0); e.vx = (cx(e.z + e.vz * dt) + want - e.x) / Math.max(dt, 0.016) * 0.1;
       e.z += e.vz * dt; e.x += e.vx * dt; e.g.position.set(e.x, Math.sin(clock * 2 + e.z) * 0.08, e.z); e.g.rotation.y = Math.atan2(e.vx, e.vz);
       if (d < 5.5 && !P.dead && P.inv <= 0) { damage(12, 'RAM'); P.inv = 0.8; hitEnemy(e, 6); }
+    }
+    if (e.type === 'gunboat') {
+      // runs down the river at you; once you're past it swings round and chases you, pulling up alongside to shoot.
+      // It tops out a little under your full speed, so flooring it gets you away; after about 25 s it gives up.
+      if (!e.chase && e.z < P.z - 10 && state === 'run') { e.chase = true; e.chaseT = 0; e.side = e.x > P.x ? 1 : -1; }
+      let tx, tz, spT;
+      if (!e.chase) { tz = e.z - 30; const lane = clamp(e.x - cx(e.z) + (P.x - cx(P.z) - (e.x - cx(e.z))) * 0.3, -(hw(tz) - 6), hw(tz) - 6); tx = cx(tz) + lane; spT = 10 + (d < 150 ? 4 : 0); }
+      else { e.chaseT += dt; tz = P.z + 4; const w2 = hw(tz) - 6; tx = cx(tz) + clamp(P.x - cx(P.z) + e.side * 11, -w2, w2); const gap = Math.hypot(tx - e.x, tz - e.z); spT = e.chaseT > 25 ? 0 : clamp(Math.hypot(P.vx, P.vz) + gap * 0.35, 5, VMAX * 0.88); }
+      const want = Math.atan2(tx - e.x, tz - e.z), dh = clamp(wrapA(want - e.h), -1.7 * dt, 1.7 * dt); e.h += dh;
+      e.sp += clamp(spT - e.sp, -10 * dt, 7 * dt);
+      e.x += Math.sin(e.h) * e.sp * dt; e.z += Math.cos(e.h) * e.sp * dt;
+      const w3 = hw(e.z) - 4; e.x = clamp(e.x, cx(e.z) - w3, cx(e.z) + w3);
+      e.g.position.set(e.x, Math.sin(clock * 2.2 + e.z) * 0.08, e.z); e.g.rotation.set(-Math.min(0.08, e.sp * 0.003), e.h, -dh / Math.max(dt, 0.001) * 0.06, 'YXZ');
+      if (e.sp > 6 && Math.random() < dt * e.sp * 0.5) splash(e.x - Math.sin(e.h) * 4.5 + (Math.random() - 0.5) * 2, e.z - Math.cos(e.h) * 4.5);
+      if (d < 6 && !P.dead && P.inv <= 0 && state === 'run') { damage(14, 'RAM'); P.inv = 0.8; hitEnemy(e, 6); }
     }
     // turn toward you and shoot when in range and you're upriver-ish
     if (e.g.userData.top && e.type !== 'sampan') { const want = Math.atan2(dx, P.z - e.z); e.aimA += wrapA(want - e.aimA) * Math.min(1, dt * 3); e.g.userData.top.rotation.y = e.aimA - e.g.rotation.y; }
@@ -687,7 +725,8 @@ function startMission() {
 }
 function title() {
   state = 'title'; mi = 0; buildRiver(0); makeMission(0); if (!boat) { boat = boatModel(); scene.add(boat); } placeBoat(60); P.v = 14;
-  K.card({ title: 'RIVER RATS', text: 'Jungle river patrol in a fast jet boat. Steer with the stick: push it up for full speed, pull back to slow down or reverse. Hold GUN for the bow minigun: it locks on to whatever is ahead of you and leads it. Tap RKT for a homing rocket from the roof pod (they reload one at a time). Your three SEALs shoot at anything on the banks by themselves. Watch for gunners in the trees, gun nests, towers, sampans, floating mines, log booms (shoot the red floats) and tripwires on the banks. Grab crates for repairs. At the top of the river, knock down the bridge. VIEW puts you behind the gun.', best: best ? 'BEST ' + best : '', button: 'Start patrol', onStart: () => { score = 0; boats = 3; mi = 0; startMission(); } });
+  K.card({ title: 'RIVER RATS', text: 'Jungle river patrol in a fast jet boat. Steer with the stick: push it up for full speed, pull back to slow down or reverse. Hold GUN for the bow minigun: it locks on to whatever is ahead of you and leads it. Tap RKT for a homing rocket from the roof pod (they reload one at a time). Your three SEALs shoot at anything on the banks by themselves. Watch for gunners in the trees, gun nests, towers, sampans, enemy gunboats that turn and chase you, floating mines, log booms (shoot the red floats) and tripwires on the banks. Grab crates for repairs. At the top of the river, knock down the bridge. VIEW puts you behind the gun.', best: best ? 'BEST ' + best : '', button: 'Start patrol', onStart: () => { score = 0; boats = 3; mi = 0; startMission(); },
+  art: { src: '../art/river-rats.jpg', w: 600, h: 600, band: [0.04, 0.5] } });
 }
 function missionDone() {
   state = 'card'; const bonus = Math.round(P.hull * 10) + 500; score += bonus; mScore += bonus; K.set('score', score);
