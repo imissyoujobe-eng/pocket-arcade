@@ -9,7 +9,7 @@ window.ARCADE_TOTAL = 87;
 window.ARCADE_GAMES = [
   { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue', art: { src: 'art/rotor-rescue.jpg', w: 600, h: 776 } },
   { id: 'river-rats', name: 'River Rats', genre: 'Shooter', tag: 'Jet boat, minigun and rockets up a jungle river', key: 'riverrats', art: { src: 'art/river-rats.jpg', w: 600, h: 600 } },
-  { id: 'word-clash', name: 'Word Clash', genre: 'Word', tag: 'Crossword tile duel vs the computer or friends', key: 'wordclash' },
+  { id: 'word-clash', name: 'Word Clash', genre: 'Word', tag: 'Crossword tile duel vs the computer or friends', key: 'wordclash', art: { src: 'art/word-clash.jpg', w: 600, h: 600 } },
   { id: 'word-wheel', name: 'Word Wheel', genre: 'Word', tag: 'Swipe the letters to fill the crossword', key: 'wordwheel', kind: 'level' },
   { id: 'gloom-dungeon', name: 'Gloom Dungeon', genre: 'Arcade', tag: 'Hunt the creatures by radar', store: 'best_gloom-dungeon' },
   { id: 'rotor-strike', name: 'Rotor Strike', genre: 'Shooter', tag: 'Fly cover for a desert convoy', store: 'best_rotor-strike' },

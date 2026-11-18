@@ -78,8 +78,13 @@ h2 { margin: 6px 0 0; font: 400 15px Bungee, Impact, sans-serif; letter-spacing:
 .sq { display: inline-block; padding: 0 5px; border-radius: 4px; font-size: 12px; font-weight: 800; }
 #think { position: fixed; left: 50%; top: 46%; transform: translate(-50%, -50%); z-index: 6; padding: 10px 18px; border-radius: 999px; background: rgba(8,16,40,.8); font-weight: 700; display: none; }
 #load { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; font: 400 20px Bungee, Impact, sans-serif; background: var(--bg2); }
+/* James's cover art in place of the WORD CLASH title on the new-game screen and the menu (art/word-clash.jpg, also the
+   game's tile on the arcade menu). If the picture can't load, the title text comes back. */
+#ov h1.cover { display: flex; justify-content: center; font-size: 0; text-shadow: none; }
+#ov h1.cover img { display: block; width: clamp(110px, 28vh, 250px); height: auto; aspect-ratio: 1; border-radius: 14px; box-shadow: 0 0 0 3px rgba(255,255,255,.2), 0 10px 28px rgba(0,0,0,.55); }
 /* phone on its side: a compact start screen, with START always in view at the bottom */
 @media (orientation: landscape) and (max-height: 620px) {
+  #ov h1.cover img { width: clamp(80px, 30vh, 150px); }
   #ov, #cover { padding: 14px 18px 10px; gap: 8px; }
   #ov h1 { font-size: clamp(24px, 9vh, 40px); }
   #ov p { max-width: 64ch; font-size: 14px; line-height: 1.35; }
@@ -476,13 +481,14 @@ h2 { margin: 6px 0 0; font: 400 15px Bungee, Impact, sans-serif; letter-spacing:
   };
   $('bMenu').onclick = () => {
     if (cpuBusy) return;
-    const ov = $('ov'); ov.innerHTML = '<h1>WORD CLASH</h1><div class="row" id="mr" style="flex-direction:column;align-items:center"></div>';
+    const ov = $('ov'); ov.innerHTML = COVER + '<div class="row" id="mr" style="flex-direction:column;align-items:center"></div>';
     if (G && !G.over) btn($('mr'), 'BACK TO THE GAME', () => { ov.hidden = true; });
     btn($('mr'), 'HOW TO PLAY', () => howTo(() => $('bMenu').onclick()), true);
     btn($('mr'), 'NEW GAME', () => { if (G && !G.over) confirmBox('Start a new game?', 'This game will be lost.', 'NEW GAME', setupScreen); else setupScreen(); }, true);
     if (G && !G.over) btn($('mr'), 'RESIGN', () => confirmBox('Resign this game?', G.mode === 'cpu' ? 'The computer wins.' : cur().name + ' gives up and the game ends.', 'RESIGN', () => endGame(-1, G.mode === 'cpu' ? G.players.findIndex(q => !q.cpu) : G.turn)), true);
     ov.hidden = false;
   };
+  const COVER = '<h1 class="cover"><img src="../art/word-clash.jpg" alt="Word Clash" width="600" height="600" onerror="const h=this.parentNode;h.className=\'\';h.textContent=\'WORD CLASH\'"></h1>';
   function btn(parent, text, fn, alt) { const b = document.createElement('button'); b.className = 'big' + (alt ? ' alt' : ''); b.textContent = text; b.onclick = fn; parent.appendChild(b); return b; }
   function confirmBox(title, text, yes, fn) {
     const ov = $('ov'); ov.innerHTML = '<h1></h1><p></p><div class="row" id="cr"></div>'; ov.querySelector('h1').textContent = title; ov.querySelector('p').textContent = text;
@@ -514,7 +520,7 @@ h2 { margin: 6px 0 0; font: 400 15px Bungee, Impact, sans-serif; letter-spacing:
   function setupScreen() {
     const ov = $('ov'); let mode = 'cpu', level = localStorage.getItem('wc-level') || 'medium', count = 2;
     function paint() {
-      ov.innerHTML = '<h1>WORD CLASH</h1><p>Make words on the board, crossword style. Bonus squares double and triple your points.</p><h2>WHO DO YOU WANT TO PLAY?</h2><div class="row" id="m"></div><div id="opt" style="display:grid;gap:10px;justify-items:center"></div><div class="row" id="go"></div>';
+      ov.innerHTML = COVER + '<p>Make words on the board, crossword style. Bonus squares double and triple your points.</p><h2>WHO DO YOU WANT TO PLAY?</h2><div class="row" id="m"></div><div id="opt" style="display:grid;gap:10px;justify-items:center"></div><div class="row" id="go"></div>';
       const m = $('m'); const b1 = btn(m, 'VS COMPUTER', () => { mode = 'cpu'; paint(); }, true), b2 = btn(m, 'PASS & PLAY', () => { mode = 'pass'; paint(); }, true);
       b1.setAttribute('aria-pressed', String(mode === 'cpu')); b2.setAttribute('aria-pressed', String(mode === 'pass'));
       const opt = $('opt');
