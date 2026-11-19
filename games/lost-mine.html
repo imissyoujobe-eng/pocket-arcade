@@ -21,7 +21,7 @@ const WORLD = ["........................................", "....................
 const WT = WORLD[0].length, HT = WORLD.length;
 
 let state = 'title', g, p, mobs, gold, goldTotal, score, check, msg, msgT, deadT, time, best = K.best('lostmine'), sparkles;
-function title() { K.card({ title: 'LOST MINE', text: 'Somewhere at the bottom of this cavern is the lost relic. Collect gold bars on the way. Climb ladders with up and down, JUMP gaps, and swim by holding up in water. Touch a cross to save your spot. Bats, scorpions and spikes send you back to it.', best: best ? 'BEST ' + best : '', button: 'Explore', onStart: start }); }
+function title() { K.card({ title: 'LOST MINE', art: { src: '../art/lost-mine.jpg', w: 600, h: 600, band: [0, 0.85] }, text: 'Somewhere at the bottom of this cavern is the lost relic. Collect gold bars on the way. Climb ladders with up and down, JUMP gaps, and swim by holding up in water. Touch a cross to save your spot. Bats, scorpions and spikes send you back to it.', best: best ? 'BEST ' + best : '', button: 'Explore', onStart: start }); }
 function start() {
   g = WORLD.map(r => r.split('')); mobs = []; goldTotal = 0; gold = 0; score = 0; time = 0; sparkles = [];
   for (let y = 0; y < HT; y++) for (let x = 0; x < WT; x++) {

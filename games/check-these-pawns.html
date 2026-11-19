@@ -11,6 +11,8 @@
     background:radial-gradient(120% 80% at 50% 0%,#3a2716 0%,#1b120b 55%,#0e0906 100%);color:#f6efe2;font-family:Rubik,system-ui,sans-serif;box-sizing:border-box}
   .cm[hidden],.cr[hidden]{display:none}
   .cm h1{margin:0;font-family:Bungee,Impact,sans-serif;font-weight:400;font-size:clamp(32px,10vw,54px);line-height:.95;text-align:center;color:#e8b04a;text-shadow:0 4px 0 rgba(0,0,0,.5)}
+  .cm h1.cover{font-size:0;line-height:0;text-shadow:none;width:clamp(140px,30vh,260px);flex:none}
+  .cm h1.cover img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:14px;box-shadow:0 0 0 3px rgba(255,255,255,.2),0 10px 28px rgba(0,0,0,.55)}
   .cm .sub{margin:0;color:#cdbfa8;text-align:center}
   .cm .cols{display:flex;flex-wrap:wrap;gap:14px;justify-content:center;width:100%;max-width:760px}
   .cm .box{flex:1 1 300px;max-width:380px;background:rgba(255,240,215,.06);border:1px solid rgba(232,176,74,.28);border-radius:18px;padding:16px;display:grid;gap:12px;box-sizing:border-box}
@@ -36,7 +38,8 @@
   /* phone on its side: everything has to fit in a short screen */
   @media (max-height:520px){
     .cm{gap:10px;padding-top:max(14px,env(safe-area-inset-top,0px));padding-left:max(150px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-    .cm h1{font-size:30px}.cm h1 br{display:none}.cm .sub,.cm .note{display:none}
+    .cm h1{font-size:30px}.cm h1 br{display:none}
+    .cm h1.cover{width:clamp(80px,34vh,130px)}.cm .sub,.cm .note{display:none}
     .cm .box{padding:12px;gap:8px}.seg button{min-height:36px}.cm .go{min-height:42px;font-size:16px}
     .cm .box{flex:1 1 220px}   /* the two panels side by side, so "Play a friend" is on screen too */
   }
@@ -500,7 +503,7 @@ const sfx = {
 
 // ---------------- menu and result card ----------------
 const menu = document.createElement('div'); menu.className = 'cm'; menu.id = 'menu';
-menu.innerHTML = '<h1>CHECK THESE <br>PAWNS</h1><p class="sub">Chess against the computer or a friend.</p>' +
+menu.innerHTML = '<h1 class="cover"><img src="../art/check-these-pawns.jpg" alt="Check These Pawns" width="600" height="600" onerror="var h=this.parentNode;h.className=\'\';h.innerHTML=\'CHECK THESE <br>PAWNS\'"></h1><p class="sub">Chess against the computer or a friend.</p>' +
   '<button class="go cont" id="back" hidden>Back to the game</button><button class="go cont" id="cont" hidden>Continue your game</button>' +
   '<div class="cols"><div class="box"><div class="lbl">PLAY THE COMPUTER</div>' +
   '<div class="seg" id="lv"><button data-v="easy">Easy</button><button data-v="medium">Medium</button><button data-v="hard">Hard</button></div>' +

@@ -996,7 +996,7 @@ function drawUI(c) {
 }
 
 // ---------------- flow ----------------
-function title() { K.card({ title: 'CLAW FURY', text: 'Carve through three robot armies with your steel claws. ATTACK chains a 3-hit combo (hold down for an uppercut, in the air it slashes down), LUNGE dashes through foes, and a full bar unleashes RAGE. Dodge hits for 3 seconds to heal. Keys: arrows, Z attack, X jump, C lunge, V rage.', best: best ? 'BEST ' + best : '', button: 'Play', onStart: newGame }); }
+function title() { K.card({ title: 'CLAW FURY', art: { src: '../art/claw-fury.jpg', w: 600, h: 600, band: [0, 0.5] }, text: 'Carve through three robot armies with your steel claws. ATTACK chains a 3-hit combo (hold down for an uppercut, in the air it slashes down), LUNGE dashes through foes, and a full bar unleashes RAGE. Dodge hits for 3 seconds to heal. Keys: arrows, Z attack, X jump, C lunge, V rage.', best: best ? 'BEST ' + best : '', button: 'Play', onStart: newGame }); }
 function newGame() { score = 0; lives = 3; si = 0; loadStage(); state = 'play'; }
 function loadStage() {
   st = STAGES[si]; hero = newHero(40); foes = []; shots = []; debris = []; fx = []; pickups = [];

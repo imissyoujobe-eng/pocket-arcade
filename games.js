@@ -41,7 +41,7 @@ window.ARCADE_GAMES = [
   { id: 'jungle-dash', name: 'Jungle Dash', genre: 'Arcade', tag: 'Treasure run to the temple', store: 'jungledash-best', art: { src: 'art/jungle-dash.jpg', w: 600, h: 600 } },
   { id: 'sky-shield', name: 'Sky Shield', genre: 'Shooter', tag: 'Guard six cities from rockets', store: 'skyshield-best' },
   { id: 'spy-guy', name: 'Spy Guy', genre: 'Arcade', tag: 'Top-secret road chase', store: 'spyguy-best' },
-  { id: 'space-cadet', name: 'Space Cadet', genre: 'Shooter', tag: 'Break the rocks, dodge the bits', store: 'spacecadet-best' },
+  { id: 'space-cadet', name: 'Space Cadet', genre: 'Shooter', tag: 'Break the rocks, dodge the bits', store: 'spacecadet-best', art: { src: 'art/space-cadet.jpg', w: 600, h: 600 } },
   { id: 'junk-planet', name: 'Junk Planet', genre: 'Arcade', tag: 'Rebuild your rocket, island by island' },
   { id: 'marsh-shot', name: 'Marsh Shot', genre: 'Shooter', tag: 'Pick a gun: ducks, dinos, bandits, zombies', store: 'marshshot-best' },
   { id: 'echo-fin', name: 'Echo Fin', genre: 'Arcade', tag: 'Sonar swim, squid on your tail', key: 'echofin' },
@@ -53,7 +53,7 @@ window.ARCADE_GAMES = [
   { id: 'saucer-sweep', name: 'Saucer Sweep', genre: 'Shooter', tag: 'Zap the ground cannons below', key: 'saucer' },
   { id: 'wing-knights', name: 'Wing Knights', genre: 'Arcade', tag: 'Fly high, joust, grab the eggs', key: 'wingknights' },
   { id: 'copter-pack', name: 'Copter Pack', genre: 'Arcade', tag: 'Heli-pack mine rescue', key: 'copter' },
-  { id: 'lost-mine', name: 'Lost Mine', genre: 'Arcade', tag: 'Explore the cavern for the relic', key: 'lostmine' },
+  { id: 'lost-mine', name: 'Lost Mine', genre: 'Arcade', tag: 'Explore the cavern for the relic', key: 'lostmine', art: { src: 'art/lost-mine.jpg', w: 600, h: 600 } },
   { id: 'apex-grand-prix', name: "Apex Grand Prix", genre: 'Racing', tag: "Qualify, then race the pack", key: 'apexgp', kind: 'cs' },
   { id: 'lunar-rover', name: "Lunar Rover", genre: 'Shooter', tag: "Hop craters, blast saucers", key: 'lunarrover' },
   { id: 'aero-assault', name: "Aero Assault", genre: 'Shooter', tag: "Guns up, bombs down", key: 'aeroassault' },
@@ -91,7 +91,7 @@ window.ARCADE_GAMES = [
   { id: 'juice-slash', name: "Juice Slash", genre: 'Action', tag: "Swipe to slice, dodge the bombs", key: 'juiceslash' },
   { id: 'puff-pal', name: "Puff Pal", genre: 'Platform', tag: "Float, inhale and copy powers", key: 'puffpal' },
   { id: 'doodle-dino', name: "Doodle Dino", genre: 'Platform', tag: "Gulp critters, throw eggs, save the storybook", key: 'doodledino' },
-  { id: 'claw-fury', name: "Claw Fury", genre: 'Action', tag: "Claw combos vs a robot army", key: 'clawfury' },
-  { id: 'check-these-pawns', name: 'Check These Pawns', genre: 'Puzzle', tag: 'Chess vs the computer or a friend', key: 'pawns-wins', kind: 'wins' },
+  { id: 'claw-fury', name: "Claw Fury", genre: 'Action', tag: "Claw combos vs a robot army", key: 'clawfury', art: { src: 'art/claw-fury.jpg', w: 600, h: 600 } },
+  { id: 'check-these-pawns', name: 'Check These Pawns', genre: 'Puzzle', tag: 'Chess vs the computer or a friend', key: 'pawns-wins', kind: 'wins', art: { src: 'art/check-these-pawns.jpg', w: 600, h: 600 } },
   { id: 'bubble-blitz', name: 'Bubble Blast', genre: 'Puzzle', tag: 'Tap bubble groups, beat the clock', key: 'bubbleblitz', art: { src: 'art/bubble-blitz.jpg', w: 600, h: 600 } }
 ];
