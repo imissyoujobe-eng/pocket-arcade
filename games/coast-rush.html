@@ -43,6 +43,11 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .card h1 { font-size: clamp(2.4rem, 12vw, 3.4rem); }
 .card h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
 .card p { margin: 0; line-height: 1.45; text-shadow: 0 1px 3px #000; }
+.overlay { overflow-y: auto; }
+.overlay > .card { margin: auto; }
+.card h1.cover { font-size: 0; line-height: 0; text-shadow: none; width: clamp(96px, 30vh, 250px); }
+.card h1.cover img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 14px; box-shadow: 0 0 0 3px rgba(255,255,255,.2), 0 10px 28px rgba(0,0,0,.55); }
+@media (orientation: landscape) and (max-height: 520px) { .card h1.cover { width: clamp(80px, 34vh, 150px); } }
 .card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; text-shadow: 0 1px 3px #000; }
 .btn { font-family: var(--display); font-size: 1.2rem; color: #1a1033; background: var(--sun); border: 0; border-radius: 12px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 var(--sun-deep); }
 .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--sun-deep); }
@@ -61,7 +66,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     <div class="banner" id="banner" hidden></div>
     <div class="overlay" id="start">
       <div class="card">
-        <h1>Coast Rush</h1>
+        <h1 class="cover"><img src="../art/coast-rush.jpg" alt="Coast Rush" width="600" height="600" onerror="const h=this.parentNode;h.className='';h.textContent='Coast Rush'"></h1>
         <ul>
           <li><b>GAS</b> and <b>BRAKE</b> on the right</li>
           <li><b>◀ ▶</b> steer on the left</li>
