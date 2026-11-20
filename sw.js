@@ -1,5 +1,5 @@
 // Offline cache for Joystik Original Arcade (formerly Pocket Arcade). Bump VERSION whenever you add or change a game.
-const VERSION = "arcade-v70";
+const VERSION = "arcade-v71";
 const FILES = [
  "./",
  "./art/agent-zero.jpg",
@@ -19,6 +19,7 @@ const FILES = [
  "./art/jungle-fire.jpg",
  "./art/juice-slash.jpg",
  "./art/lost-mine.jpg",
+ "./art/oval-rush.jpg",
  "./art/pub-darts.jpg",
  "./art/puff-pal.jpg",
  "./art/ramp-rally.jpg",

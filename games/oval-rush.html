@@ -12,13 +12,18 @@ html,body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family
 #overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(18,22,26,.84);padding-inline:16px}
 #overlay h1{font-family:var(--display);font-size:clamp(44px,14vw,84px);margin:0;color:var(--you);font-style:italic;text-shadow:4px 4px 0 #d7263d}
 #overlay p{margin:0;max-width:32ch;line-height:1.5}
+#overlay{overflow-y:auto;justify-content:safe center}
+#overlay h1.cover{font-size:0;line-height:0;text-shadow:none;width:clamp(120px,34vh,280px);flex:none}
+#overlay h1.cover img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:14px;box-shadow:0 0 0 3px rgba(255,255,255,.2),0 10px 28px rgba(0,0,0,.55)}
+@media (orientation:landscape) and (max-height:520px){#overlay h1.cover{width:clamp(80px,34vh,150px)}}
+
 #go{font-family:var(--display);font-size:20px;padding:12px 32px;border:0;border-radius:999px;background:#d7263d;color:#fff;box-shadow:0 5px 0 #8a1526;cursor:pointer}
 #go:active{transform:translateY(3px)}#go:focus-visible{outline:3px solid var(--you);outline-offset:3px}
 </style>
 <div id="wrap"><canvas id="c"></canvas>
   <div id="hud"><span id="lap">LAP 1/5</span><span id="pos">P4</span><span id="spd">0 MPH</span></div>
   <div id="hint"><span>◀</span><span>▶</span></div>
-  <div id="overlay"><h1>OVAL RUSH</h1><p id="msg">Five laps, four cars, one checkered flag. Your car floors it on its own. Steer with the joystick (or arrow keys) and hold GAS (or Space) to go. Pull back to brake. Stay off the grass.</p><div id="best"></div><button id="go">Start your engine</button></div>
+  <div id="overlay"><h1 class="cover"><img src="../art/oval-rush.jpg" alt="Oval Rush" width="600" height="600" onerror="var h=this.parentNode;h.className='';h.textContent='OVAL RUSH'"></h1><p id="msg">Five laps, four cars, one checkered flag. Your car floors it on its own. Steer with the joystick (or arrow keys) and hold GAS (or Space) to go. Pull back to brake. Stay off the grass.</p><div id="best"></div><button id="go">Start your engine</button></div>
 </div>
 <script src="../lib/art.js"></script>
 <script>

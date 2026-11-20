@@ -13,7 +13,7 @@ window.ARCADE_GAMES = [
   { id: 'word-wheel', name: 'Word Wheel', genre: 'Word', tag: 'Swipe the letters to fill the crossword', key: 'wordwheel', kind: 'level' },
   { id: 'gloom-dungeon', name: 'Gloom Dungeon', genre: 'Arcade', tag: 'Hunt the creatures by radar', store: 'best_gloom-dungeon', art: { src: 'art/gloom-dungeon.jpg', w: 600, h: 600 } },
   { id: 'rotor-strike', name: 'Rotor Strike', genre: 'Shooter', tag: 'Fly cover for a desert convoy', store: 'best_rotor-strike', art: { src: 'art/rotor-strike.jpg', w: 600, h: 600 } },
-  { id: 'oval-rush', name: 'Oval Rush', genre: 'Racing', tag: 'Five laps, four cars, one flag', store: 'oval-best', kind: 'secs' },
+  { id: 'oval-rush', name: 'Oval Rush', genre: 'Racing', tag: 'Five laps, four cars, one flag', store: 'oval-best', kind: 'secs', art: { src: 'art/oval-rush.jpg', w: 600, h: 600 } },
   { id: 'rink-rumble', name: 'Rink Rumble', genre: 'Sports', tag: 'Three-on-three arcade hockey', store: 'best_rink-rumble', art: { src: 'art/rink-rumble.jpg', w: 600, h: 600 } },
   { id: 'block-builder', name: 'Block Builder', genre: 'Puzzle', tag: 'Stack, clear lines, drop bombs', store: 'blockbuilder-best' },
   { id: 'bug-bloom', name: 'Bug Bloom', genre: 'Arcade', tag: 'Munch seeds, spell BLOOM', store: 'best_bug-bloom' },
