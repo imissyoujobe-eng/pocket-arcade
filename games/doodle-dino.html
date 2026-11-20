@@ -280,7 +280,7 @@ let p, camX = 0, camY = 0, shake = 0, score = 0, tries = 3, hearts = 3, eggs = 0
 let best = K.best('doodledino');
 
 function title() {
-  K.card({ title: 'DOODLE DINO', text: 'Run and JUMP through the storybook. Hold JUMP in the air to flutter. GULP critters to make eggs, then THROW them where you aim to break blocks, pop clouds and beat the Ink Blot!', best: best ? 'BEST ' + best : '', button: 'Play', onStart: start });
+  K.card({ title: 'DOODLE DINO', art: { src: '../art/doodle-dino.jpg', w: 600, h: 600, band: [0.05, 0.75] }, text: 'Run and JUMP through the storybook. Hold JUMP in the air to flutter. GULP critters to make eggs, then THROW them where you aim to break blocks, pop clouds and beat the Ink Blot!', best: best ? 'BEST ' + best : '', button: 'Play', onStart: start });
 }
 function start() { score = 0; tries = 3; hearts = 3; eggs = 0; coins = 0; totalPages = 0; loadLevel(0); state = 'play'; hud(); }
 function hud() { K.set('score', score); K.set('chap', lvl < 3 ? 'CH ' + (lvl + 1) : 'BOSS'); K.set('tries', 'TRIES ' + Math.max(0, tries)); }
