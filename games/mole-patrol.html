@@ -22,13 +22,18 @@ button:focus-visible{outline:3px solid var(--sky);outline-offset:3px}
 #overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:rgba(27,18,12,.82);border-radius:6px;padding-inline:16px}
 #overlay h1{font-family:var(--display);font-size:clamp(34px,10vw,58px);margin:0;color:var(--sky);text-shadow:0 4px 0 #1d6fa0}
 #overlay p{margin:0;max-width:30ch;line-height:1.5}
+#overlay{overflow-y:auto;justify-content:safe center}
+#overlay h1.cover{font-size:0;line-height:0;text-shadow:none;width:clamp(90px,21vh,170px);flex:none}
+#overlay h1.cover img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:cover;border-radius:14px;box-shadow:0 0 0 3px rgba(255,255,255,.2),0 10px 28px rgba(0,0,0,.55)}
+@media (orientation:landscape) and (max-height:520px){#overlay h1.cover{width:clamp(80px,34vh,150px)}}
+
 #go{font-size:20px;padding:12px 30px;border-radius:999px;background:var(--pump);color:#fff;box-shadow:0 5px 0 #a3223f}
 @media (min-width:900px){#pad{display:none}}
 </style>
 <div id="app">
   <div id="hud"><span id="sc">0</span><span class="r" id="lv">ROUND 1</span><span id="lv2">♥♥♥</span></div>
   <div id="stage"><canvas id="c" width="416" height="416"></canvas>
-    <div id="overlay"><h1>MOLE PATROL</h1><p>Dig tunnels and pump up the goggle-eyed Grubbles until they pop. Arrows to dig, PUMP (or Space) to inflate.</p><div id="best"></div><button id="go">Play</button></div>
+    <div id="overlay"><h1 class="cover"><img src="../art/mole-patrol.jpg" alt="Mole Patrol" width="600" height="600" onerror="var h=this.parentNode;h.className='';h.textContent='MOLE PATROL'"></h1><p>Dig tunnels and pump up the goggle-eyed Grubbles until they pop. Arrows to dig, PUMP (or Space) to inflate.</p><div id="best"></div><button id="go">Play</button></div>
   </div>
   <div id="pad">
     <div class="dpad"><button class="u" data-d="0,-1" aria-label="Up">▲</button><button class="l" data-d="-1,0" aria-label="Left">◀</button><button class="d" data-d="0,1" aria-label="Down">▼</button><button class="rt" data-d="1,0" aria-label="Right">▶</button></div>
