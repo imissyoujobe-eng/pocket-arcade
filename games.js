@@ -21,7 +21,7 @@ window.ARCADE_GAMES = [
   { id: 'coast-rush', name: 'Coast Rush', genre: 'Racing', tag: 'Beat the clock down the highway', store: 'coastrush-best', art: { src: 'art/coast-rush.jpg', w: 600, h: 600 } },
   { id: 'frost-cup', name: 'Frost Cup', genre: 'Sports', tag: 'Skate, jump and slalom for gold', store: 'best_frost-cup' },
   { id: 'dot-chomper', name: 'Dot Chomper', genre: 'Arcade', tag: 'Chomp the dots, scare the Gloops', store: 'dotchomper-best', art: { src: 'art/dot-chomper.jpg', w: 600, h: 600 } },
-  { id: 'star-trench', name: 'Star Trench', genre: 'Shooter', tag: 'Dogfight, then run the trench', store: 'best_star-trench' },
+  { id: 'star-trench', name: 'Star Trench', genre: 'Shooter', tag: 'Dogfight, then run the trench', store: 'best_star-trench', art: { src: 'art/star-trench.jpg', w: 600, h: 600 } },
   { id: 'eat-my-dust', name: 'Eat My Dust', genre: 'Racing', tag: 'Motocross jumps at sunset', store: 'eatmydust-best', kind: 'secs' },
   { id: 'pub-darts', name: 'Pub Darts', genre: 'Sports', tag: '301 down to zero, steady hand', art: { src: 'art/pub-darts.jpg', w: 600, h: 600 } },
   { id: 'kings-row', name: 'Kings Row', genre: 'Puzzle', tag: 'Checkers vs a smarter computer', key: 'kingsrow-wins', kind: 'wins' },
