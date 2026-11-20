@@ -243,7 +243,7 @@ let score = 0, lives = 3, best = K.best('puffpal'), msg = '', msgT = 0, deadT = 
 
 function hud() { K.set('score', '★ ' + score); K.set('level', li < 3 ? 'LEVEL ' + (li + 1) : 'BOSS'); K.set('lives', '♥ ' + Math.max(0, lives)); }
 function title() {
-  K.card({ title: 'PUFF PAL', text: 'Walk and JUMP; tap JUMP again in the air to puff up and float. Hold INHALE to suck in a critter, then press INHALE to spit it as a star or COPY to steal its power (COPY again drops it). Cross 3 lands and topple Old Grumbark!', best: best ? 'BEST ' + best : '', button: 'Play', onStart: newGame });
+  K.card({ title: 'PUFF PAL', art: { src: '../art/puff-pal.jpg', w: 600, h: 600, band: [0.03, 0.85] }, text: 'Walk and JUMP; tap JUMP again in the air to puff up and float. Hold INHALE to suck in a critter, then press INHALE to spit it as a star or COPY to steal its power (COPY again drops it). Cross 3 lands and topple Old Grumbark!', best: best ? 'BEST ' + best : '', button: 'Play', onStart: newGame });
 }
 function newGame() { score = 0; lives = 3; loadLevel(0, null); state = 'play'; hud(); }
 

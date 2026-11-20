@@ -89,7 +89,7 @@ window.ARCADE_GAMES = [
   { id: 'cube-pop', name: "Cube Pop", genre: 'Puzzle', tag: "Pop color groups, build rockets", key: 'cubepop' },
   { id: 'fling-frenzy', name: "Fling Frenzy", genre: 'Puzzle', tag: "Slingshot Puffs at wobbly forts", key: 'flingfrenzy', art: { src: 'art/fling-frenzy.jpg', w: 600, h: 600 } },
   { id: 'juice-slash', name: "Juice Slash", genre: 'Action', tag: "Swipe to slice, dodge the bombs", key: 'juiceslash' },
-  { id: 'puff-pal', name: "Puff Pal", genre: 'Platform', tag: "Float, inhale and copy powers", key: 'puffpal' },
+  { id: 'puff-pal', name: "Puff Pal", genre: 'Platform', tag: "Float, inhale and copy powers", key: 'puffpal', art: { src: 'art/puff-pal.jpg', w: 600, h: 600 } },
   { id: 'doodle-dino', name: "Doodle Dino", genre: 'Platform', tag: "Gulp critters, throw eggs, save the storybook", key: 'doodledino', art: { src: 'art/doodle-dino.jpg', w: 600, h: 600 } },
   { id: 'claw-fury', name: "Claw Fury", genre: 'Action', tag: "Claw combos vs a robot army", key: 'clawfury', art: { src: 'art/claw-fury.jpg', w: 600, h: 600 } },
   { id: 'check-these-pawns', name: 'Check These Pawns', genre: 'Puzzle', tag: 'Chess vs the computer or a friend', key: 'pawns-wins', kind: 'wins', art: { src: 'art/check-these-pawns.jpg', w: 600, h: 600 } },
