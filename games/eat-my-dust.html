@@ -51,6 +51,11 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .card { max-width: 360px; display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .card h1, .card h2 { margin: 0; line-height: .95; text-wrap: balance; }
 .card h1 { font-family: var(--shade); font-weight: 400; font-size: clamp(2.6rem, 13vw, 3.8rem); color: var(--gold); text-shadow: 0 0 24px rgba(255,122,26,.7), 0 4px 0 var(--orange-deep); }
+.overlay { overflow-y: auto; }
+.overlay > .card { margin: auto; }
+.card h1.cover { font-size: 0; line-height: 0; text-shadow: none; width: clamp(96px, 30vh, 250px); }
+.card h1.cover img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 14px; box-shadow: 0 0 0 3px rgba(255,255,255,.2), 0 10px 28px rgba(0,0,0,.55); }
+@media (orientation: landscape) and (max-height: 520px) { .card h1.cover { width: clamp(80px, 34vh, 150px); } }
 .card h2 { font-family: var(--display); font-size: clamp(1.9rem, 9vw, 2.6rem); color: var(--gold); text-shadow: 0 0 18px rgba(255,122,26,.7); }
 .card p { margin: 0; line-height: 1.45; }
 .card ul { margin: 0; padding: 12px 14px; list-style: none; display: grid; gap: 6px; font-size: .95rem; text-align: left; background: var(--panel); border: 1px solid rgba(255,255,255,.12); border-radius: 14px; }
@@ -73,7 +78,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     <div class="banner" id="banner" hidden></div>
     <div class="overlay" id="start">
       <div class="card">
-        <h1>Eat My Dust</h1>
+        <h1 class="cover"><img src="../art/eat-my-dust.jpg" alt="Eat My Dust" width="600" height="600" onerror="var h=this.parentNode;h.className='';h.textContent='Eat My Dust'"></h1>
         <ul>
           <li><b>GAS</b> hold to ride</li>
           <li><b>TURBO</b> faster, but heats the engine. Too hot and it stalls.</li>
