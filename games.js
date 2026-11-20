@@ -17,7 +17,7 @@ window.ARCADE_GAMES = [
   { id: 'rink-rumble', name: 'Rink Rumble', genre: 'Sports', tag: 'Three-on-three arcade hockey', store: 'best_rink-rumble', art: { src: 'art/rink-rumble.jpg', w: 600, h: 600 } },
   { id: 'block-builder', name: 'Block Builder', genre: 'Puzzle', tag: 'Stack, clear lines, drop bombs', store: 'blockbuilder-best' },
   { id: 'bug-bloom', name: 'Bug Bloom', genre: 'Arcade', tag: 'Munch seeds, spell BLOOM', store: 'best_bug-bloom' },
-  { id: 'tread-storm', name: 'Tread Storm', genre: 'Shooter', tag: 'Tank battles from the gunner seat', store: 'best_tread-storm' },
+  { id: 'tread-storm', name: 'Tread Storm', genre: 'Shooter', tag: 'Tank battles from the gunner seat', store: 'best_tread-storm', art: { src: 'art/tread-storm.jpg', w: 600, h: 600 } },
   { id: 'coast-rush', name: 'Coast Rush', genre: 'Racing', tag: 'Beat the clock down the highway', store: 'coastrush-best', art: { src: 'art/coast-rush.jpg', w: 600, h: 600 } },
   { id: 'frost-cup', name: 'Frost Cup', genre: 'Sports', tag: 'Skate, jump and slalom for gold', store: 'best_frost-cup' },
   { id: 'dot-chomper', name: 'Dot Chomper', genre: 'Arcade', tag: 'Chomp the dots, scare the Gloops', store: 'dotchomper-best', art: { src: 'art/dot-chomper.jpg', w: 600, h: 600 } },
