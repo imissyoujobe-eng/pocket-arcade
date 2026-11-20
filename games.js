@@ -88,7 +88,7 @@ window.ARCADE_GAMES = [
   { id: 'commando-sights', name: "Commando Sights", genre: 'Action', tag: "Crosshair shooting gallery", key: 'commandosights', art: { src: 'art/commando-sights.jpg', w: 600, h: 678 } },
   { id: 'cube-pop', name: "Cube Pop", genre: 'Puzzle', tag: "Pop color groups, build rockets", key: 'cubepop' },
   { id: 'fling-frenzy', name: "Fling Frenzy", genre: 'Puzzle', tag: "Slingshot Puffs at wobbly forts", key: 'flingfrenzy', art: { src: 'art/fling-frenzy.jpg', w: 600, h: 600 } },
-  { id: 'juice-slash', name: "Juice Slash", genre: 'Action', tag: "Swipe to slice, dodge the bombs", key: 'juiceslash' },
+  { id: 'juice-slash', name: "Juice Slash", genre: 'Action', tag: "Swipe to slice, dodge the bombs", key: 'juiceslash', art: { src: 'art/juice-slash.jpg', w: 600, h: 600 } },
   { id: 'puff-pal', name: "Puff Pal", genre: 'Platform', tag: "Float, inhale and copy powers", key: 'puffpal', art: { src: 'art/puff-pal.jpg', w: 600, h: 600 } },
   { id: 'doodle-dino', name: "Doodle Dino", genre: 'Platform', tag: "Gulp critters, throw eggs, save the storybook", key: 'doodledino', art: { src: 'art/doodle-dino.jpg', w: 600, h: 600 } },
   { id: 'claw-fury', name: "Claw Fury", genre: 'Action', tag: "Claw combos vs a robot army", key: 'clawfury', art: { src: 'art/claw-fury.jpg', w: 600, h: 600 } },

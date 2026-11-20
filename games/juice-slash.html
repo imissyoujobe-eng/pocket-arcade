@@ -23,7 +23,7 @@ const FRUITS = [
   { n: 'lemon', r: 18, skin: '#ffe23a', flesh: '#fff7a0', juice: '#ffe86a' },
 ];
 let state = 'title', score, lives, items, pieces, splats, trail, blade, waveT, slow, combo, comboT, pops, best = K.best('juiceslash'), level, shake;
-function title() { K.card({ title: 'JUICE SLASH', text: 'Swipe across the screen to slice the fruit, then keep slicing the falling pieces for bonus points: every fruit can be cut into 8 chunks. Slice 3 or more in one swipe for a COMBO bonus. Do NOT slice the bombs! Miss 3 fruits and the game is over. The frosty blue berry slows time for a few seconds.', best: best ? 'BEST ' + best : '', button: 'Slice!', onStart: start }); }
+function title() { K.card({ title: 'JUICE SLASH', art: { src: '../art/juice-slash.jpg', w: 600, h: 600, band: [0.02, 0.8] }, text: 'Swipe across the screen to slice the fruit, then keep slicing the falling pieces for bonus points: every fruit can be cut into 8 chunks. Slice 3 or more in one swipe for a COMBO bonus. Do NOT slice the bombs! Miss 3 fruits and the game is over. The frosty blue berry slows time for a few seconds.', best: best ? 'BEST ' + best : '', button: 'Slice!', onStart: start }); }
 function start() { score = 0; lives = 3; items = []; pieces = []; splats = []; trail = []; pops = []; waveT = 1; slow = 0; combo = 0; comboT = 0; level = 0; shake = 0; blade = null; state = 'play'; }
 function toss(kind) {
   const x = K.rnd(40, W - 40), tx = K.rnd(60, W - 60), peak = K.rnd(120, 300), g = 520;
