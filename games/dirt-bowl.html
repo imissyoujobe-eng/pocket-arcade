@@ -992,7 +992,7 @@ function attract() {
 }
 function title() {
   attract();
-  K.card({ title: 'DIRT BOWL', text: 'Stadium off-road racing under the lights: four trucks, four laps, big jumps, bumps and sticky mud. Hold GAS to drive and steer with the stick. Tap NITRO for a burst of speed, and hold BRAKE to slow down or back up. In the Joystik app the phone\'s side buttons work too: volume up is gas, volume down is brake. Land on the far side of a jump to keep your speed. Grab nitro cans and cash bags, win prize money, then upgrade your engine, tires and shocks in the pit shop. Finish last and you lose a truck. Lose all three and the season is over. VIEW switches between the chase camera, the cockpit (the driver\'s seat) and the high camera.', best: best ? 'BEST ' + money(best) : '', button: 'Start season', onStart: newSeason });
+  K.card({ title: 'DIRT BOWL', text: 'Stadium off-road racing under the lights: four trucks, four laps, big jumps, bumps and sticky mud. Hold GAS to drive and steer with the stick. Tap NITRO for a burst of speed, and hold BRAKE to slow down or back up. In the Joystik app the phone\'s side buttons work too: volume up is gas, volume down is brake. Land on the far side of a jump to keep your speed. Grab nitro cans and cash bags, win prize money, then upgrade your engine, tires and shocks in the pit shop. Finish last and you lose a truck. Lose all three and the season is over. VIEW switches between the chase camera, the cockpit (the driver\'s seat) and the high camera.', best: best ? 'BEST ' + money(best) : '', button: 'Start season', onStart: newSeason, art: { src: '../art/dirt-bowl.jpg', w: 600, h: 600, band: [0.0, 0.55] } });
 }
 function newSeason() { audioOn(); season = SEASON0(); startRace(); }
 function startRace() {

@@ -18,7 +18,7 @@ K.hud(['you', 'cpu']);
 K.pad({ dpad: '4', buttons: [{ id: 'a', label: 'REEL' }] });
 const ROWS = [150, 172, 194, 216, 244, 272, 300], WT = [2, 2, 3, 4, 5, 6, 8];
 let state = 'title', fish, me, cpu, shark, splash, msg, msgT, wins = K.best('lake-wins'), timeT;
-function title() { K.card({ title: 'LAKE SHOWDOWN', text: 'Steer your hook to a fish. Once it bites, hold REEL to haul it up fast, but if the shark touches your fish it is gone. Deep fish weigh the most. First to 99 lbs wins.', best: wins ? 'WINS ' + wins : '', button: 'Cast off', onStart: start }); }
+function title() { K.card({ title: 'LAKE SHOWDOWN', text: 'Steer your hook to a fish. Once it bites, hold REEL to haul it up fast, but if the shark touches your fish it is gone. Deep fish weigh the most. First to 99 lbs wins.', best: wins ? 'WINS ' + wins : '', button: 'Cast off', onStart: start, art: { src: '../art/lake-showdown.jpg', w: 600, h: 600, band: [0.05, 0.62] } }); }
 function start() {
   fish = ROWS.map((y, i) => newFish(i));
   me = { x: 80, y: 140, rod: { x: 38, y: 68 }, lbs: 0, f: null, cpu: false };

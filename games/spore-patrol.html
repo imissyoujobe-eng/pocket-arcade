@@ -1,4 +1,5 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style><style>.cov{display:block;width:min(56vw,30vh,240px);height:auto;border-radius:10px}</style>
+</head><body>
 <title>Spore Patrol</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@400;600&display=swap">
 <style>
@@ -26,7 +27,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
 <div id="app">
   <div id="hud"><div><span class="lbl" id="l1">SCORE</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">WAVE</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">LIVES</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
   <div id="stage"><canvas id="c" width="400" height="600"></canvas>
-    <div id="overlay"><h1>Spore Patrol</h1><p id="msg">A giant crawler is winding down through the mushroom patch. Blast every segment before it reaches you.</p><p class="how">Left side: drag to move. Right side: hold to fire. Hit segments turn into mushrooms. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+    <div id="overlay"><h1>Spore Patrol</h1><img class="cov" src="../art/spore-patrol.jpg" alt="Spore Patrol" width="600" height="600" onload="this.previousElementSibling.hidden=true" onerror="this.remove()"><p id="msg">A giant crawler is winding down through the mushroom patch. Blast every segment before it reaches you.</p><p class="how">Left side: drag to move. Right side: hold to fire. Hit segments turn into mushrooms. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
 <script src="../lib/fit.js" data-canvas="#c" data-wide="1" data-max="2.4"></script>
