@@ -42,6 +42,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .card h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
 .card p { margin: 0; line-height: 1.45; }
 .card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.cov { display: block; width: min(62vw, 34vh, 260px); height: auto; border-radius: 10px; }
 .btn { font-family: var(--display); font-size: 1.2rem; color: var(--panel); background: var(--gold); border: 0; border-radius: 12px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 #b8860b; }
 .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b8860b; }
 .banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-family: var(--display); font-size: clamp(1.4rem, 8vw, 2.4rem); color: #fff; text-shadow: 0 3px 0 var(--coral-deep), 0 0 16px rgba(0,0,0,.5); pointer-events: none; padding-inline: 16px; }
@@ -58,7 +59,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     <div class="banner" id="banner" hidden></div>
     <div class="overlay" id="start">
       <div class="card">
-        <h1>Block Builder</h1>
+        <h1>Block Builder</h1><img class="cov" src="../art/block-builder.jpg" alt="Block Builder" width="600" height="600" onload="this.previousElementSibling.hidden=true" onerror="this.remove()">
         <ul>
           <li><b>◀ ▶</b> or swipe sideways to move</li>
           <li><b>TURN</b> or tap the well to spin a piece</li>
