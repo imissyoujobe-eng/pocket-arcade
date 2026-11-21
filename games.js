@@ -26,7 +26,7 @@ window.ARCADE_GAMES = [
   { id: 'pub-darts', name: 'Pub Darts', genre: 'Sports', tag: '301 down to zero, steady hand', art: { src: 'art/pub-darts.jpg', w: 600, h: 600 } },
   { id: 'kings-row', name: 'Kings Row', genre: 'Puzzle', tag: 'Checkers vs a smarter computer', key: 'kingsrow-wins', kind: 'wins', art: { src: 'art/kings-row.jpg', w: 600, h: 600 } },
   { id: 'mole-patrol', name: 'Mole Patrol', genre: 'Arcade', tag: 'Dig deep, pump up the Grubbles', store: 'mole-best', art: { src: 'art/mole-patrol.jpg', w: 600, h: 600 } },
-  { id: 'deep-dive', name: 'Deep Dive', genre: 'Shooter', tag: 'Rescue divers before air runs out', store: 'best_deep-dive' },
+  { id: 'deep-dive', name: 'Deep Dive', genre: 'Shooter', tag: 'Rescue divers before air runs out', store: 'best_deep-dive', art: { src: 'art/deep-dive.jpg', w: 600, h: 600 } },
   { id: 'downtown-dash', name: 'Downtown Dash', genre: 'Racing', tag: 'Open 3D city, jobs and cash', store: 'downtown-best', kind: 'cash' },
   { id: 'paddle-party', name: 'Paddle Party', genre: 'Sports', tag: 'Four paddle games in one', art: { src: 'art/paddle-party.jpg', w: 600, h: 600 } },
   { id: 'road-hopper', name: 'Road Hopper', genre: 'Arcade', tag: 'Get Pip the toad home', store: 'hop-best', art: { src: 'art/road-hopper.jpg', w: 600, h: 600 } },
