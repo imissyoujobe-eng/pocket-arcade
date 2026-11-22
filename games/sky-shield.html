@@ -32,6 +32,11 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: 
 .card h1, .card h2 { font-family: var(--display); margin: 0; line-height: 1; color: var(--cyan); text-shadow: 0 4px 0 #1d3b7a; }
 .card h1 { font-size: clamp(2.4rem, 12vw, 3.4rem); }
 .card h2 { font-size: clamp(1.8rem, 9vw, 2.4rem); }
+/* James's cover art in place of the title (art/sky-shield.jpg); falls back to the title text if it can't load */
+.card h1.cover { font-size: 0; text-shadow: none; }
+.card h1.cover img { display: block; width: min(240px, 60vw, 30vh); height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 14px; box-shadow: 0 0 0 3px rgba(255,255,255,.2), 0 10px 28px rgba(0,0,0,.55); }
+.overlay { overflow-y: auto; }
+.overlay .card { margin: auto; }
 .card p { margin: 0; line-height: 1.45; text-shadow: 0 1px 3px #000; }
 .btn { font-family: var(--display); font-size: 1.2rem; color: var(--panel); background: var(--gold); border: 0; border-radius: 12px; padding: 14px 28px; cursor: pointer; box-shadow: 0 6px 0 var(--gold-deep); }
 .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--gold-deep); }
@@ -50,7 +55,7 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: 
     <div class="banner" id="banner" hidden></div>
     <div class="overlay" id="start">
       <div class="card">
-        <h1>Sky Shield</h1>
+        <h1 class="cover"><img src="../art/sky-shield.jpg" alt="Sky Shield" width="600" height="600" onerror="const h=this.parentNode;h.className='';h.textContent='Sky Shield'"></h1>
         <p>Rockets are raining down on your six cities. Tap the sky to launch an interceptor from the closest base. Its blast knocks out anything that flies into it.</p>
         <p>Lead your shots, catch several rockets in one blast, and save ammo for the bonus.</p>
         <button class="btn" id="play">Tap to Defend</button>

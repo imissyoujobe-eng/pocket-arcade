@@ -530,7 +530,7 @@ function gunIcon(c, id, x, y, col) {
   else if (id === 'ak') { r(-18, -3, 26, 4); c.beginPath(); c.moveTo(x - 3, y + 1); c.lineTo(x + 2, y + 1); c.lineTo(x + 5, y + 8); c.lineTo(x, y + 8); c.fill(); r(8, -2, 11, 5); }
   else { r(-22, -2, 34, 3); r(-6, -7, 14, 3); r(10, -2, 11, 5); }
 }
-function title() { K.card({ title: 'MARSH SHOT', text: 'Pick your gun along the bottom: pistol, shotgun, AR-15, AK or sniper rifle. Tap a target to shoot (hold to keep firing the AR-15 and AK; with the sniper, hold to look through the scope and let go to fire). Each level is a new place with more on screen: ducks, deer, boars, raptors, a T. rex, bandits and zombies. Hit enough to move on, and stop anything charging before it reaches you.', best: best ? 'BEST ' + best.toLocaleString() : '', button: 'Play', onStart: newGame }); }
+function title() { K.card({ title: 'MARSH SHOT', art: { src: '../art/marsh-shot.jpg', w: 600, h: 600 }, text: 'Pick your gun along the bottom: pistol, shotgun, AR-15, AK or sniper rifle. Tap a target to shoot (hold to keep firing the AR-15 and AK; with the sniper, hold to look through the scope and let go to fire). Each level is a new place with more on screen: ducks, deer, boars, raptors, a T. rex, bandits and zombies. Hit enough to move on, and stop anything charging before it reaches you.', best: best ? 'BEST ' + best.toLocaleString() : '', button: 'Play', onStart: newGame }); }
 setup(); place = PLACES[0]; buildPlace(); title();
 K.run(update, () => {});
 window.msDebug = () => ({ state, level, score, hearts, hits, quota, total, spawned, alive: targets.filter(t => !t.dead).length, weapon: WEAPONS[weapon].name, ammo: ammo[weapon], reloadT });
