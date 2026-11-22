@@ -457,7 +457,7 @@ function hudDraw() {
 setup();
 for (const p of P) { p.home = homeOf(p.team, p.i); p.x = p.home.x; p.z = p.home.z; }
 ctrl = P[1]; hudSet();
-K.card({ title: 'FOOTBALL', text: 'Four-a-side indoor football in 3D, seen from one foot above your player\'s head. Push the stick up to run and left or right to turn. Hold SHOOT and let go to fire: the longer you hold, the harder. PASS finds a teammate. Without the ball, SHOOT is a slide tackle and PASS switches player. SPRINT runs faster, VIEW looks through his eyes. Three minutes, golden goal if it\'s level.', best: best ? 'BEST ' + best : '', button: 'Kick off', onStart: startMatch });
+K.card({ title: 'FOOTBALL', art: { src: '../art/football.jpg', w: 600, h: 600 }, text: 'Four-a-side indoor football in 3D, seen from one foot above your player\'s head. Push the stick up to run and left or right to turn. Hold SHOOT and let go to fire: the longer you hold, the harder. PASS finds a teammate. Without the ball, SHOOT is a slide tackle and PASS switches player. SPRINT runs faster, VIEW looks through his eyes. Three minutes, golden goal if it\'s level.', best: best ? 'BEST ' + best : '', button: 'Kick off', onStart: startMatch });
 K.run(update, draw);
 window.DB = { state: () => ({ state, clock, goals, view, ctrl: ctrl && { x: +ctrl.x.toFixed(1), z: +ctrl.z.toFixed(1), h: +ctrl.h.toFixed(2) }, ball: { x: +ball.x.toFixed(1), y: +ball.y.toFixed(2), z: +ball.z.toFixed(1), own: ball.owner ? ball.owner.team + '/' + ball.owner.i : null }, PR }), start: startMatch, step: (n, dt) => { for (let i = 0; i < n; i++) update(dt); }, view: v => { view = v; camSnap = true; }, P: () => P, ball: () => ball, shoot: c => shootBall(ctrl, c) };
 </script>
