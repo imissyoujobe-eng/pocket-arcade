@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Football</title>
+</head>
+<body>
+<script src="../lib/kit.js"></script>
+<script src="../lib/three.min.js"></script>
+<script>
+// Football: four-a-side indoor football in 3D, seen from one foot above your player's head (or through his eyes).
+// Push the stick up to run and left / right to turn. Hold SHOOT and let go to fire (longer = harder). PASS finds a
+// teammate. Without the ball SHOOT is a slide tackle and PASS switches player. SPRINT runs faster. VIEW swaps the
+// over-the-head camera for your own eyes. Three minutes, next goal wins if it's level.
+K.theme({ bg: '#06130b', ink: '#f1fff3', accent: '#3be07a', accentInk: '#03140a' });
+K.hud(['score', 'clock']);
+K.pad({ dpad: '4', buttons: [{ id: 'v', label: 'VIEW', top: true }, { id: 'a', label: 'SHOOT' }, { id: 'b', label: 'PASS' }, { id: 'c', label: 'SPRINT' }] });
+addEventListener('keydown', e => { const k = e.key.toLowerCase(); if (k === 'v') K.press('v'); if (k === 'c' || k === 'e') K.press('c'); });
+addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k === 'v') K.release('v'); if (k === 'c' || k === 'e') K.release('c'); });
+{ const st = document.createElement('style'); st.textContent =
+  '#kp button[aria-label=a]{box-shadow:inset 0 -7px 0 #ff4a3a,0 4px 0 rgba(0,0,0,.35)}' +
+  '#kp button[aria-label=b]{box-shadow:inset 0 -7px 0 #3ab4ff,0 4px 0 rgba(0,0,0,.35)}' +
+  '#kp button[aria-label=c]{box-shadow:inset 0 -7px 0 #ffd23f,0 4px 0 rgba(0,0,0,.35)}';
+  document.head.appendChild(st); }
+
+const TAU = Math.PI * 2, WX = 22, WZ = 35, GW = 9, GHT = 3, GDP = 3.2, BR = 0.32, PS = 1.3, GRAV = 19, HT = 1.94 * PS;
+const RUN = 7.2, SPR = 9.8, CPU_RUN = 6.6, CPU_CHASE = 8.0, MATCH = 180;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t, rnd = (a, b) => a + Math.random() * (b - a);
+const adiff = (a, b) => { let d = b - a; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
+const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+
+// ---------------------------------------------------------------- 3D setup
+let renderer, scene, camera, stageEl, hudC, hud, PR = 1.5, HW = 1, HH = 1;
+function cTex(w, h, fn, rep) { const c = document.createElement('canvas'); c.width = w; c.height = h; fn(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; }
+const MC = {}; const mat = c => MC[c] || (MC[c] = new THREE.MeshLambertMaterial({ color: c }));
+const cyl = (rt, rb, h, m, seg = 10) => new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m);
+const sph = (r, m, w = 12, h = 10) => new THREE.Mesh(new THREE.SphereGeometry(r, w, h), m);
+function setup() {
+  stageEl = document.getElementById('ks'); const kc = stageEl.querySelector('canvas'); if (kc) kc.style.display = 'none';
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' }); PR = Math.min(devicePixelRatio || 1, 1.75); renderer.setPixelRatio(PR);
+  renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block'; stageEl.style.position = 'relative'; stageEl.insertBefore(renderer.domElement, stageEl.firstChild);
+  hudC = document.createElement('canvas'); hudC.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1'; stageEl.insertBefore(hudC, renderer.domElement.nextSibling); hud = hudC.getContext('2d');
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x0a1424); scene.fog = new THREE.Fog(0x0a1424, 80, 220);
+  camera = new THREE.PerspectiveCamera(68, 1, 0.1, 400);
+  scene.add(new THREE.HemisphereLight(0xe4ecff, 0x2d5a2d, 0.85));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 0.75); sun.position.set(20, 60, 15); scene.add(sun);
+  buildWorld(); buildTeams(); addEventListener('resize', fit); fit();
+}
+function fit() {
+  if (!renderer) return;
+  const r = stageEl.getBoundingClientRect(), w = Math.max(100, r.width), h = Math.max(100, r.height);
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  HW = w; HH = h; const d = Math.min(devicePixelRatio || 1, 2); hudC.width = Math.round(w * d); hudC.height = Math.round(h * d);
+}
+
+function pitchTex() {
+  return cTex(1024, 2048, (c, w, h) => {
+    const PW = 58, PL = 88; c.setTransform(w / PW, 0, 0, h / PL, w / 2, h / 2);
+    for (let z = -PL / 2, i = 0; z < PL / 2; z += 5, i++) { c.fillStyle = i % 2 ? '#2f9a43' : '#37ac4d'; c.fillRect(-PW / 2, z, PW, 5.02); }
+    c.fillStyle = 'rgba(0,50,0,.07)'; for (let i = 0; i < 7000; i++) c.fillRect((Math.random() - .5) * PW, (Math.random() - .5) * PL, .13, .13);
+    c.strokeStyle = '#fff'; c.lineWidth = .17; c.lineCap = 'round';
+    c.strokeRect(-WX, -WZ, WX * 2, WZ * 2);
+    c.beginPath(); c.moveTo(-WX, 0); c.lineTo(WX, 0); c.stroke();
+    c.beginPath(); c.arc(0, 0, 5.5, 0, TAU); c.stroke(); c.fillStyle = '#fff'; c.beginPath(); c.arc(0, 0, .3, 0, TAU); c.fill();
+    for (const s of [-1, 1]) {
+      c.strokeRect(-10, s > 0 ? WZ - 9 : -WZ, 20, 9); c.strokeRect(-6, s > 0 ? WZ - 3.5 : -WZ, 12, 3.5);
+      c.beginPath(); c.arc(0, s * (WZ - 7), .3, 0, TAU); c.fill();
+      c.beginPath(); c.arc(0, s * (WZ - 7), 5.2, s > 0 ? Math.PI * 1.22 : Math.PI * .22, s > 0 ? Math.PI * 1.78 : Math.PI * .78); c.stroke();
+    }
+  });
+}
+function crowdTex() {
+  const cols = ['#e63946', '#1f6bff', '#f2f2f2', '#ffd23f', '#3ddc84', '#ff9a1a', '#7a4cff'], sk = ['#f2c7a0', '#d9a070', '#8d5a3a', '#c68642'];
+  return cTex(512, 256, (c, w, h) => {
+    c.fillStyle = '#10141f'; c.fillRect(0, 0, w, h);
+    for (let y = 6; y < h; y += 13) for (let x = ((y / 13) % 2) * 7; x < w; x += 14) { c.fillStyle = cols[(Math.random() * cols.length) | 0]; c.fillRect(x, y + 5, 11, 9); c.fillStyle = sk[(Math.random() * 4) | 0]; c.beginPath(); c.arc(x + 5.5, y + 2.5, 3.8, 0, TAU); c.fill(); }
+  }, true);
+}
+function adTex() {
+  const cols = ['#e63946', '#1f6bff', '#ffd23f', '#3ddc84', '#ff9a1a'], names = ['FOOTBALL', 'JOYSTIK', 'GOAL!', 'ARCADE', 'PLAY ON'];
+  return cTex(1024, 64, (c, w, h) => { for (let i = 0; i < 5; i++) { c.fillStyle = cols[i]; c.fillRect(i * 204.8, 0, 205, h); c.fillStyle = i === 2 ? '#222' : '#fff'; c.font = 'bold 40px Bungee, Impact, sans-serif'; c.textAlign = 'center'; c.fillText(names[i], i * 204.8 + 102, 46); } }, true);
+}
+function netTex() { return cTex(64, 64, (c, w, h) => { c.strokeStyle = 'rgba(255,255,255,.75)'; c.lineWidth = 2; c.strokeRect(0, 0, w, h); }, true); }
+function blobTex() { return cTex(64, 64, (c, w, h) => { const g = c.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, 'rgba(0,0,0,.5)'); g.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = g; c.fillRect(0, 0, w, h); }); }
+let BLOB = null;
+function blob(r) { const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 2, r * 2), new THREE.MeshBasicMaterial({ map: BLOB, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.y = .03; return m; }
+
+function buildWorld() {
+  BLOB = blobTex();
+  const pitch = new THREE.Mesh(new THREE.PlaneGeometry(58, 88), new THREE.MeshLambertMaterial({ map: pitchTex() })); pitch.rotation.x = -Math.PI / 2; scene.add(pitch);
+  const out = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), new THREE.MeshLambertMaterial({ color: 0x15241a })); out.rotation.x = -Math.PI / 2; out.position.y = -.05; scene.add(out);
+  // boards with adverts (end boards leave the goal open)
+  const ad = adTex();
+  function board(len, x, z, ry) { const t = ad.clone(); t.needsUpdate = true; t.repeat.set(len / 12, 1); const m = new THREE.Mesh(new THREE.BoxGeometry(len, 1.3, .35), new THREE.MeshLambertMaterial({ map: t })); m.position.set(x, .65, z); m.rotation.y = ry; scene.add(m); }
+  for (const s of [-1, 1]) {
+    board(WZ * 2 + .7, s * (WX + .2), 0, Math.PI / 2);
+    const seg = WX - GW / 2; for (const sx of [-1, 1]) board(seg, sx * (GW / 2 + seg / 2), s * (WZ + .2), 0);
+  }
+  // goals
+  const nt = netTex();
+  function goalFrame(s) {
+    const g = new THREE.Group(); g.position.z = s * WZ; const w = mat(0xffffff);
+    for (const sx of [-1, 1]) { const p = cyl(.1, .1, GHT, w); p.position.set(sx * GW / 2, GHT / 2, 0); g.add(p); const b = cyl(.06, .06, GHT, w); b.position.set(sx * GW / 2, GHT / 2, s * GDP); g.add(b); const t = cyl(.05, .05, GDP, w); t.rotation.x = Math.PI / 2; t.position.set(sx * GW / 2, GHT, s * GDP / 2); g.add(t); }
+    const bar = cyl(.1, .1, GW + .2, w); bar.rotation.z = Math.PI / 2; bar.position.y = GHT; g.add(bar);
+    function netPlane(pw, ph, x, y, z, rx, ry) { const t = nt.clone(); t.needsUpdate = true; t.repeat.set(pw / .45, ph / .45); const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: .55, side: THREE.DoubleSide, depthWrite: false })); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); g.add(m); }
+    netPlane(GW, GHT, 0, GHT / 2, s * GDP, 0, 0);
+    for (const sx of [-1, 1]) netPlane(GDP, GHT, sx * GW / 2, GHT / 2, s * GDP / 2, 0, Math.PI / 2);
+    netPlane(GW, GDP, 0, GHT, s * GDP / 2, Math.PI / 2, 0);
+    scene.add(g);
+  }
+  goalFrame(1); goalFrame(-1);
+  // stands full of fans
+  const crowd = crowdTex(), a = 35 * Math.PI / 180, nrm = [-Math.sin(a), Math.cos(a)];
+  function stand(len, side, end) {
+    const t = crowd.clone(); t.needsUpdate = true; t.repeat.set(len / 9, 1.6);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 17), new THREE.MeshBasicMaterial({ map: t, color: 0xb8b8c8 }));
+    const base = (end ? WZ + 6 : WX + 2), c = base + 8.5 * Math.cos(a), y = 1.2 + 8.5 * Math.sin(a);
+    if (!end) { m.position.set(side * c, y, 0); m.lookAt(side * (c + nrm[0]), y + nrm[1], 0); } else { m.position.set(0, y, side * c); m.lookAt(0, y + nrm[1], side * (c + nrm[0])); }
+    scene.add(m);
+  }
+  for (const s of [-1, 1]) { stand(WZ * 2 + 30, s, false); stand(WX * 2 + 30, s, true); }
+  // floodlight towers
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const pole = cyl(.4, .6, 24, mat(0x30343e)); pole.position.set(sx * (WX + 10), 12, sz * (WZ + 9)); scene.add(pole);
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(7, 3, .6), new THREE.MeshBasicMaterial({ color: 0xfff6d8 })); lamp.position.set(sx * (WX + 10), 24.5, sz * (WZ + 9)); lamp.lookAt(0, 8, 0); scene.add(lamp);
+  }
+}
+
+// the players: big, chunky, with a number on the back
+const numTexC = {};
+function numMat(n) { return numTexC[n] || (numTexC[n] = new THREE.MeshBasicMaterial({ map: cTex(128, 128, (c, w, h) => { c.font = 'bold 100px Bungee, Impact, sans-serif'; c.textAlign = 'center'; c.lineWidth = 9; c.strokeStyle = '#111'; c.strokeText(n, 64, 100); c.fillStyle = '#fff'; c.fillText(n, 64, 100); }), transparent: true })); }
+function mkPlayer(team, role, num) {
+  const kit = role === 'g' ? (team === 0 ? { j: 0xffd23f, s: 0x1b1b1b, k: 0xffd23f } : { j: 0x2fd070, s: 0x1b1b1b, k: 0x2fd070 }) : (team === 0 ? { j: 0x1f6bff, s: 0xffffff, k: 0x1f6bff } : { j: 0xe63946, s: 0x222222, k: 0xe63946 });
+  const skin = [0xf2c7a0, 0xd9a070, 0x8d5a3a, 0xc68642, 0x5a3a26][num % 5], hair = [0x2a1a0e, 0x111111, 0xb98a3a, 0x6b3a1c, 0xd8c070][(num * 3) % 5];
+  const root = new THREE.Group(), body = new THREE.Group(); root.add(body); root.scale.setScalar(PS);
+  const legs = [], arms = [];
+  for (const sx of [-1, 1]) {
+    const lg = new THREE.Group(); lg.position.set(sx * .14, .92, 0);
+    const sh = cyl(.125, .11, .36, mat(kit.s)); sh.position.y = -.16; lg.add(sh);
+    const sock = cyl(.085, .075, .5, mat(kit.k), 8); sock.position.y = -.6; lg.add(sock);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(.15, .11, .32), mat(0x101010)); boot.position.set(0, -.88, .07); lg.add(boot);
+    body.add(lg); legs.push(lg);
+    const ag = new THREE.Group(); ag.position.set(sx * .38, 1.55, 0);
+    const up = cyl(.09, .08, .3, mat(kit.j), 8); up.position.y = -.14; ag.add(up);
+    const fo = cyl(.07, .06, .3, mat(role === 'g' ? kit.j : skin), 8); fo.position.y = -.4; ag.add(fo);
+    const hand = sph(role === 'g' ? .13 : .075, mat(role === 'g' ? 0xff7a1a : skin), 8, 6); hand.position.y = -.58; ag.add(hand);
+    body.add(ag); arms.push(ag);
+  }
+  const torso = cyl(.3, .24, .66, mat(kit.j), 12); torso.position.y = 1.28; torso.scale.z = .78; body.add(torso);
+  const trim = cyl(.305, .305, .06, mat(0xffffff), 12); trim.position.y = 1.58; trim.scale.z = .78; body.add(trim);
+  const neck = cyl(.07, .08, .1, mat(skin), 8); neck.position.y = 1.62; body.add(neck);
+  const head = sph(.2, mat(skin), 14, 12); head.position.y = 1.74; body.add(head);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(.212, 14, 10, 0, TAU, 0, 1.95), mat(hair)); cap.position.set(0, 1.755, -.025); body.add(cap);
+  for (const sx of [-1, 1]) { const e = sph(.03, mat(0x111111), 6, 5); e.position.set(sx * .075, 1.77, .185); body.add(e); }
+  const bn = new THREE.Mesh(new THREE.PlaneGeometry(.36, .36), numMat(num)); bn.position.set(0, 1.3, -.245); bn.rotation.y = Math.PI; body.add(bn);
+  const fn = new THREE.Mesh(new THREE.PlaneGeometry(.16, .16), numMat(num)); fn.position.set(.12, 1.42, .245); body.add(fn);
+  const sh = blob(.85); root.add(sh);
+  return { root, body, legs, arms };
+}
+
+let P = [], ball = null, ctrl = null;
+function buildTeams() {
+  const nums = [1, 9, 7, 11, 1, 10, 8, 4];
+  for (let t = 0; t < 2; t++) for (let i = 0; i < 4; i++) {
+    const p = { team: t, role: i === 0 ? 'g' : 'f', i, x: 0, z: 0, vx: 0, vz: 0, h: t === 0 ? 0 : Math.PI, sp: 0, ph: Math.random() * 6, kick: 0, tk: 0, stun: 0, lunge: 0, dive: 0, dd: 0, cel: 0, hold: 0, think: 0, dph: 0, home: { x: 0, z: 0 }, mesh: mkPlayer(t, i === 0 ? 'g' : 'f', nums[t * 4 + i]) };
+    scene.add(p.mesh.root); P.push(p);
+  }
+  const bt = cTex(256, 128, (c, w, h) => { c.fillStyle = '#fafafa'; c.fillRect(0, 0, w, h); c.fillStyle = '#16161c'; for (let i = 0; i < 14; i++) { const x = (i % 7) * 40 + (i < 7 ? 12 : 32), y = i < 7 ? 34 : 92; c.beginPath(); for (let k = 0; k < 5; k++) { const a = k / 5 * TAU - 1.57; c.lineTo(x + Math.cos(a) * 15, y + Math.sin(a) * 15); } c.fill(); } });
+  const bm = new THREE.Mesh(new THREE.SphereGeometry(BR, 18, 14), new THREE.MeshLambertMaterial({ map: bt, emissive: 0x303030 }));
+  const bs = blob(.6); scene.add(bm, bs);
+  ball = { x: 0, y: BR, z: 0, vx: 0, vy: 0, vz: 0, owner: null, cd: 0, target: null, last: null, mesh: bm, shadow: bs };
+}
+const HOME = [[0, -33.4], [0, -5], [-10, -14], [10, -14]];
+function homeOf(t, i) { const h = HOME[i]; return t === 0 ? { x: h[0], z: h[1] } : { x: -h[0], z: -h[1] }; }
+
+// ---------------------------------------------------------------- the match
+let state = 'title', T = 0, clock = MATCH, ot = false, goals = [0, 0], charge = 0, view = 0, camH = 0, camSnap = true, kt = 0, gt = 0, swT = 0, banner = null, best = K.best('football'), lastScorer = -1;
+function setBanner(t, sub, d) { banner = { t, sub: sub || '', l: d, L: d }; }
+function hudSet() { K.set('score', 'YOU ' + goals[0] + ' – ' + goals[1] + ' CPU'); const c = Math.max(0, Math.ceil(clock)); K.set('clock', ot ? 'GOLDEN GOAL' : Math.floor(c / 60) + ':' + String(c % 60).padStart(2, '0')); }
+function kickoff() {
+  for (const p of P) { p.home = homeOf(p.team, p.i); p.x = p.home.x; p.z = p.home.z; if (p.team === 1 && p.i === 1) p.z = 4.5; if (p.team === 0 && p.i === 1) p.z = -4; p.vx = p.vz = p.sp = 0; p.h = p.team === 0 ? 0 : Math.PI; p.stun = 0; p.lunge = 0; p.dive = 0; p.cel = 0; p.hold = 0; p.kick = 0; }
+  Object.assign(ball, { x: 0, y: BR, z: 0, vx: 0, vy: 0, vz: 0, owner: null, cd: 0, target: null, last: null });
+  ctrl = P[1]; camSnap = true; charge = 0; state = 'kick';
+  { const k = lastScorer === 0 ? P[5] : P[1]; k.z = k.team === 0 ? -2 : 2; k.x = 0; ball.owner = k; ball.last = k; if (k.team === 0) ctrl = k; } kt = 1.5; hudSet(); setBanner(ot ? 'GOLDEN GOAL' : 'KICK OFF', '', 1.3);
+}
+function startMatch() { goals = [0, 0]; clock = MATCH; ot = false; kickoff(); K.tune([523, 659, 784], .08, { type: 'triangle' }); }
+
+// ---- kicking
+function aimGoal(p, bx, bz) {
+  const dir = p.team === 0 ? 1 : -1, gz = dir * WZ, cz = Math.cos(p.h);
+  if (cz * dir > 0.05) { const xh = bx + Math.sin(p.h) / cz * (gz - bz); if (Math.abs(xh) < GW / 2 + 4) return Math.atan2(clamp(xh, -(GW / 2 - .7), GW / 2 - .7) - bx, gz - bz); }
+  return p.h;
+}
+function release(p) { ball.owner = null; ball.cd = .3; ball.last = p; ball.target = null; }
+function shootBall(p, c, cpuX) {
+  const bx = ball.x, bz = ball.z; let ang = p.h;
+  if (cpuX != null) ang = Math.atan2(cpuX - bx, (p.team === 0 ? WZ : -WZ) - bz); else ang = aimGoal(p, bx, bz);
+  const sp = 14 + c * 21; release(p);
+  ball.vx = Math.sin(ang) * sp; ball.vz = Math.cos(ang) * sp; ball.vy = .5 + c * c * 5.5; p.kick = .3;
+  K.noise(.07, .1 + c * .12); K.beep(150 - c * 40, .12, { type: 'triangle', to: 70, vol: .09 });
+  if (c > .6) pop(p.team === 0 ? 'POWER!' : '');
+}
+function passTo(p, tm) {
+  const d = Math.hypot(tm.x - ball.x, tm.z - ball.z), lead = clamp(d / 18, .1, .8), sp = clamp(8 + d * .85, 11, 25);
+  const tx = tm.x + tm.vx * lead, tz = tm.z + tm.vz * lead, dd = Math.hypot(tx - ball.x, tz - ball.z) || 1;
+  release(p); ball.vx = (tx - ball.x) / dd * sp; ball.vz = (tz - ball.z) / dd * sp; ball.vy = d > 14 ? 2.4 : .3; ball.target = tm; p.kick = .25;
+  K.beep(330, .06, { type: 'triangle', vol: .07 }); K.noise(.04, .08);
+}
+function humanPass(p) {
+  let best = null, bs = -9;
+  for (const tm of P) { if (tm.team !== p.team || tm === p || tm.role === 'g') continue; const d = dist2(tm, ball); if (d < 3 || d > 32) continue; const a = Math.abs(adiff(p.h, Math.atan2(tm.x - p.x, tm.z - p.z))); if (a > 1.1) continue; const s = Math.cos(a) * 1.3 - d / 50; if (s > bs) { bs = s; best = tm; } }
+  if (best) { passTo(p, best); ctrl = best; } else { release(p); ball.vx = Math.sin(p.h) * 13; ball.vz = Math.cos(p.h) * 13; ball.vy = .3; p.kick = .25; K.beep(300, .06, { type: 'triangle' }); }
+}
+function tackle(p) { if (p.tk > 0 || p.stun > 0) return; p.lunge = .38; p.tk = .8; K.noise(.1, .1); }
+let popT = null;
+function pop(t) { if (t) popT = { t, l: 1 }; }
+
+// ---- player movement
+function drive(p, sp, dt, accel) { p.sp += clamp(sp - p.sp, -42 * dt, (accel || 26) * dt); p.vx = Math.sin(p.h) * p.sp; p.vz = Math.cos(p.h) * p.sp; }
+function aiMove(p, tx, tz, spd, dt) {
+  const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz), want = Math.atan2(dx, dz), da = adiff(p.h, want);
+  p.h += clamp(da, -7 * dt, 7 * dt);
+  const s = spd * clamp(d / 1.6, 0, 1) * (Math.abs(da) < 1.2 ? 1 : .35); drive(p, s, dt, 22);
+}
+function human(dt) {
+  const p = ctrl, st = K.stick;
+  const kx = (K.down('right') ? 1 : 0) - (K.down('left') ? 1 : 0), ky = (K.down('up') ? 1 : 0) - (K.down('down') ? 1 : 0);
+  const mx = clamp(Math.abs(st.x) > .12 ? st.x : kx, -1, 1), my = clamp(Math.abs(st.y) > .12 ? -st.y : ky, -1, 1);
+  if (p.stun <= 0) p.h -= mx * (2.5 + (my < .25 ? 1.1 : 0)) * dt;
+  if (p.lunge > 0) { drive(p, 12, dt, 80); }
+  else if (p.stun > 0) drive(p, 0, dt, 20);
+  else { const sprint = K.down('c'); drive(p, my > 0 ? my * (sprint ? SPR : RUN) : my * 3.4, dt); }
+  const own = ball.owner === p;
+  if (own) { if (K.down('a')) charge = Math.min(1, charge + dt / .85); else if (charge > 0) { shootBall(p, charge); charge = 0; } if (K.hit('b')) humanPass(p); }
+  else { charge = 0; if (K.hit('a')) tackle(p); if (K.hit('b')) switchNear(true); }
+  if (K.hit('v')) { view = 1 - view; camSnap = true; }
+}
+function nearestMine() { let b = null, bd = 1e9; for (let i = 1; i < 4; i++) { const d = dist2(P[i], ball); if (d < bd) { bd = d; b = P[i]; } } return b; }
+function switchNear(force) {
+  const n = nearestMine(); if (n && n !== ctrl && (force || dist2(ctrl, ball) - dist2(n, ball) > 3.5)) { ctrl = n; swT = .5; K.beep(700, .05, { type: 'triangle', vol: .05 }); }
+}
+
+// ---- CPU and teammates
+function nearestOpp(p) { let b = null, bd = 1e9; for (const o of P) { if (o.team === p.team || o.role === 'g') continue; const d = dist2(o, p); if (d < bd) { bd = d; b = o; } } return { o: b, d: bd }; }
+function aiPlayer(p, dt) {
+  const dir = p.team === 0 ? 1 : -1, gz = dir * WZ, own = ball.owner === p, base = p.team === 0 ? CPU_RUN : CPU_RUN, chaseSp = CPU_CHASE;
+  p.think -= dt;
+  if (own) {
+    const { o, d } = nearestOpp(p); let tx = Math.sin(T * .9 + p.i * 2.1) * 8, tz = gz - dir * 3;
+    if (o && d < 5.5 && (o.z - p.z) * dir > -1) tx = p.x + (p.x - o.x >= 0 ? 1 : -1) * 9;
+    aiMove(p, clamp(tx, -WX + 3, WX - 3), tz, base + .6, dt);
+    const gd = Math.hypot(p.x, gz - p.z), gk = P[(1 - p.team) * 4];
+    if (gd < 22 && Math.random() < dt * 2.4) { const side = gk.x > 0 ? -1 : 1; shootBall(p, rnd(.5, 1), side * rnd(1.8, 4.3)); return; }
+    if (d < 3.2 && p.think <= 0) {
+      let b = null, bs = -9; for (const tm of P) { if (tm.team !== p.team || tm === p || tm.role === 'g') continue; const dd = dist2(tm, p), prog = (tm.z - p.z) * dir; if (dd < 5 || dd > 24 || prog < -3) continue; const s = prog / 20 - dd / 60 + Math.random() * .3; if (s > bs) { bs = s; b = tm; } }
+      if (b) { passTo(p, b); if (p.team === 0 && b !== P[0]) ctrl = ctrl === p ? b : ctrl; } p.think = 1.1;
+    }
+    return;
+  }
+  const mates = P.filter(m => m.team === p.team && m.role === 'f' && m !== ctrl);
+  const loose = !ball.owner || ball.owner.team !== p.team;
+  let chaser = null, cd = 1e9; for (const m of mates) { const d = dist2(m, ball); if (d < cd) { cd = d; chaser = m; } }
+  if (loose && chaser === p && !(p.team === 0 && dist2(ctrl, ball) + 4 < cd)) {
+    const bo = ball.owner; const tx = bo ? bo.x + Math.sin(bo.h) * 1.5 : ball.x + ball.vx * .25, tz = bo ? bo.z + Math.cos(bo.h) * 1.5 : ball.z + ball.vz * .25; aiMove(p, tx, tz, chaseSp, dt);
+  } else if (!loose && ball.owner !== p) {
+    const bo = ball.owner, side = p.home.x < 0 ? -1 : 1; aiMove(p, clamp(bo.x + side * 9, -WX + 3, WX - 3), clamp(bo.z + dir * (6 + p.i * 3), -WZ + 8, WZ - 8), base, dt);
+  } else {
+    aiMove(p, clamp(p.home.x + ball.x * .3, -WX + 3, WX - 3), clamp(p.home.z * .55 + ball.z * .45, -WZ + 4, WZ - 4), base, dt);
+  }
+}
+function keeper(g, dt) {
+  const sg = g.team === 0 ? -1 : 1, lineZ = sg * (WZ - 1.4);
+  if (ball.owner === g) {
+    g.hold -= dt; g.sp = 0; g.vx = g.vz = 0; g.h += adiff(g.h, sg > 0 ? Math.PI : 0) * Math.min(1, dt * 6);
+    if (g.hold <= 0) { let tm = null, bd = 1e9; for (const m of P) { if (m.team === g.team && m.role === 'f') { const d = Math.abs(m.z - g.z); if (d < bd && d > 10) { bd = d; tm = m; } } } tm = tm || P[g.team * 4 + 1]; passTo(g, tm); ball.vy = 3; if (g.team === 0) ctrl = tm; }
+    return;
+  }
+  let tx = clamp(ball.x * .4, -GW / 2 + 1, GW / 2 - 1), thr = false, tt = 9;
+  if (!ball.owner && ball.vz * sg > 2) { tt = (lineZ - ball.z) / ball.vz; if (tt > 0 && tt < 2.2) { if (!g.thr) g.err = rnd(-2.6, 2.6); tx = clamp(ball.x + ball.vx * tt + g.err, -GW / 2 + .2, GW / 2 - .2); thr = true; } }
+  g.thr = thr;
+  const bd = Math.abs(ball.z - sg * WZ), adv = thr ? 0 : clamp((26 - bd) / 26, 0, 1) * 2.4, tz = lineZ - sg * adv;
+  if (g.dive > 0) { g.dive -= dt; g.x += g.dd * 7.5 * dt; }
+  else {
+    const dx = tx - g.x, need = Math.abs(dx);
+    if (thr && tt < .5 && need > 1.3 && Math.abs(ball.vz) > 12) { g.dive = .55; g.dd = Math.sign(dx); }
+    g.x += clamp(dx, -4.8 * dt, 4.8 * dt);
+  }
+  g.x = clamp(g.x, -GW / 2 - .3, GW / 2 + .3); g.z += clamp(tz - g.z, -5 * dt, 5 * dt); g.vx = g.vz = 0; g.h += adiff(g.h, sg > 0 ? Math.PI : 0) * Math.min(1, dt * 8);
+  // save or parry
+  g.missT = (g.missT || 0) - dt;
+  if (!ball.owner && ball.cd <= 0 && g.missT <= 0) {
+    const dd = Math.hypot(g.x - ball.x, g.z - ball.z, (ball.y - 1.0) * .8);
+    if (dd < 1.6 && ball.y < GHT + .2) {
+      const s = Math.hypot(ball.vx, ball.vz);
+      if (s > 8 && Math.random() > clamp(1.35 - s / 32, .5, 1)) { g.missT = .5; return; }
+      if (s < 5 || Math.random() < clamp(1.1 - s / 36, .2, .9) * .93) { ball.owner = g; ball.last = g; ball.target = null; g.hold = .9; K.beep(220, .08, { type: 'triangle' }); setBanner('SAVE!', '', .8); }
+      else { ball.vz = -sg * rnd(4, 9); ball.vx = rnd(-7, 7); ball.vy = rnd(2, 5); ball.cd = .45; ball.last = g; K.noise(.1, .18); setBanner('SAVE!', '', .8); }
+    }
+  }
+}
+
+// ---- the ball
+function ballStep(dt) {
+  const b = ball, o = b.owner;
+  if (o) {
+    if (o.role === 'g') { b.x = o.x + Math.sin(o.h) * .55; b.z = o.z + Math.cos(o.h) * .55; b.y = 1.05; b.vx = b.vy = b.vz = 0; }
+    else {
+      o.dph += Math.abs(o.sp) * dt * 1.55; const f = 1.85 + .85 * Math.sin(o.dph), lat = .5, fx = Math.sin(o.h), fz = Math.cos(o.h);
+      b.x = clamp(o.x + fx * f - fz * lat, -WX + BR, WX - BR); b.z = clamp(o.z + fz * f + fx * lat, -WZ + BR, WZ - BR);
+      b.y = BR + Math.abs(Math.sin(o.dph + 1.57)) * .12 * Math.min(1, Math.abs(o.sp) / 5); b.vx = o.vx; b.vz = o.vz; b.vy = 0; b.last = o;
+    }
+    return;
+  }
+  b.cd -= dt; b.vy -= GRAV * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+  if (b.y < BR) {
+    b.y = BR;
+    if (b.vy < -1.4) { b.vy = -b.vy * .58; if (b.vy > 2) K.beep(110, .05, { type: 'sine', vol: .08 }); } else b.vy = 0;
+    const s = Math.hypot(b.vx, b.vz), ns = Math.max(0, s * Math.exp(-.45 * dt) - 1.5 * dt); if (s > 0) { b.vx *= ns / s; b.vz *= ns / s; }
+  } else { const k = Math.exp(-.1 * dt); b.vx *= k; b.vz *= k; }
+  // side walls
+  if (b.x > WX - BR) { b.x = WX - BR; b.vx = -Math.abs(b.vx) * .62; wall(); } else if (b.x < -WX + BR) { b.x = -WX + BR; b.vx = Math.abs(b.vx) * .62; wall(); }
+  const az = Math.abs(b.z), sz = Math.sign(b.z) || 1, inMouth = Math.abs(b.x) < GW / 2 && b.y < GHT;
+  if (az > WZ) {
+    // inside the goal: nets all round
+    if (state === 'play' && inMouth) goal(sz > 0 ? 0 : 1);
+    if (az > WZ + GDP - BR) { b.z = sz * (WZ + GDP - BR); b.vz *= -.25; b.vx *= .5; }
+    if (Math.abs(b.x) > GW / 2 - BR) { b.x = Math.sign(b.x) * (GW / 2 - BR); b.vx *= -.3; }
+    if (b.y > GHT - BR) { b.y = GHT - BR; b.vy = -Math.abs(b.vy) * .3; }
+  } else if (az > WZ - BR && !(Math.abs(b.x) < GW / 2 && b.y < GHT - BR * .2)) { b.z = sz * (WZ - BR); b.vz = -sz * Math.abs(b.vz) * .6; wall(); if (Math.abs(b.x) < GW / 2) { K.beep(900, .12, { type: 'triangle', vol: .08 }); } }
+  // posts
+  for (const sx of [-1, 1]) { const px = sx * GW / 2, dx = b.x - px, dz = b.z - sz * WZ, d = Math.hypot(dx, dz); if (d < BR + .1 && b.y < GHT) { const nx = dx / d, nz = dz / d, dv = b.vx * nx + b.vz * nz; if (dv < 0) { b.vx -= 1.7 * dv * nx; b.vz -= 1.7 * dv * nz; K.beep(1100, .1, { type: 'triangle', vol: .1 }); } b.x = px + nx * (BR + .12); b.z = sz * WZ + nz * (BR + .12); } }
+  // roll the ball
+  const s = Math.hypot(b.vx, b.vz); if (s > .05 && b.y < BR + .05) { const ax = new THREE.Vector3(b.vz, 0, -b.vx).normalize(); b.mesh.rotateOnWorldAxis(ax, s * dt / BR); }
+  pickups();
+}
+function wall() { if (T - (wall.t || -1) > .1) { wall.t = T; K.beep(150, .05, { type: 'square', vol: .04 }); } }
+function pickups() {
+  const b = ball; if (b.owner || b.cd > 0 || state === 'goal' || state === 'over') return;
+  const spd = Math.hypot(b.vx, b.vz); let best = null, bd = 9;
+  for (const p of P) {
+    if (p.role === 'g' || p.stun > 0) continue; const d = Math.hypot(p.x - b.x, p.z - b.z);
+    if (d < 1.4 && b.y < 1.7 && d < bd) { bd = d; best = p; }
+  }
+  if (!best) return;
+  if (spd > 17 && best !== b.target && Math.random() < .5) { b.vx *= .6; b.vz *= .6; b.vy = rnd(1, 3); b.vx += rnd(-4, 4); b.cd = .2; K.beep(260, .05, { type: 'triangle', vol: .06 }); return; }
+  b.owner = best; b.last = best; b.target = null; K.beep(520, .03, { type: 'triangle', vol: .04 });
+}
+function contests(dt) {
+  const o = ball.owner; if (!o || o.role === 'g') return;
+  for (const p of P) {
+    if (p.team === o.team || p.role === 'g' || p.stun > 0) continue; const d = Math.hypot(p.x - ball.x, p.z - ball.z);
+    if (p.lunge > 0 && d < 1.9 && Math.random() < .16) { steal(p, o); return; }
+    if (p.team === 1 && d < 1.2 && Math.random() < 1.7 * dt) { steal(p, o); return; }
+    if (p.team === 0 && p !== ctrl && d < 1.2 && Math.random() < 1.2 * dt) { steal(p, o); return; }
+    if (p === ctrl && d < 1.0 && Math.random() < 1.6 * dt) { steal(p, o); return; }
+  }
+}
+function steal(p, from) { ball.owner = p; ball.last = p; ball.cd = .15; from.stun = .5; from.sp *= .3; p.lunge = 0; K.noise(.08, .12); K.beep(240, .08, { type: 'sawtooth', vol: .06 }); if (p.team === 0 && p.role === 'f') ctrl = p; }
+
+function goal(team) {
+  if (state !== 'play') return; goals[team]++; lastScorer = team; state = 'goal'; gt = 3; hudSet();
+  setBanner(team === 0 ? 'GOAL!' : 'CPU SCORES', goals[0] + ' – ' + goals[1], 2.6);
+  for (const p of P) if (p.team === team) p.cel = 3;
+  K.noise(.5, .3); K.tune(team === 0 ? [523, 659, 784, 1047, 1319, 1568] : [330, 262, 220], .1, { type: 'square', vol: .07 });
+}
+function endMatch() {
+  state = 'over'; const win = goals[0] > goals[1], draw = goals[0] === goals[1]; const score = goals[0] * 100 + (win ? 500 : draw ? 200 : 0);
+  const b = K.saveBest('football', score); best = Math.max(best, b);
+  setBanner('FULL TIME', goals[0] + ' – ' + goals[1], 1.8); K.tune(win ? [523, 659, 784, 1047] : [392, 330, 262, 196], .14, { type: 'triangle' });
+  setTimeout(() => K.card({ title: win ? 'YOU WIN!' : draw ? 'DRAW' : 'YOU LOSE', text: 'Final score ' + goals[0] + ' – ' + goals[1] + '. Match score ' + score + ' (100 a goal, 500 for a win).', best: 'BEST ' + best, button: 'Play again', onStart: startMatch }), 1900);
+}
+
+function update(dt) {
+  T += dt; if (banner) { banner.l -= dt; if (banner.l <= 0) banner = null; } if (popT) { popT.l -= dt; if (popT.l <= 0) popT = null; }
+  if (state === 'title') { for (const p of P) p.mesh.root.position.set(p.x, 0, p.z); return; }
+  swT -= dt;
+  if (state === 'kick') { kt -= dt; if (kt <= 0) { state = 'play'; K.beep(1500, .35, { type: 'sine', vol: .1 }); setBanner('', '', 0); } }
+  if (state === 'goal') { gt -= dt; if (gt <= 0) { if (ot) { endMatch(); return; } kickoff(); } }
+  const live = state === 'play';
+  if (live) {
+    if (!ot) { clock -= dt; if (clock <= 0) { clock = 0; if (goals[0] === goals[1]) { ot = true; setBanner('GOLDEN GOAL', 'Next goal wins', 1.6); } else { hudSet(); endMatch(); return; } } }
+    hudSet();
+    if (ball.owner && ball.owner.team === 0 && ball.owner.role === 'f') ctrl = ball.owner; else if (swT <= 0 && (!ball.owner || ball.owner.team === 1)) switchNear(false);
+    human(dt);
+    for (const p of P) { if (p === ctrl) continue; if (p.role === 'g') keeper(p, dt); else aiPlayer(p, dt); }
+    contests(dt);
+  } else if (state === 'goal' || state === 'over') { for (const p of P) { if (p.role !== 'g') drive(p, 0, dt, 12); } }
+  else { for (const p of P) { p.sp = 0; p.vx = p.vz = 0; } }
+  for (const p of P) {
+    p.x += p.vx * dt; p.z += p.vz * dt; p.stun -= dt; p.tk -= dt; p.kick -= dt; p.cel -= dt; if (p.lunge > 0) { p.lunge -= dt; if (p.lunge <= 0) p.stun = Math.max(p.stun, .4); }
+    const mx = WX - .8, mz = WZ - .8; if (p.role === 'g') { p.z = clamp(p.z, -WZ + .5, WZ - .5); } else { p.x = clamp(p.x, -mx, mx); p.z = clamp(p.z, -mz, mz); }
+  }
+  for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) { const a = P[i], c = P[j], dx = c.x - a.x, dz = c.z - a.z, d = Math.hypot(dx, dz); if (d < 1.25 && d > 0) { const o = (1.25 - d) / 2, nx = dx / d, nz = dz / d; a.x -= nx * o; a.z -= nz * o; c.x += nx * o; c.z += nz * o; } }
+  ballStep(dt);
+}
+
+// ---------------------------------------------------------------- drawing
+function pose(p, dt) {
+  const m = p.mesh, sp = Math.abs(p.sp), run = clamp(sp / 7, 0, 1.3);
+  p.ph += sp * dt * 1.9; const sw = Math.sin(p.ph) * .85 * run;
+  m.root.position.set(p.x, 0, p.z); m.root.rotation.y = p.h;
+  m.legs[0].rotation.x = sw; m.legs[1].rotation.x = -sw;
+  if (p.kick > 0) m.legs[1].rotation.x = -1.5 * Math.sin(clamp(p.kick / .3, 0, 1) * Math.PI);
+  if (p.cel > 0) { m.arms[0].rotation.x = m.arms[1].rotation.x = -3; m.arms[0].rotation.z = .3; m.arms[1].rotation.z = -.3; m.root.position.y = Math.abs(Math.sin(T * 9 + p.i)) * .35; }
+  else if (p.role === 'g') { const a = p.dive > 0 ? -2.6 : -.6 + Math.sin(T * 3) * .1; m.arms[0].rotation.x = m.arms[1].rotation.x = a; m.arms[0].rotation.z = .5; m.arms[1].rotation.z = -.5; }
+  else { m.arms[0].rotation.x = -sw * .9; m.arms[1].rotation.x = sw * .9; m.arms[0].rotation.z = m.arms[1].rotation.z = 0; }
+  m.body.rotation.x = p.lunge > 0 ? .9 : p.stun > 0 ? .25 : run * .12; m.body.rotation.z = p.dive > 0 ? -p.dd * 1.15 : 0;
+  m.body.position.y = p.dive > 0 ? -.25 : 0;
+}
+function camUpdate(dt) {
+  const p = ctrl || P[1]; if (!p) return;
+  if (camSnap) { camH = p.h; camSnap = false; } else camH += adiff(camH, p.h) * (1 - Math.exp(-dt * 8));
+  const fx = Math.sin(camH), fz = Math.cos(camH), rx = -fz, rz = fx;
+  let cx, cy, cz, lx, ly, lz;
+  if (view === 0) { cx = p.x - fx * 3 + rx * .95; cz = p.z - fz * 3 + rz * .95; cy = HT + .3; lx = p.x + fx * 10 + rx * .95; lz = p.z + fz * 10 + rz * .95; ly = .1; camera.fov = 68; }
+  else { cx = p.x + fx * .3; cz = p.z + fz * .3; cy = 2.15; lx = p.x + fx * 8; lz = p.z + fz * 8; ly = .3; camera.fov = 78; }
+  camera.position.set(clamp(cx, -WX + .3, WX - .3), cy, clamp(cz, -WZ - 2, WZ + 2)); camera.lookAt(lx, ly, lz); camera.updateProjectionMatrix();
+}
+let slowF = [], slowSkip = 60;
+function draw(_, t) {
+  if (!renderer) return;
+  const now = performance.now(), el = draw.last ? (now - draw.last) / 1000 : .016; draw.last = now; const dt = Math.min(.05, el);
+  for (const p of P) { pose(p, dt); p.mesh.root.visible = !(view === 1 && p === ctrl && state !== 'title'); }
+  ball.mesh.position.set(ball.x, ball.y, ball.z); ball.shadow.position.set(ball.x, .03, ball.z); const sh = clamp(1 - (ball.y - BR) / 6, .3, 1); ball.shadow.scale.set(sh, sh, sh);
+  camUpdate(dt);
+  renderer.render(scene, camera); hudDraw();
+  if (state === 'play' && !document.hidden) { if (slowSkip > 0) slowSkip--; else { slowF.push(el); if (slowF.length >= 60) { const med = slowF.slice().sort((a, b) => a - b)[30]; slowF.length = 0; if (med > .03 && PR > .8) { PR = Math.max(.8, PR - .35); renderer.setPixelRatio(PR); fit(); slowSkip = 60; } } } }
+}
+const V3 = new THREE.Vector3();
+function hudDraw() {
+  const k = hudC.width / HW, c = hud; c.setTransform(k, 0, 0, k, 0, 0); c.clearRect(0, 0, HW, HH);
+  if (state === 'title' || !ctrl) return;
+  // radar: up is the way you're facing
+  const rw = 78, rh = 122, rx0 = 8, ry0 = 8, sc = rh / (WZ * 2 + 6) * 1.0, cxr = rx0 + rw / 2, cyr = ry0 + rh * .66, h = ctrl.h, sn = Math.sin(h), cs = Math.cos(h);
+  const R = (x, z) => { const dx = x - ctrl.x, dz = z - ctrl.z, f = dx * sn + dz * cs, r = -dx * cs + dz * sn; return [cxr + r * sc * 1.5, cyr - f * sc * 1.5]; };
+  c.save(); c.beginPath(); c.rect(rx0, ry0, rw, rh); c.clip(); c.fillStyle = 'rgba(8,30,14,.72)'; c.fillRect(rx0, ry0, rw, rh);
+  c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 1.2; c.beginPath(); [[-WX, -WZ], [WX, -WZ], [WX, WZ], [-WX, WZ]].forEach((q, i) => { const [x, y] = R(q[0], q[1]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.closePath(); c.stroke();
+  for (const s of [-1, 1]) { const a = R(-GW / 2, s * WZ), b = R(GW / 2, s * WZ); c.strokeStyle = s > 0 ? '#ffd23f' : '#9ad0ff'; c.lineWidth = 3; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
+  for (const p of P) { const [x, y] = R(p.x, p.z); c.fillStyle = p.team === 0 ? '#3b86ff' : '#ff4a5a'; c.beginPath(); c.arc(x, y, p === ctrl ? 4.2 : 3, 0, TAU); c.fill(); if (p === ctrl) { c.strokeStyle = '#fff'; c.lineWidth = 1.4; c.stroke(); } }
+  const [bx, by] = R(ball.x, ball.z); c.fillStyle = '#fff'; c.beginPath(); c.arc(bx, by, 2.6, 0, TAU); c.fill(); c.restore();
+  c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 1; c.strokeRect(rx0, ry0, rw, rh);
+  // arrow to the ball when it isn't on screen
+  V3.set(ball.x, ball.y, ball.z).applyMatrix4(camera.matrixWorldInverse);
+  const fwd = -V3.z, lim = fwd * Math.tan(camera.fov * Math.PI / 360) * camera.aspect * .92;
+  if (fwd < .8 || Math.abs(V3.x) > lim) { const right = V3.x >= 0, x = right ? HW - 22 : 22, y = HH * .45; c.fillStyle = 'rgba(255,255,255,.85)'; c.strokeStyle = '#111'; c.lineWidth = 2; c.beginPath(); c.moveTo(x + (right ? 14 : -14), y); c.lineTo(x - (right ? 8 : -8), y - 12); c.lineTo(x - (right ? 8 : -8), y + 12); c.closePath(); c.stroke(); c.fill(); }
+  // shot power
+  if (charge > 0) { const w = Math.min(220, HW * .5), x = (HW - w) / 2, y = HH - 22; c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(x - 3, y - 3, w + 6, 16); c.fillStyle = charge < .5 ? '#ffd23f' : charge < .9 ? '#ff9a1a' : '#ff3d52'; c.fillRect(x, y, w * charge, 10); }
+  if (banner && banner.t) {
+    const a = Math.min(1, banner.l * 3, (banner.L - banner.l) * 6); c.save(); c.globalAlpha = a; c.textAlign = 'center'; c.font = '44px Bungee, Impact, sans-serif';
+    c.lineWidth = 8; c.strokeStyle = '#052'; c.strokeText(banner.t, HW / 2, HH * .36); c.fillStyle = '#fff'; c.fillText(banner.t, HW / 2, HH * .36);
+    if (banner.sub) { c.font = '22px Bungee, Impact, sans-serif'; c.strokeText(banner.sub, HW / 2, HH * .36 + 34); c.fillStyle = '#3be07a'; c.fillText(banner.sub, HW / 2, HH * .36 + 34); } c.restore();
+  }
+  if (popT) { c.save(); c.globalAlpha = Math.min(1, popT.l * 2); c.textAlign = 'center'; c.font = '26px Bungee, Impact, sans-serif'; c.lineWidth = 6; c.strokeStyle = '#000'; c.strokeText(popT.t, HW / 2, HH * .5); c.fillStyle = '#ffd23f'; c.fillText(popT.t, HW / 2, HH * .5); c.restore(); }
+}
+
+setup();
+for (const p of P) { p.home = homeOf(p.team, p.i); p.x = p.home.x; p.z = p.home.z; }
+ctrl = P[1]; hudSet();
+K.card({ title: 'FOOTBALL', text: 'Four-a-side indoor football in 3D, seen from one foot above your player\'s head. Push the stick up to run and left or right to turn. Hold SHOOT and let go to fire: the longer you hold, the harder. PASS finds a teammate. Without the ball, SHOOT is a slide tackle and PASS switches player. SPRINT runs faster, VIEW looks through his eyes. Three minutes, golden goal if it\'s level.', best: best ? 'BEST ' + best : '', button: 'Kick off', onStart: startMatch });
+K.run(update, draw);
+window.DB = { state: () => ({ state, clock, goals, view, ctrl: ctrl && { x: +ctrl.x.toFixed(1), z: +ctrl.z.toFixed(1), h: +ctrl.h.toFixed(2) }, ball: { x: +ball.x.toFixed(1), y: +ball.y.toFixed(2), z: +ball.z.toFixed(1), own: ball.owner ? ball.owner.team + '/' + ball.owner.i : null }, PR }), start: startMatch, step: (n, dt) => { for (let i = 0; i < n; i++) update(dt); }, view: v => { view = v; camSnap = true; }, P: () => P, ball: () => ball, shoot: c => shootBall(ctrl, c) };
+</script>
+</body>
+</html>

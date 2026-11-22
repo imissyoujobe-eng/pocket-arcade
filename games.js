@@ -5,7 +5,7 @@
 // kind = how that score reads (time, cs, ms, secs, mins, par, wins, fights, cup, cash, rally, streak, level; blank = points).
 // art = optional cover picture { src, w, h } (in art/, 600 px wide, also listed in sw.js): the game's whole tile on the menu, its lettering
 // is the title. Pass the same picture to the game's start card as K.card({ ..., art: { src: '../art/...', w, h } }).
-window.ARCADE_TOTAL = 87;
+window.ARCADE_TOTAL = 88;
 window.ARCADE_GAMES = [
   { id: 'rotor-rescue', name: 'Rotor Rescue', genre: 'Shooter', tag: 'Jungle rescue missions from the cockpit', key: 'rotorrescue', art: { src: 'art/rotor-rescue.jpg', w: 600, h: 776 } },
   { id: 'river-rats', name: 'River Rats', genre: 'Shooter', tag: 'Jet boat, minigun and rockets up a jungle river', key: 'riverrats', art: { src: 'art/river-rats.jpg', w: 600, h: 600 } },
@@ -14,6 +14,7 @@ window.ARCADE_GAMES = [
   { id: 'gloom-dungeon', name: 'Gloom Dungeon', genre: 'Arcade', tag: 'Hunt the creatures by radar', store: 'best_gloom-dungeon', art: { src: 'art/gloom-dungeon.jpg', w: 600, h: 600 } },
   { id: 'rotor-strike', name: 'Rotor Strike', genre: 'Shooter', tag: 'Fly cover for a desert convoy', store: 'best_rotor-strike', art: { src: 'art/rotor-strike.jpg', w: 600, h: 600 } },
   { id: 'oval-rush', name: 'Oval Rush', genre: 'Racing', tag: 'Five laps, four cars, one flag', store: 'oval-best', kind: 'secs', art: { src: 'art/oval-rush.jpg', w: 600, h: 600 } },
+  { id: 'football', name: 'Football', genre: 'Sports', tag: '3D four-a-side, camera right over your head', key: 'football' },
   { id: 'rink-rumble', name: 'Rink Rumble', genre: 'Sports', tag: 'Three-on-three arcade hockey', store: 'best_rink-rumble', art: { src: 'art/rink-rumble.jpg', w: 600, h: 600 } },
   { id: 'block-builder', name: 'Block Builder', genre: 'Puzzle', tag: 'Stack, clear lines, drop bombs', store: 'blockbuilder-best', art: { src: 'art/block-builder.jpg', w: 600, h: 600 } },
   { id: 'bug-bloom', name: 'Bug Bloom', genre: 'Arcade', tag: 'Munch seeds, spell BLOOM', store: 'best_bug-bloom', art: { src: 'art/bug-bloom.jpg', w: 600, h: 600 } },
