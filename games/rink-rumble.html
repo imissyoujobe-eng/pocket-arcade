@@ -33,7 +33,7 @@ button:active{transform:translateY(2px)}button:focus-visible{outline:3px solid v
 <div id="app">
   <div id="hud"><div><span class="lbl" id="l1">YOU</span><span id="h1">0</span></div><div class="c"><span class="lbl" id="l2">CLOCK</span><span id="h2"></span></div><div class="r"><span class="lbl" id="l3">CPU</span><span id="h3"></span></div><div class="btns"><button class="ib" id="pz" aria-label="Pause">II</button><button class="ib" id="mu" aria-label="Sound on or off">SND</button></div></div>
   <div id="stage"><canvas id="c" width="400" height="600"></canvas>
-    <div id="overlay"><h1 class="cover"><img src="../art/rink-rumble.jpg" alt="Rink Rumble" width="600" height="600" onerror="const h=this.parentNode;h.className='';h.textContent='Rink Rumble'"></h1><p id="msg">Three-on-three arcade hockey. Outskate the red team and bury the puck in their net.</p><p class="how">Skate with the stick. Hold SHOOT to wind up and let go to fire: the longer you hold, the harder the shot (a full wind-up is a slap shot). Tap SHOOT near a carrier to check. PASS passes. Turn your phone sideways for the full rink. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
+    <div id="overlay"><h1 class="cover"><img src="../art/rink-rumble.jpg" alt="Rink Rumble" width="600" height="600" onerror="const h=this.parentNode;h.className='';h.textContent='Rink Rumble'"></h1><p id="msg">Three-on-three arcade hockey. Outskate the red team and bury the puck in their net.</p><p class="how">Skate with the stick. Hold SHOOT to wind up and let go to fire: the longer you hold, the harder the shot (a full wind-up is a slap shot). Hit CHECK near a skater to knock him down. PASS passes. Turn your phone sideways for the full rink. Keys: arrows + space.</p><p class="best" id="bestline"></p><button id="go">Play</button></div>
   </div>
 </div>
 <script>if(innerWidth>innerHeight*1.15){const c=document.getElementById('c');c.width=600;c.height=400}</script>
@@ -53,7 +53,7 @@ function jingle(notes,step=.09,type='square',v=.05){notes.forEach((n,i)=>setTime
 const keys={};
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=1;if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();if(state!=='play'&&k==='enter')startGame();if(k==='p'&&(state==='play'||state==='paused'))togglePause()});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0});
-let joy=null,fireId=null,prevPass=false;const coarse=matchMedia('(pointer:coarse)').matches;
+let joy=null,fireId=null,prevPass=false,prevCheck=false;const coarse=matchMedia('(pointer:coarse)').matches;
 function cpos(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*CW,y:(e.clientY-r.top)/r.height*CH}}
 cv.addEventListener('pointerdown',e=>{const p=cpos(e);try{cv.setPointerCapture(e.pointerId)}catch(_){}if((p.x<CW*.55||!ACTION_LABEL)&&!joy)joy={id:e.pointerId,x0:p.x,y0:p.y,x:p.x,y:p.y};else{fireId=e.pointerId;tapPt=p}e.preventDefault()});
 cv.addEventListener('pointermove',e=>{if(joy&&e.pointerId===joy.id){const p=cpos(e);joy.x=p.x;joy.y=p.y;const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>55){joy.x0=joy.x-dx/m*55;joy.y0=joy.y-dy/m*55}}});
@@ -63,7 +63,7 @@ let tapPt=null;const inp={x:0,y:0,fire:false,fireTap:false,up:false,upTap:false}
 function readInput(){let x=0,y=0;if(keys.arrowleft||keys.a)x--;if(keys.arrowright||keys.d)x++;if(keys.arrowup||keys.w)y--;if(keys.arrowdown||keys.s)y++;
  if(joy){const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy);if(m>7){const k=Math.min(1,m/38);x=dx/m*k;y=dy/m*k}}
  if(ROT){const t=x;x=y;y=-t} // the rink is turned a quarter turn sideways, so screen right = toward their net
- const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f;const pz=!!keys.x||!!keys.l;inp.passTap=pz&&!prevPass;prevPass=pz}
+ const m=Math.hypot(x,y);if(m>1){x/=m;y/=m}inp.x=x;inp.y=y;const f=fireId!=null||!!keys[' ']||!!keys.k||!!keys.j;inp.fireTap=f&&!prevFire;inp.fire=f;prevFire=f;const pz=!!keys.x||!!keys.l;inp.passTap=pz&&!prevPass;prevPass=pz;const ck=!!keys.c||!!keys.z;inp.checkTap=ck&&!prevCheck;prevCheck=ck}
 function drawJoy(){if(!joy&&!coarse)return;ctx.save();if(joy){ctx.globalAlpha=.3;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.x0,joy.y0,42,0,TAU);ctx.stroke();ctx.fillStyle='#fff';const dx=joy.x-joy.x0,dy=joy.y-joy.y0,m=Math.hypot(dx,dy),k=m>42?42/m:1;ctx.beginPath();ctx.arc(joy.x0+dx*k,joy.y0+dy*k,17,0,TAU);ctx.fill()}
  if(coarse&&state==='play'&&ACTION_LABEL&&!ROT){ctx.globalAlpha=fireId!=null?.35:.14;ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc')||'#fff';ctx.beginPath();ctx.arc(CW-58,CH-62,34,0,TAU);ctx.fill();ctx.globalAlpha=.6;ctx.fillStyle='#fff';ctx.font='12px Rubik, sans-serif';ctx.textAlign='center';ctx.fillText(ACTION_LABEL,CW-58,CH-58)}ctx.restore()}
 let ACTION_LABEL='FIRE';
@@ -124,13 +124,13 @@ const RX0=22,RX1=378,RY0=22,RY1=578,GL=166,GR=234,GOALT=58,GOALB=542,CX=200,CY=3
 const BLUE='#2f7dff',RED='#ff3d52',GAMELEN=150;
 let sk,puck,pause,goals,clock,ctrl,sudden,trail=[],charge=null,hadPuck=false;
 ACTION_LABEL='SHOOT';
-function mk(x,y,team,role){return{x,y,vx:0,vy:0,team,role,fx:0,fy:team===0?-1:1,cd:0,t:Math.random()*9,check:0}}
+function mk(x,y,team,role){return{x,y,vx:0,vy:0,team,role,fx:0,fy:team===0?-1:1,cd:0,t:Math.random()*9,check:0,down:0}}
 function faceoff(){sk=[mk(150,350,0,'f'),mk(250,380,0,'f'),mk(CX,GOALB-16,0,'g'),mk(250,250,1,'f'),mk(150,220,1,'f'),mk(CX,GOALT+16,1,'g')];
  puck={x:CX,y:CY,vx:0,vy:0,owner:null,cd:0,z:0};pause=1.3;ctrl=sk[0];trail=[];showBanner('FACE OFF','',1.1)}
 function reset(){goals=[0,0];score=0;clock=GAMELEN;sudden=false;faceoff();hud()}
 function hud(){$('h1').textContent=goals[0];$('h3').textContent=goals[1];const c=Math.max(0,Math.ceil(clock));$('h2').textContent=sudden?'OT':Math.floor(c/60)+':'+String(c%60).padStart(2,'0')}
 function cap(s,max){const v=Math.hypot(s.vx,s.vy);if(v>max){s.vx*=max/v;s.vy*=max/v}}
-function steer(s,tx,ty,acc,max,dt){const dx=tx-s.x,dy=ty-s.y,m=Math.hypot(dx,dy)||1;if(m>5){s.vx+=dx/m*acc*dt;s.vy+=dy/m*acc*dt}else{s.vx*=.8;s.vy*=.8}cap(s,max);if(m>5){s.fx+=(dx/m-s.fx)*.2;s.fy+=(dy/m-s.fy)*.2;const n=Math.hypot(s.fx,s.fy)||1;s.fx/=n;s.fy/=n}}
+function steer(s,tx,ty,acc,max,dt){if(s.down>0)return;const dx=tx-s.x,dy=ty-s.y,m=Math.hypot(dx,dy)||1;if(m>5){s.vx+=dx/m*acc*dt;s.vy+=dy/m*acc*dt}else{s.vx*=.8;s.vy*=.8}cap(s,max);if(m>5){s.fx+=(dx/m-s.fx)*.2;s.fy+=(dy/m-s.fy)*.2;const n=Math.hypot(s.fx,s.fy)||1;s.fx/=n;s.fy/=n}}
 function shoot(s,tx,ty,spd){const dx=tx-puck.x,dy=ty-puck.y,m=Math.hypot(dx,dy)||1;puck.owner=null;puck.vx=dx/m*spd+s.vx*.25;puck.vy=dy/m*spd+s.vy*.25;puck.cd=.22;puck.last=s;beep(240,.09,.08,'triangle',120);noise(.05,.05,3000)}
 function pass(s,to){const lead=.25;shoot(s,to.x+to.vx*lead,to.y+to.vy*lead,330);beep(520,.05,.05,'triangle')}
 function goal(t){goals[t]++;hud();kick(8);flash=.6;flashCol=t===0?BLUE:RED;burst(puck.x,puck.y,[t===0?BLUE:RED,'#fff','#ffd23f'],50,320,1.2,4);
@@ -145,6 +145,7 @@ function update(dt){
  if(puck.owner&&puck.owner.team===0&&puck.owner.role==='f')ctrl=puck.owner;
  else if(!puck.owner||puck.owner.team===1){const a=dist(mine[0].x,mine[0].y,puck.x,puck.y),b=dist(mine[1].x,mine[1].y,puck.x,puck.y);const want=a<b?mine[0]:mine[1];if(want!==ctrl&&Math.abs(a-b)>30)ctrl=want}
  const p=ctrl,mate=p===mine[0]?mine[1]:mine[0];
+ if(p.down>0){inp.x=0;inp.y=0;inp.passTap=false}
  p.vx+=inp.x*1000*dt;p.vy+=inp.y*1000*dt;if(!inp.x&&!inp.y){const k=Math.pow(.08,dt);p.vx*=k;p.vy*=k}cap(p,200);
  if(inp.x||inp.y){const m=Math.hypot(inp.x,inp.y);p.fx=inp.x/m;p.fy=inp.y/m}
  if(inp.passTap&&puck.owner===p){charge=null;pass(p,mate)}
@@ -161,7 +162,10 @@ function update(dt){
      else{const spread=8+c*10;shoot(p,CX+clamp(p.fx*40,-28,28)+rnd(-spread,spread),GOALT-6,560+c*560);
        if(c>.55){kick(3+c*5);noise(.14,.11,2400);beep(105,.2,.09,'sawtooth',55);burst(puck.x,puck.y,['#ffffff','#cfe8ff','#ffd23f'],14,220,.45,3);floats.push({x:p.x,y:p.y-22,t:c>.92?'SLAP SHOT!':'BOOM!',c:'#ffd23f',l:1})}}}}
  hadPuck=own;
- if(inp.fireTap&&puck.owner&&puck.owner.team===1&&dist(p.x,p.y,puck.x,puck.y)<34&&p.check<=0){p.check=.6;p.vx+=p.fx*160;p.vy+=p.fy*160;beep(140,.06,.06)}
+ if(inp.checkTap&&p.check<=0&&!(p.down>0)){p.check=.5;p.vx+=p.fx*300;p.vy+=p.fy*300;beep(140,.06,.06);
+   let tg=null,td=44;for(const o of theirs){const dx=o.x-p.x,dy=o.y-p.y,d=Math.hypot(dx,dy);if(d<td&&o.down<=0&&(dx*p.fx+dy*p.fy)/(d||1)>.2){tg=o;td=d}}
+   if(tg){const dx=tg.x-p.x,dy=tg.y-p.y,d=Math.hypot(dx,dy)||1;tg.down=1.3;tg.vx=dx/d*260;tg.vy=dy/d*260;kick(6);noise(.14,.12,500);beep(90,.12,.09,'sawtooth',50);burst(tg.x,tg.y,['#ffffff','#cfe8ff'],14,160,.5,3);floats.push({x:tg.x,y:tg.y-20,t:'CHECKED!',c:'#ffd23f',l:1});
+     if(puck.owner===tg){puck.owner=null;puck.vx=tg.vx*.8;puck.vy=tg.vy*.8;puck.cd=.2}}}
  // teammate AI: get open ahead of the play, or chase a loose puck
  if(puck.owner===p||(puck.owner&&puck.owner.team===0))steer(mate,clamp(p.x<CX?p.x+120:p.x-120,60,340),clamp(p.y-110,GOALT+70,GOALB-60),700,170,dt);
  else if(!puck.owner&&dist(mate.x,mate.y,puck.x,puck.y)<dist(p.x,p.y,puck.x,puck.y))steer(mate,puck.x,puck.y,700,175,dt);
@@ -179,7 +183,7 @@ function update(dt){
  for(const g of[sk[2],sk[5]]){const top=g.team===1,gy=top?GOALT+16:GOALB-16;const lead=top?(puck.y<CY?1:.45):(puck.y>CY?1:.45);
   const tx=clamp(CX+(puck.x-CX)*.55*lead,GL+4,GR-4);g.vx=clamp((tx-g.x)*7,top?-150:-170,top?150:170);g.vy=(gy-g.y)*8;g.fx=0;g.fy=top?1:-1;
   if(puck.owner===g){puck.owner=null;const dir=top?1:-1;const out=g.team===0?(mine[0].x<CX?-1:1):(theirs[0].x<CX?-1:1);puck.vx=out*rnd(160,260);puck.vy=dir*rnd(240,320);puck.cd=.35;puck.last=g;beep(180,.06,.06,'triangle');burst(g.x,g.y+dir*10,'#cfe8ff',8,90,.4,2)}}
- for(const s of sk){s.x+=s.vx*dt;s.y+=s.vy*dt;s.check-=dt;s.cd-=dt;
+ for(const s of sk){if(s.down>0){s.down-=dt;const k=Math.pow(.04,dt);s.vx*=k;s.vy*=k;s.cd=Math.max(s.cd,.1)}s.x+=s.vx*dt;s.y+=s.vy*dt;s.check-=dt;s.cd-=dt;
   if(s.x<RX0+11){s.x=RX0+11;s.vx*=-.4}if(s.x>RX1-11){s.x=RX1-11;s.vx*=-.4}if(s.y<RY0+11){s.y=RY0+11;s.vy*=-.4}if(s.y>RY1-11){s.y=RY1-11;s.vy*=-.4}
   if(s.role==='f'&&Math.hypot(s.vx,s.vy)>150&&Math.random()<dt*20)parts.push({x:s.x+rnd(-4,4),y:s.y+6,vx:rnd(-20,20),vy:rnd(-20,20),l:.35,L:.35,c:'#ffffff',s:2})}
  for(let i=0;i<6;i++)for(let j=i+1;j<6;j++){const a=sk[i],b=sk[j],dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy);if(d<21&&d>0){const o=(21-d)/2,nx=dx/d,ny=dy/d;a.x-=nx*o;a.y-=ny*o;b.x+=nx*o;b.y+=ny*o;
@@ -202,7 +206,7 @@ function update(dt){
    for(const ny of[GOALT,GOALB]){const back=ny===GOALT?ny-22:ny+22;if(puck.x>GL-3&&puck.x<GR+3&&puck.y>Math.min(ny,back)-3&&puck.y<Math.max(ny,back)+3&&!(inMouth&&Math.abs(puck.y-ny)<4)){if(Math.abs(puck.x-GL)<5||Math.abs(puck.x-GR)<5)puck.vx*=-1;else puck.vy*=-1;puck.x+=puck.vx*dt;puck.y+=puck.vy*dt}}}
   const fr=Math.pow(.6,dt);puck.vx*=fr;puck.vy*=fr;
   if(sp>250)trail.push({x:puck.x,y:puck.y,l:.25});
-  if(puck.cd<=0){const ps=Math.hypot(puck.vx,puck.vy);for(const s of sk){if(dist(s.x,s.y,puck.x,puck.y)<16){
+  if(puck.cd<=0){const ps=Math.hypot(puck.vx,puck.vy);for(const s of sk){if(!(s.down>0)&&dist(s.x,s.y,puck.x,puck.y)<16){
     if(ps>620&&Math.random()>(s.role==='g'?.86-(ps-620)/1400:.5)){puck.cd=.12;puck.vx=puck.vx*.86+rnd(-50,50);puck.vy*=.86;burst(puck.x,puck.y,'#cfe8ff',6,100,.3,2);beep(240,.04,.06,'triangle');break}
     puck.owner=s;beep(520,.03,.03);break}}}
  }
@@ -240,7 +244,7 @@ function drawRink(){ctx.drawImage(arenaArt(),0,0,W,H);
  for(const [ny,dir]of[[GOALT,-1],[GOALB,1]]){ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillRect(GL,Math.min(ny,ny+dir*22),GR-GL,22);
   ctx.strokeStyle='rgba(120,120,140,.6)';ctx.lineWidth=1;for(let x=GL;x<=GR;x+=6){ctx.beginPath();ctx.moveTo(x,ny);ctx.lineTo(x,ny+dir*22);ctx.stroke()}for(let k=0;k<=22;k+=6){ctx.beginPath();ctx.moveTo(GL,ny+dir*k);ctx.lineTo(GR,ny+dir*k);ctx.stroke()}
   ctx.strokeStyle='#e8344a';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(GL,ny);ctx.lineTo(GL,ny+dir*22);ctx.lineTo(GR,ny+dir*22);ctx.lineTo(GR,ny);ctx.stroke()}}
-function drawSkater(s){ctx.save();ctx.translate(s.x,s.y);ctx.scale(1.2,1.2);ctx.translate(-s.x,-s.y);drawSkater0(s);ctx.restore()}
+function drawSkater(s){ctx.save();ctx.translate(s.x,s.y);ctx.scale(1.2,1.2);if(s.down>0){ctx.rotate(Math.min(1,(1.3-s.down)*7)*1.45);ctx.globalAlpha=.8}ctx.translate(-s.x,-s.y);drawSkater0(s);ctx.restore();if(s.down>0){ctx.fillStyle='#ffd23f';for(let i=0;i<3;i++){const a=T*6+i*2.1;ctx.fillRect(s.x+Math.cos(a)*13-2,s.y-16+Math.sin(a)*4-2,4,4)}}}
 function drawSkater0(s){const col=s.team===0?BLUE:RED,dark=s.team===0?'#123a8c':'#8c1222';
  ctx.fillStyle='rgba(0,30,60,.18)';ctx.beginPath();ctx.ellipse(s.x+3,s.y+6,12,6,0,0,TAU);ctx.fill();
  if(s===ctrl&&state==='play'){ctx.strokeStyle='#ffd23f';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(s.x,s.y,17+Math.sin(T*8)*1.5,0,TAU);ctx.stroke()}
@@ -272,5 +276,5 @@ function drawOver(){if(state==='play'&&pause>0&&!banner){const p=toScreen(CX,CY)
 reset();requestAnimationFrame(frame);
 </script>
 
-<script src="../lib/joy.js" data-axes="4" data-buttons='[{"label": "SHOOT", "key": " "}, {"label": "PASS", "key": "x"}]'></script>
+<script src="../lib/joy.js" data-axes="4" data-buttons='[{"label": "SHOOT", "key": " "}, {"label": "PASS", "key": "x"}, {"label": "CHECK", "key": "c"}]'></script>
 </body></html>

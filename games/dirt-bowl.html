@@ -38,7 +38,7 @@ K.sideKeys({ up: 'g', down: 'b' }, () => state === 'count' || state === 'race');
   '#kp button[aria-label=b]{box-shadow:inset 0 -7px 0 #ff4a3a,0 4px 0 rgba(0,0,0,.35)}';
   document.head.appendChild(st); }
 
-const TAU = Math.PI * 2, G = 22, TW = 11, HW = TW / 2, LAPS = 4;
+const TAU = Math.PI * 2, G = 17, JUMPX = 1.7, TW = 11, HW = TW / 2, LAPS = 4;
 const FX0 = -80, FZ0 = -52, FW = 160, FD = 104, SXN = 240, SZN = 156, CELL = FW / SXN, GXN = SXN + 1, GZN = SZN + 1;   // the stadium floor: 160 x 104 m on a 2/3 m grid
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v, lerp = (a, b, t) => a + (b - a) * t;
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -65,7 +65,7 @@ function featLen(f) { switch (f.k) { case 'table': return 13 + (f.top || 7); cas
 // height of a feature, ds metres after its start
 function featH(f, ds) {
   if (ds < 0 || ds > f.len) return 0;
-  const h = f.h || FH[f.k];
+  const h = (f.h || FH[f.k]) * (f.k === 'whoops' ? 1.3 : f.k === 'mud' ? 1 : JUMPX);
   switch (f.k) {
     case 'table': { const top = f.top || 7; return ds < 6 ? h * ds / 6 : ds < 6 + top ? h : h * (1 - (ds - 6 - top) / 7); }
     case 'step': { const top = f.top || 16; return ds < 6 ? h * ds / 6 : ds < 6 + top ? h : h * (1 - (ds - 6 - top) / 9); }
@@ -87,6 +87,10 @@ function sampleTrack(T) {
   // curvature (heading change per metre), smoothed over a few metres
   smp.forEach((p, i) => { const a0 = smp[(i - 6 + N) % N].a, a1 = smp[(i + 6) % N].a; p.k = wrapA(a1 - a0) / (12 * DS); });
   TR = T; T.feats.forEach(f => { f.s0 = f.u * TRL; f.len = featLen(f); });
+  // lots more jumps: fill every free stretch of track with a kicker or a double
+  if (!T.boosted) { T.boosted = true; let n = 0;
+    for (let s = 32; s < TRL - 30; s += 26) { const k = n % 3 === 2 ? 'double' : 'kicker', len = featLen({ k });
+      if (T.feats.every(f => s + len + 9 < f.s0 || s > f.s0 + f.len + 9)) { T.feats.push({ k, u: s / TRL, h: k === 'double' ? 2.2 : 2.4, s0: s, len }); n++; } } }
   smp.forEach(p => { p.mud = T.feats.some(f => f.k === 'mud' && inFeat(f, p.s)); p.jump = T.feats.some(f => f.k !== 'mud' && f.k !== 'whoops' && inFeat(f, p.s)); });
   let a = 1e9, b = -1e9, c = 1e9, d = -1e9; smp.forEach(p => { a = Math.min(a, p.x); b = Math.max(b, p.x); c = Math.min(c, p.z); d = Math.max(d, p.z); }); trackBox = { x0: a, x1: b, z0: c, z1: d };
 }
