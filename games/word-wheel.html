@@ -199,11 +199,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b2140; col
       if (!cells.has(key)) cells.set(key, { x: cx, y: cy, ch: w[k], on: false, hint: false }); } words.push({ w, ks, found: false }); });
     for (const w of words) if (st.found.includes(w.w)) { w.found = true; for (const k of w.ks) cells.get(k).on = true; }
     for (const k of st.hints) if (cells.has(k)) cells.get(k).hint = true;
+    sweep();
     letters = L.l.split(''); order = letters.map((_, i) => i);
     const S = scene(st.level);
     $('lvl').innerHTML = '<b>LEVEL ' + (st.level + 1) + '</b><small>' + S.name + ' · ' + (st.level % 20 + 1) + '/20</small>';
     $('coins').textContent = st.coins; $('bcount').textContent = st.bonus.length;
     paint(); layout();
+    // a level that was left fully filled in (the old stuck bug) finishes now
+    if (words.length && words.every(x => x.found)) { busy = true; setTimeout(complete, 700); }
   }
   // sizes: the crossword fills its area, the wheel takes what's left at the bottom
   function layout() {
@@ -287,8 +290,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #1b2140; col
     showWord('bad'); tone(160, 0.25, { type: 'square', vol: 0.04 }); later();
   }
   function later() { setTimeout(() => { if (!dragging) { sel = []; updSel(); } }, 520); }
+  // A word whose squares are all already filled by crossing words counts as found (e.g. PUN inside PUNT), otherwise the level can never finish
+  function sweep() {
+    let changed = true;
+    while (changed) { changed = false;
+      for (const x of words) if (!x.found && x.ks.every(k => { const c = cells.get(k); return c.on || c.hint || words.some(f => f.found && f.ks.includes(k)); })) { x.found = true; if (!st.found.includes(x.w)) st.found.push(x.w); changed = true; } }
+  }
   function found(w) {
-    w.found = true; st.found.push(w.w); save();
+    w.found = true; st.found.push(w.w); sweep(); save();
     // the letters fly from the word box into their squares
     const src = $('word').getBoundingClientRect();
     w.ks.forEach((k, j) => {
