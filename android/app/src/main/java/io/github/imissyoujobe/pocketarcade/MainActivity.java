@@ -8,6 +8,9 @@ import android.graphics.Insets;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,8 +24,10 @@ import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
+import android.webkit.MimeTypeMap;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -31,6 +36,9 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.window.OnBackInvokedDispatcher;
+
+import java.io.IOException;
+import java.io.InputStream;
 
 /**
  * Joystik Original Arcade: the web arcade (imissyoujobe-eng.github.io/pocket-arcade) in a full-screen WebView.
@@ -82,6 +90,14 @@ public class MainActivity extends Activity {
                 if (inApp(u)) return false;
                 openOutside(u);
                 return true;
+            }
+
+            /** With no internet, serve the copy of the site that is built into the app, so the games work right after install. */
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
+                Uri u = r.getUrl();
+                if (!inApp(u) || !"GET".equals(r.getMethod()) || isOnline()) return null;
+                return bundled(u);
             }
 
             @Override
@@ -136,6 +152,37 @@ public class MainActivity extends Activity {
         if (state != null) web.restoreState(state);
         if (web.getUrl() == null) web.loadUrl(HOME);
         hideBars();
+    }
+
+    private boolean isOnline() {
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            Network n = cm.getActiveNetwork();
+            NetworkCapabilities c = n == null ? null : cm.getNetworkCapabilities(n);
+            return c != null && c.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+        } catch (RuntimeException e) {
+            return true; // unsure: let the normal path (and the service worker) handle it
+        }
+    }
+
+    /** The site files are copied into assets/www at build time (see app/build.gradle). Null when a file isn't bundled. */
+    private WebResourceResponse bundled(Uri u) {
+        String path = u.getPath().substring(SCOPE.length());
+        if (path.isEmpty() || path.endsWith("/")) path += "index.html";
+        if (path.contains("..")) return null;
+        try {
+            InputStream in = getAssets().open("www/" + path);
+            String ext = MimeTypeMap.getFileExtensionFromUrl(path);
+            String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+            if ("js".equals(ext) || "mjs".equals(ext)) mime = "application/javascript";
+            else if ("webmanifest".equals(ext)) mime = "application/manifest+json";
+            else if ("txt".equals(ext)) mime = "text/plain";
+            if (mime == null) mime = "application/octet-stream";
+            boolean text = mime.startsWith("text/") || mime.contains("javascript") || mime.contains("json");
+            return new WebResourceResponse(mime, text ? "utf-8" : null, in);
+        } catch (IOException e) {
+            return null;
+        }
     }
 
     static boolean inApp(Uri u) {

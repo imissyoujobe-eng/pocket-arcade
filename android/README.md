@@ -6,7 +6,7 @@ It replaced the PWABuilder (Trusted Web Activity) build in Nov 2026 because Test
 
 ## Build
 - Needs JDK 17+ and the Android SDK (platform 36, build-tools 36.0.0). Put `sdk.dir=/path/to/android-sdk` in `local.properties`.
-- Raise `versionCode` in `app/build.gradle` for every upload (10 = version 1.1.0, the first WebView build; 11 = 1.1.1, the new icon lettering; 12 = 1.1.2, the phone's side buttons as game buttons; 13 = 1.1.3, the same app rebuilt on Nov 17 so the green JOYSTIK icon can go up on Play).
+- Raise `versionCode` in `app/build.gradle` for every upload (10 = version 1.1.0, the first WebView build; 11 = 1.1.1, the new icon lettering; 12 = 1.1.2, the phone's side buttons as game buttons; 13 = 1.1.3, the same app rebuilt on Nov 17 so the green JOYSTIK icon can go up on Play; 14 = 1.1.4, the games are built into the app).
 - `./gradlew bundleRelease` makes the unsigned bundle at `app/build/outputs/bundle/release/app-release.aab`.
 - `./gradlew assembleDebug` makes a test copy (`io.github.imissyoujobe.pocketarcade.preview`, "Joystik test") that installs next to the Play version.
 
@@ -19,5 +19,5 @@ It replaced the PWABuilder (Trusted Web Activity) build in Nov 2026 because Test
 - Full screen (bars hidden, swipe to show), follows the phone's rotation, keeps games out from under the camera cutout.
 - Back button closes a game or My Scores first, then leaves the app.
 - The phone's side (volume) buttons can be game buttons: a game calls `JoystikApp.volumeKeys(true)` while it's being played (lib/kit.js `K.sideKeys`), and the app then sends volume up and down to the page as `AudioVolumeUp` / `AudioVolumeDown` key presses instead of changing the volume. Every new page load hands them back to the volume. Dirt Bowl uses them as GAS and BRAKE (since 1.1.2).
-- Links outside /pocket-arcade/ open in the browser. If the first launch has no internet, it shows a "No connection / Try again" screen; after that the site's service worker keeps the games working offline.
+- Links outside /pocket-arcade/ open in the browser. From 1.1.4 the whole site is copied into the app at build time (`copySite` in `app/build.gradle`, into assets/www) and served whenever the phone has no internet, so the games work offline right after install. With internet, the live site is used as before, so a git push still updates the games. Same address as the live site, so saved scores carry over. Older builds (1.1.3 and before) show "No connection / Try again" if the first launch has no internet.
 - Icon: James's cockpit artwork, new chunky green JOYSTIK lettering since 1.1.1 (Nov 16 2026). Adaptive icon: the picture at 64dp, nudged about 1dp left and down so the whole word sits inside the 66dp safe circle on every launcher shape. Behind it is a copy with the letters painted out, mirrored to the edges and blurred.
