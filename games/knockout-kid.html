@@ -18,7 +18,10 @@ let W = 240; const H = 330, SW = 256, SC = 1.12, OY = 56;
 K.screen(W, H);
 K.flex(240, H, w => { W = w; }, { maxW: 760 }); // phone on its side: the whole arena around the ring
 K.hud(['me', 'round', 'foe']);
-K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'LEFT' }, { id: 'a', label: 'RIGHT' }] });
+K.pad({ dpad: '4', buttons: [{ id: 'b', label: 'LEFT' }, { id: 'a', label: 'RIGHT' }, { id: 'c', label: 'UPPER' }, { id: 'd', label: 'BODY' }] });
+// keyboard: C or U = uppercut, V or I = body hook (X and Z / Space are the left and right punches)
+addEventListener('keydown', e => { if (e.repeat) return; if (e.key === 'c' || e.key === 'C' || e.key === 'u' || e.key === 'U') K.press('c'); else if (e.key === 'v' || e.key === 'V' || e.key === 'i' || e.key === 'I') K.press('d'); });
+addEventListener('keyup', e => { if (e.key === 'c' || e.key === 'C' || e.key === 'u' || e.key === 'U') K.release('c'); else if (e.key === 'v' || e.key === 'V' || e.key === 'i' || e.key === 'I') K.release('d'); });
 
 // look: skin, trunks, trim, hair color and style (hs), face extras, bulk (how big and muscled)
 // fight: speed, tell (wind-up time), moves, guard, hp, dmg (how hard he hits), counter (fires back into your punches), chain (combos)
@@ -32,7 +35,7 @@ const FOES = [
 const ME = { skin: '#d9a07a', hair: '#2a1a10', trunks: '#2f9e44', trim: '#ffffff', glove: '#2f9e44' };
 const MV = { jab: { dmg: 8, need: 'any', dur: 0.25 }, hookL: { dmg: 14, need: 'right', dur: 0.35 }, hookR: { dmg: 14, need: 'left', dur: 0.35 }, upper: { dmg: 20, need: 'duck', dur: 0.4 }, flurry: { dmg: 5, need: 'any', dur: 0.9 } };
 let fx = [], dust = [], state = 'title', fi, foe, me, round, clock, msg, msgT, between, shake = 0, wins = K.best('knockout');
-function title() { K.card({ title: 'KNOCKOUT KID', text: 'Watch your opponent: when they flash and wind up, DODGE with ◀ or ▶, or DUCK with ▼ for uppercuts. Right after a miss they are wide open, so punch with LEFT and RIGHT! Hold ▲ while punching to aim at the head. These fighters hit back: punch into their guard and they counter, and the tough ones throw combos. Land counters to earn stars, then ▲ + RIGHT throws a star punch.', best: wins ? 'FURTHEST: FIGHT ' + wins : '', button: 'Step into the ring', onStart: () => { fi = 0; fight(); } }); }
+function title() { K.card({ title: 'KNOCKOUT KID', text: 'Watch your opponent: when they flash and wind up, WEAVE your head with ◀ or ▶, or DUCK with ▼ for uppercuts. Right after a miss they are wide open, so punch with LEFT and RIGHT! Hold ▲ while punching to aim at the head. UPPER is an uppercut to the chin (it beats a high guard) and BODY loops a hook around to his ribs (it beats a low guard). These fighters hit back: punch into their guard and they counter, and the tough ones throw combos. Land counters to earn stars, then ▲ + RIGHT throws a star punch.', best: wins ? 'FURTHEST: FIGHT ' + wins : '', button: 'Step into the ring', onStart: () => { fi = 0; fight(); } }); }
 function fight() { const F = FOES[fi]; foe = { F, hp: F.hp, st: 'idle', t: 1.2, mv: null, guard: 'head', down: 0, downT: 0, knocks: 0, hit: 0, hitDir: 1, sway: 0, koT: 0, thud: false }; me = { hp: 100, st: 'idle', t: 0, stars: 0, punch: null, hit: 0 }; round = 1; clock = 90; fx = []; dust = []; between = 0; shake = 0; msg = F.n; msgT = 1.8; state = 'play'; hud(); K.tune([392, 523, 659], 0.12); }
 function hud() { K.set('me', 'YOU ' + Math.max(0, Math.ceil(me.hp))); K.set('round', 'R' + round + ' ' + Math.ceil(clock)); K.set('foe', foe.F.n.split(' ')[0] + ' ' + Math.max(0, Math.ceil(foe.hp))); }
 
@@ -48,7 +51,7 @@ function update(dt) {
   if (clock <= 0) { if (round >= 3) return decision(); between = 2; msg = 'END OF ROUND ' + round; msgT = 2; return; }
   // knockdowns: he takes a knee for the count, then gets up with a good chunk of health back
   if (foe.down > 0) { foe.down -= dt; foe.downT += dt; if (foe.down <= 0) { foe.hp = Math.max(foe.hp, foe.F.hp * (0.65 - foe.knocks * 0.12)); foe.st = 'idle'; foe.t = 0.8; msg = 'HE\'S UP!'; msgT = 1; hud(); } return; }
-  if (me.st === 'down') { me.t -= dt; if (K.hit('a') || K.hit('b') || K.ptr.tapped) { me.mash = (me.mash || 0) + 1; K.beep(300 + me.mash * 20, 0.04, { vol: 0.04 }); } if (me.mash >= 12 + me.knocks * 4) { me.st = 'idle'; me.hp = 40 - me.knocks * 8; me.mash = 0; msg = 'BACK ON YOUR FEET!'; msgT = 1; hud(); } else if (me.t <= 0) return defeat(); return; }
+  if (me.st === 'down') { me.t -= dt; if (K.hit('a') || K.hit('b') || K.hit('c') || K.hit('d') || K.ptr.tapped) { me.mash = (me.mash || 0) + 1; K.beep(300 + me.mash * 20, 0.04, { vol: 0.04 }); } if (me.mash >= 12 + me.knocks * 4) { me.st = 'idle'; me.hp = 40 - me.knocks * 8; me.mash = 0; msg = 'BACK ON YOUR FEET!'; msgT = 1; hud(); } else if (me.t <= 0) return defeat(); return; }
   // player actions
   if (me.t > 0) me.t -= dt; else me.st = 'idle';
   if (me.hit > 0) me.hit -= dt;
@@ -56,9 +59,15 @@ function update(dt) {
     if (K.hit('left')) { me.st = 'dodgeL'; me.t = 0.42; }
     else if (K.hit('right')) { me.st = 'dodgeR'; me.t = 0.42; }
     else if (K.hit('down')) { me.st = 'duck'; me.t = 0.45; }
+    else if (K.hit('c') || K.hit('d')) {
+      // uppercut (up the middle to the chin) or body hook (looping around to the ribs): slower than a straight punch, but they hit harder
+      const kind = K.hit('c') ? 'upper' : 'hook'; me.alt = !me.alt;
+      me.st = 'punch'; me.t = me.pdur = kind === 'upper' ? 0.38 : 0.36; me.punch = { side: me.alt ? 'R' : 'L', high: kind === 'upper', star: false, kind };
+      landPunch(me.punch);
+    }
     else if (K.hit('a') || K.hit('b')) {
       const star = K.down('up') && K.hit('a') && me.stars > 0;
-      me.st = 'punch'; me.t = star ? 0.45 : 0.22; me.punch = { side: K.hit('a') ? 'R' : 'L', high: K.down('up'), star };
+      me.st = 'punch'; me.t = me.pdur = star ? 0.45 : 0.22; me.punch = { side: K.hit('a') ? 'R' : 'L', high: K.down('up'), star, kind: 'straight' };
       if (star) me.stars--;
       landPunch(me.punch);
     }
@@ -84,16 +93,19 @@ function update(dt) {
 // he fires right back: a quick counter with a short wind-up
 function counter() { const F = foe.F; foe.mv = Math.random() < 0.55 ? 'jab' : (Math.random() < 0.5 ? 'hookL' : 'hookR'); foe.st = 'tell'; foe.t = 0.3 * F.speed; fx.push({ t: 'COUNTER!', l: 0.6 }); K.beep(620, 0.05, { vol: 0.04 }); }
 function landPunch(pu) {
-  const F = foe.F, open = foe.st === 'open' || foe.st === 'stun' || foe.st === 'tell' && Math.random() < 0.3;
-  const guarded = !open && foe.st !== 'attack' && ((pu.high && foe.guard === 'head') || (!pu.high && foe.guard === 'body')) && Math.random() < F.guard + 0.3;
+  const F = foe.F, kind = pu.kind || 'straight', open = foe.st === 'open' || foe.st === 'stun' || foe.st === 'tell' && Math.random() < 0.3;
+  // an uppercut goes up the middle to his chin, a hook loops around to his ribs: each slips past most of the guard that covers that spot
+  const toHead = kind === 'upper' || (kind === 'straight' && pu.high), covered = toHead ? foe.guard === 'head' : foe.guard === 'body';
+  const gp = (F.guard + 0.3) * (kind === 'upper' ? 0.45 : kind === 'hook' ? 0.55 : 1);
+  const guarded = !open && foe.st !== 'attack' && covered && Math.random() < gp;
   if (guarded) { fx.push({ t: 'BLOCK', l: 0.4 }); K.beep(200, 0.05, { vol: 0.04 }); if (Math.random() < 0.4) foe.guard = foe.guard === 'head' ? 'body' : 'head'; if (Math.random() < F.counter) counter(); return; }
-  let dmg = pu.star ? 30 : pu.high ? 7 : 5;
+  let dmg = pu.star ? 30 : kind === 'upper' ? 13 : kind === 'hook' ? 11 : pu.high ? 7 : 5;
   // punches that aren't on an opening only graze him (he rolls with them), and he may fire back
   const rolled = foe.st === 'idle'; if (rolled) dmg *= 0.7;
   if (foe.st === 'open') { dmg *= 1.6; if (Math.random() < 0.6 && me.stars < 3) { me.stars++; fx.push({ t: 'STAR!', l: 0.6 }); K.tune([988, 1319], 0.05); } foe.st = 'stun'; foe.t = 0.35; }
   if (foe.st === 'tell') { foe.st = 'stun'; foe.t = 0.4; }
-  foe.hp -= dmg; foe.hit = 0.2; foe.hitDir = pu.side === 'L' ? 1 : -1; K.noise(0.1, 0.25); K.beep(pu.star ? 120 : 250, 0.08, { type: 'square', vol: 0.06 }); hud();
-  fx.push({ t: pu.star ? 'STAR PUNCH!' : 'HIT', l: 0.35 });
+  foe.hp -= dmg; foe.hit = kind === 'straight' ? 0.2 : 0.3; foe.hitKind = kind; foe.hitDir = pu.side === 'L' ? 1 : -1; K.noise(0.1, 0.25); K.beep(pu.star ? 120 : kind === 'upper' ? 180 : 250, 0.08, { type: 'square', vol: 0.06 }); hud();
+  fx.push({ t: pu.star ? 'STAR PUNCH!' : kind === 'upper' ? 'UPPERCUT!' : kind === 'hook' ? 'BODY HOOK!' : 'HIT', l: 0.35 });
   if (foe.hp <= 0) {
     foe.knocks++;
     // the third knockdown, or sometimes the second, is a knockout: he goes face-first to the canvas
@@ -285,7 +297,9 @@ function foePose(t) {
     else { if (Math.floor(t / 90) % 2) p.gL = { x: -6, y: -70, r: 20 }; else p.gR = { x: 6, y: -70, r: 20 }; } }
   else if (foe.st === 'open' || foe.st === 'stun') { p.face = 'daze'; p.gL = { x: -32, y: -14, r: 12 }; p.gR = { x: 32, y: -14, r: 12 }; p.hr = Math.sin(t / 150) * 0.12; p.lean = Math.sin(t / 200) * 0.05; }
   else if (foe.st === 'down') { p.face = 'hurt'; p.sink = 32; p.sy = 0.9; p.lean = 0.06; p.hy = 6; p.hr = 0.25; p.gL = { x: -30, y: -20, r: 12 }; p.gR = { x: 26, y: 40, r: 12 }; }
-  if (foe.hit > 0 && foe.st !== 'down') { p.face = 'hurt'; p.hx = foe.hitDir * 5; p.hr = foe.hitDir * 0.25; p.y -= 1; }
+  if (foe.hit > 0 && foe.st !== 'down') { p.face = 'hurt'; p.hx = foe.hitDir * 5; p.hr = foe.hitDir * 0.25; p.y -= 1;
+    if (foe.hitKind === 'upper') { p.hx = 0; p.hr = 0; p.hy = -7; p.sy = 1.03; }                                  // head snaps up off the chin
+    else if (foe.hitKind === 'hook') { p.lean = foe.hitDir * 0.12; p.sink = 5; p.hy = 6; p.hr = foe.hitDir * 0.12; } } // folds over the ribs shot
   return p;
 }
 function drawFoe(c, t, p) {
@@ -311,12 +325,34 @@ function drawKO(c, t) {
     if (k > KO_LAND) for (let i = 0; i < 3; i++) { const a = t / 300 + i * 2.1; K.text(c, '★', 128 + Math.cos(a) * 20, feetY + 92 - 22 + Math.sin(a) * 5, 9, '#ffd23f'); }
   }
 }
-// you, from behind: back muscles, shoulders, the back of your head, green gloves up
+// glove paths for your punches (all in your own coordinates). q runs 0 to 1 over the punch: wind up, land, pull back to guard
+const ease = k => k * k * (3 - 2 * k);
+const lerpG = (a, b, k) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, r: a.r + (b.r - a.r) * k });
+const bezG = (a, m, b, k) => { const u = 1 - k; return { x: u * u * a.x + 2 * u * k * m.x + k * k * b.x, y: u * u * a.y + 2 * u * k * m.y + k * k * b.y, r: a.r + (b.r - a.r) * k }; };
+function punchGlove(pu, s, q, px, py, guard) {
+  if (pu.kind === 'upper') {
+    // dip the glove low by your hip, then drive it straight up under his chin
+    const dip = { x: s * 30, y: 16, r: 14 }, top = { x: 128 + s * 4 - px, y: 66 - py, r: 12 };
+    return q < 0.35 ? lerpG(guard, dip, ease(q / 0.35)) : q < 0.6 ? lerpG(dip, top, ease((q - 0.35) / 0.25)) : lerpG(top, guard, ease((q - 0.6) / 0.4));
+  }
+  if (pu.kind === 'hook') {
+    // swing the glove out wide past your own side, then loop it around into the side of his body
+    const out = { x: s * 70, y: -28, r: 15 }, hit = { x: 128 + s * 24 - px, y: 100 - py, r: 11 }, mid = { x: s * 78, y: -84, r: 13 };
+    return q < 0.35 ? lerpG(guard, out, ease(q / 0.35)) : q < 0.68 ? bezG(out, mid, hit, ease((q - 0.35) / 0.33)) : lerpG(hit, guard, ease((q - 0.68) / 0.32));
+  }
+  const tgt = { x: 128 + s * 6 - px, y: (pu.high || pu.star ? 52 : 92) - py, r: pu.star ? 12 : 10 };
+  return q < 0.4 ? lerpG(guard, tgt, ease(q / 0.4)) : lerpG(tgt, guard, ease((q - 0.4) / 0.6));
+}
+// you, from behind: back muscles, shoulders, the back of your big head, green gloves up in front of your face
 function drawMe(c, t) {
   const kk = koTilt(), win = foe.st === 'ko';
-  const px = 128 + (me.st === 'dodgeL' ? -40 : me.st === 'dodgeR' ? 40 : 0) + kk * 108, py = 196 + (me.st === 'duck' ? 16 : 0) + (me.hit > 0 ? 3 : 0) + kk * 62;
-  const lean = me.st === 'dodgeL' ? -0.14 : me.st === 'dodgeR' ? 0.14 : 0, sk = ME.skin;
-  c.save(); c.translate(px, py); c.rotate(lean);
+  // head weave: your feet stay put and your upper body rolls at the waist, so your head slips well out of the way
+  const dd = me.st === 'dodgeL' ? -1 : me.st === 'dodgeR' ? 1 : 0, dp = 1 - K.clamp(me.t / 0.42, 0, 1), am = dd ? K.clamp(Math.min(dp / 0.14, (1 - dp) / 0.3), 0, 1) : 0, sm = am * am * (3 - 2 * am);
+  const pu = me.st === 'punch' ? me.punch : null, pq = pu ? K.clamp(1 - me.t / (me.pdur || 0.22), 0, 1) : 0;
+  const dip = pu && pu.kind === 'upper' ? 9 * Math.max(0, 1 - Math.abs(pq - 0.3) / 0.3) : 0;
+  const px = 128 + dd * sm * 8 + kk * 108, py = 196 + (me.st === 'duck' ? 16 : 0) + (me.hit > 0 ? 3 : 0) + dip + kk * 62;
+  const lean = dd * sm * 0.34, sk = ME.skin;
+  c.save(); c.translate(px, py); c.translate(0, 64); c.rotate(lean); c.translate(0, -64);
   // back
   c.beginPath(); c.moveTo(-9, -12); c.quadraticCurveTo(-30, -8, -44, 2); c.quadraticCurveTo(-51, 14, -44, 28); c.bezierCurveTo(-40, 40, -33, 50, -31, 64); c.lineTo(31, 64); c.bezierCurveTo(33, 50, 40, 40, 44, 28); c.quadraticCurveTo(51, 14, 44, 2); c.quadraticCurveTo(30, -8, 9, -12); c.closePath();
   const bg = c.createRadialGradient(-14, 6, 4, 0, 20, 62); bg.addColorStop(0, sh(sk, 0.16)); bg.addColorStop(0.55, sk); bg.addColorStop(1, sh(sk, -0.3)); c.fillStyle = bg; c.fill(); c.strokeStyle = 'rgba(30,12,6,.85)'; c.lineWidth = 1.2; c.stroke();
@@ -324,16 +360,21 @@ function drawMe(c, t) {
   c.lineWidth = 1.1; for (const s of [-1, 1]) { c.beginPath(); c.arc(s * 19, 18, 12, s > 0 ? Math.PI * 0.75 : -Math.PI * 0.15, s > 0 ? Math.PI * 1.55 : Math.PI * 0.25); c.stroke(); c.beginPath(); c.moveTo(s * 40, 24); c.quadraticCurveTo(s * 36, 42, s * 28, 60); c.stroke(); c.beginPath(); c.moveTo(s * 8, -8); c.quadraticCurveTo(s * 22, -4, s * 38, 4); c.stroke(); }
   c.fillStyle = ME.trunks; c.fillRect(-31, 60, 62, 10); c.fillStyle = ME.trim; c.fillRect(-31, 58, 62, 4);
   // neck and the back of the head
-  limb(c, 0, -10, 0, -22, 8, 7.5, sk);
-  for (const s of [-1, 1]) { c.fillStyle = sh(sk, -0.08); c.beginPath(); c.ellipse(s * 13.5, -30, 3, 5, 0, 0, 7); c.fill(); }
-  c.fillStyle = sk; c.beginPath(); c.ellipse(0, -31, 13.5, 15.5, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(30,12,6,.85)'; c.stroke();
-  c.fillStyle = ME.hair; c.beginPath(); c.moveTo(-13.6, -28); c.bezierCurveTo(-15, -50, 15, -50, 13.6, -28); c.quadraticCurveTo(10, -20, 0, -19); c.quadraticCurveTo(-10, -20, -13.6, -28); c.fill();
-  c.fillStyle = 'rgba(255,255,255,.14)'; c.beginPath(); c.ellipse(-4, -40, 5, 2.4, -0.4, 0, 7); c.fill();
-  // arms and gloves
-  const pu = me.st === 'punch' ? me.punch : null, me2 = { bulk: 1.15, skin: sk };
+  limb(c, 0, -8, 0, -26, 11, 10, sk);
+  // the head is drawn 1.65x bigger than before and tips into the weave (origin = middle of the head)
+  c.save(); c.translate(0, -22); c.rotate(dd * sm * 0.2); c.translate(0, -14); c.scale(1.65, 1.65);
+  for (const s of [-1, 1]) { c.fillStyle = sh(sk, -0.08); c.beginPath(); c.ellipse(s * 13.6, 1.5, 3, 5, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(30,12,6,.6)'; c.lineWidth = 0.7; c.stroke(); }
+  const hg = c.createRadialGradient(-4, -6, 2, 0, 0, 19); hg.addColorStop(0, sh(sk, 0.16)); hg.addColorStop(0.6, sk); hg.addColorStop(1, sh(sk, -0.28));
+  c.fillStyle = hg; c.beginPath(); c.ellipse(0, 0, 13.5, 15.5, 0, 0, 7); c.fill(); c.strokeStyle = 'rgba(30,12,6,.85)'; c.lineWidth = 0.9; c.stroke();
+  c.fillStyle = ME.hair; c.beginPath(); c.moveTo(-13.6, 3); c.bezierCurveTo(-15, -19, 15, -19, 13.6, 3); c.quadraticCurveTo(10, 11, 0, 12); c.quadraticCurveTo(-10, 11, -13.6, 3); c.fill();
+  c.strokeStyle = 'rgba(255,255,255,.12)'; c.lineWidth = 0.6; for (let k = -2; k <= 2; k++) { c.beginPath(); c.moveTo(k * 3.4, 11); c.quadraticCurveTo(k * 4.6, -2, k * 3.2, -12); c.stroke(); }
+  c.fillStyle = 'rgba(255,255,255,.14)'; c.beginPath(); c.ellipse(-4, -9, 5, 2.4, -0.4, 0, 7); c.fill();
+  c.restore();
+  // arms and gloves: the guard is up in front of your face, just under your eyes, so you can see over your gloves
+  const me2 = { bulk: 1.15, skin: sk };
   for (const s of [-1, 1]) {
-    const side = s < 0 ? 'L' : 'R'; let G = { x: s * 30, y: -24, r: 14 };
-    if (pu && pu.side === side) { const tx = 128 + s * 6 - px, ty = (pu.high || pu.star ? 52 : 92) - py; G = { x: tx, y: ty, r: pu.star ? 12 : 10 }; }
+    const side = s < 0 ? 'L' : 'R'; let G = { x: s * 23, y: -24 + Math.sin(t / 230 + s) * 1.1, r: 13.5 };
+    if (pu && pu.side === side) G = punchGlove(pu, s, pq, px, py, G);
     if (win && s > 0) G = { x: 30, y: -78, r: 14 };
     if (me.st === 'duck') G.y += 4;
     arm(c, me2, s, { x: s * 40, y: 8 }, G, ME.glove);
