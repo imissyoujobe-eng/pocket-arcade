@@ -80,6 +80,23 @@ footer a{color:var(--muted)}
 .sc-row:active{transform:scale(.985)}
 .sc-row:focus-visible,.sc-back:focus-visible,.mys:focus-visible{outline:3px solid var(--racing);outline-offset:3px}
 .sc-empty{background:var(--panel);border-radius:16px;padding:20px;color:var(--muted);text-align:center;line-height:1.5;margin-top:18px}
+
+/* first-run tour, exit prompt */
+.ov{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(10,6,24,.82)}
+.ov[hidden]{display:none}
+.card{width:100%;max-width:380px;background:var(--panel);border:2px solid var(--line);border-radius:22px;padding:22px 20px 18px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+.card .ic{font-size:44px;line-height:1}
+.card h3{font-family:var(--display);font-weight:400;font-size:24px;line-height:1.1;margin:12px 0 8px}
+.card p{margin:0 0 16px;color:var(--muted);font-size:15px;line-height:1.45}
+.dots{display:flex;justify-content:center;gap:7px;margin:0 0 16px}
+.dots i{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.dots i.on{background:var(--racing)}
+.btns{display:flex;gap:10px;justify-content:center}
+.btn{font-family:var(--display);font-size:14px;min-height:46px;padding:10px 20px;border-radius:999px;border:2px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.btn.pri{background:var(--racing);border-color:var(--racing);color:#1a1200}
+.btn:focus-visible{outline:3px solid var(--racing);outline-offset:3px}
+.skip{display:block;margin:12px auto 0;background:none;border:0;color:var(--muted);font:inherit;font-size:13px;text-decoration:underline;cursor:pointer;min-height:36px}
+footer button.lnk{background:none;border:0;padding:0;font:inherit;color:var(--muted);text-decoration:underline;cursor:pointer}
 </style>
 </head>
 <body>
@@ -91,7 +108,7 @@ footer a{color:var(--muted)}
 <nav class="chips" id="chips" aria-label="Filter games"></nav>
 <p class="count" id="count"></p>
 <main id="grid"></main>
-<footer>by James McGuire · <a href="privacy.html">Privacy policy</a></footer>
+<footer>by James McGuire · <a href="privacy.html">Privacy policy</a> · <a id="fb" href="mailto:mcguirepixelart@gmail.com?subject=Joystik%20Original%20Arcade%20feedback">Send feedback</a> · <button class="lnk" id="tourbtn" type="button">How it works</button></footer>
 
 <div id="scores" role="dialog" aria-modal="true" aria-labelledby="sct" hidden>
   <div class="sc-in">
@@ -106,6 +123,25 @@ footer a{color:var(--muted)}
 <div id="player" role="dialog" aria-label="Game">
   <iframe id="frame" title="Game" allow="autoplay; fullscreen"></iframe>
   <button class="close" id="close" aria-label="Back to the arcade">◀ ARCADE</button>
+</div>
+
+<div class="ov" id="tour" role="dialog" aria-modal="true" aria-labelledby="tt" hidden>
+  <div class="card">
+    <div class="ic" id="ti"></div>
+    <h3 id="tt"></h3>
+    <p id="tp"></p>
+    <div class="dots" id="td"></div>
+    <div class="btns"><button class="btn" id="tback" type="button">Back</button><button class="btn pri" id="tnext" type="button">Next</button></div>
+    <button class="skip" id="tskip" type="button">Skip</button>
+  </div>
+</div>
+
+<div class="ov" id="leave" role="alertdialog" aria-modal="true" aria-labelledby="lt" hidden>
+  <div class="card">
+    <h3 id="lt">Leave Joystik?</h3>
+    <p>Press Back again to exit, or keep playing.</p>
+    <div class="btns"><button class="btn pri" id="stay" type="button">Keep playing</button></div>
+  </div>
 </div>
 
 <script src="games.js"></script>
@@ -156,6 +192,41 @@ footer a{color:var(--muted)}
   // swap the game frame's page without adding a step to the phone's back-button history
   function go(f,url){try{f.contentWindow.location.replace(url)}catch(e){f.src=url}}
   document.getElementById('close').onclick=function(){history.state&&history.state.game?history.back():shut()};
+
+
+  // ---- first-run tour (skippable; "How it works" in the footer replays it) ----
+  var STEPS=[
+    ['\ud83d\udd79\ufe0f','Welcome to Joystik',total+' arcade games in one app. Tap any tile to start playing.'],
+    ['\ud83c\udfaf','Find your kind of game','Use the colored buttons under the title to show just shooters, racers, sports, puzzles and more.'],
+    ['\u25c0','Getting around','Tap \u25c0 ARCADE or your phone\u2019s Back button to leave a game. Controls appear on screen in every game.'],
+    ['\u2605','Beat your best','My Scores keeps your records and play counts for every game, saved on your phone.'],
+    ['\ud83d\udcf6','Play anywhere','After the first launch downloads the games, they all work offline. Have fun!']
+  ];
+  var tour=document.getElementById('tour'), ti=0;
+  function tourShow(){
+    var st=STEPS[ti];
+    document.getElementById('ti').textContent=st[0];document.getElementById('tt').textContent=st[1];document.getElementById('tp').textContent=st[2];
+    var d=document.getElementById('td');d.innerHTML='';
+    STEPS.forEach(function(_,i){var e=document.createElement('i');if(i===ti)e.className='on';d.appendChild(e)});
+    document.getElementById('tback').style.visibility=ti?'visible':'hidden';
+    document.getElementById('tnext').textContent=ti===STEPS.length-1?'Let\u2019s play':'Next';
+    document.getElementById('tskip').style.display=ti===STEPS.length-1?'none':'block';
+  }
+  function tourOpen(){ti=0;tourShow();tour.hidden=false;document.getElementById('tnext').focus()}
+  function tourClose(){tour.hidden=true;try{localStorage.setItem('pa-tour','1')}catch(e){}}
+  document.getElementById('tnext').onclick=function(){if(ti>=STEPS.length-1)tourClose();else{ti++;tourShow()}};
+  document.getElementById('tback').onclick=function(){if(ti){ti--;tourShow()}};
+  document.getElementById('tskip').onclick=tourClose;
+  document.getElementById('tourbtn').onclick=tourOpen;
+  var seen=null;try{seen=localStorage.getItem('pa-tour')}catch(e){}
+  if(!seen)tourOpen();
+
+  // ---- leaving the app: Back on the home screen asks first. Entry 0 is a "leave" marker, entry 1 is the home screen. ----
+  var leave=document.getElementById('leave');
+  function leaveShow(){leave.hidden=false;document.getElementById('stay').focus()}
+  function leaveHide(){if(leave.hidden)return;leave.hidden=true;history.pushState({home:1},'','#')}
+  document.getElementById('stay').onclick=leaveHide;
+  leave.onclick=function(e){if(e.target===leave)leaveHide()};
 
   // ---- My Scores: best score, times played and last played for every game (all stored on this phone) ----
   var sc=document.getElementById('scores'), scBack=document.getElementById('scback');
@@ -232,8 +303,13 @@ footer a{color:var(--muted)}
   scBack.onclick=function(){history.state&&history.state.scores?history.back():hideScores()};
   addEventListener('keydown',function(e){if(e.key==='Escape'&&!sc.hidden&&!player.classList.contains('on'))scBack.click()});
   // the phone's back button steps out of a game (back to My Scores if you came from there), then out of My Scores
-  window.addEventListener('popstate',function(){shut();if(history.state&&history.state.scores)showScores(false);else hideScores()});
-  if(location.hash)history.replaceState(null,'',location.pathname);
+  window.addEventListener('popstate',function(){
+    shut();
+    if(history.state&&history.state.exit){hideScores();leaveShow();return}
+    leave.hidden=true;
+    if(history.state&&history.state.scores)showScores(false);else hideScores();
+  });
+  if(!(history.state&&(history.state.home||history.state.scores||history.state.game))){history.replaceState({exit:1},'',location.pathname);history.pushState({home:1},'','#')}
   render();
   if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}
 })();
